@@ -90,6 +90,11 @@ interface AppContextType {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
 
+  // Theme (Día / Noche)
+  theme: 'light' | 'dark';
+  setTheme: (theme: 'light' | 'dark') => void;
+  toggleTheme: () => void;
+
   // Firebase
   firebaseStatus: FirebaseSyncStatus;
   firebaseMessage: string;
@@ -228,6 +233,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     loadStorage<AppTab>('activeTab', 'panel')
   );
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
+
+  // Theme state with localStorage persistence and DOM class synchronization
+  const [theme, setThemeState] = useState<'light' | 'dark'>(() => {
+    try {
+      const saved = localStorage.getItem('pv_theme');
+      if (saved === 'dark' || saved === 'light') return saved;
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'dark'
+        : 'light';
+    } catch {
+      return 'light';
+    }
+  });
+
+  const setTheme = useCallback((newTheme: 'light' | 'dark') => {
+    setThemeState(newTheme);
+    try {
+      localStorage.setItem('pv_theme', newTheme);
+    } catch (e) {
+      console.warn('Could not save theme:', e);
+    }
+    if (newTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  }, [theme, setTheme]);
+
+  // Sync theme class on mount and changes
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
 
   const [empresa, setEmpresa] = useState<Empresa>(() =>
     loadStorage<Empresa>('empresa', initialEmpresa)
@@ -1085,6 +1130,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveTab,
         sidebarOpen,
         setSidebarOpen,
+
+        theme,
+        setTheme,
+        toggleTheme,
 
         firebaseStatus,
         firebaseMessage,

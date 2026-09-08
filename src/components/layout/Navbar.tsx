@@ -13,6 +13,8 @@ import {
   ShoppingCart,
   Store,
   Database,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -24,6 +26,8 @@ export const Navbar: React.FC = () => {
     setActiveTab,
     sidebarOpen,
     setSidebarOpen,
+    theme,
+    toggleTheme,
     notificaciones,
     markNotificationsAsRead,
     resetAllDataToDefaults,
@@ -143,6 +147,26 @@ export const Navbar: React.FC = () => {
           <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5" />
         </form>
 
+        {/* Toggle Modo Día / Noche */}
+        <button
+          id="btn-toggle-theme"
+          onClick={toggleTheme}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 hover:border-amber-400/60 transition-all cursor-pointer shadow-xs group"
+          title={theme === 'dark' ? 'Cambiar a Modo Día (Luz)' : 'Cambiar a Modo Noche (Oscuro)'}
+        >
+          {theme === 'dark' ? (
+            <>
+              <Sun className="w-4 h-4 text-amber-400 transition-transform group-hover:rotate-45" />
+              <span className="hidden sm:inline text-amber-300 text-[11px] font-medium">Modo Día</span>
+            </>
+          ) : (
+            <>
+              <Moon className="w-4 h-4 text-indigo-300 transition-transform group-hover:-rotate-12" />
+              <span className="hidden sm:inline text-slate-300 text-[11px] font-medium">Modo Noche</span>
+            </>
+          )}
+        </button>
+
         {/* Notifications Dropdown */}
         <div className="relative" ref={notifRef}>
           <button
@@ -233,6 +257,26 @@ export const Navbar: React.FC = () => {
               </div>
 
               <div className="py-1">
+                <button
+                  onClick={() => {
+                    toggleTheme();
+                    setShowUserMenu(false);
+                  }}
+                  className="w-full text-left px-3 py-1.5 hover:bg-slate-50 flex items-center justify-between text-slate-700 cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    {theme === 'dark' ? (
+                      <Sun className="w-3.5 h-3.5 text-amber-500" />
+                    ) : (
+                      <Moon className="w-3.5 h-3.5 text-indigo-500" />
+                    )}
+                    <span>{theme === 'dark' ? 'Cambiar a Modo Día' : 'Cambiar a Modo Noche'}</span>
+                  </div>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold uppercase">
+                    {theme === 'dark' ? 'Oscuro' : 'Claro'}
+                  </span>
+                </button>
+
                 <button
                   onClick={() => {
                     setActiveTab('empresa');

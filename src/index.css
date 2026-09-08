@@ -1,1 +1,117 @@
 @import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Transición suave al alternar entre modo día y modo noche */
+html {
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* Estilos de Modo Noche (Dark Mode) de Alto Lujo */
+html.dark body {
+  background-color: #0b0f19;
+  color: #f1f5f9;
+}
+
+/* Contenedores, tarjetas y modales en Modo Noche */
+html.dark .bg-white {
+  background-color: #111827 !important;
+  color: #f3f4f6 !important;
+}
+
+html.dark .bg-slate-50 {
+  background-color: #1a2234 !important;
+}
+
+html.dark .bg-slate-100 {
+  background-color: #0f172a !important;
+}
+
+html.dark .bg-slate-200 {
+  background-color: #334155 !important;
+}
+
+/* Bordes y separadores */
+html.dark .border-slate-200,
+html.dark .border-slate-300 {
+  border-color: #1f293d !important;
+}
+
+html.dark .border-slate-100 {
+  border-color: #192233 !important;
+}
+
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1f293d !important;
+}
+
+/* Textos adaptados para máximo contraste y legibilidad */
+html.dark .text-slate-900,
+html.dark .text-slate-800 {
+  color: #f8fafc !important;
+}
+
+html.dark .text-slate-700,
+html.dark .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .text-slate-500,
+html.dark .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+/* Campos de formulario e inputs */
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #1a2234 !important;
+  color: #f8fafc !important;
+  border-color: #2e3a52 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  border-color: #d97706 !important;
+  outline: none;
+}
+
+/* Tablas y filas en Modo Noche */
+html.dark table th {
+  background-color: #172033 !important;
+  color: #e2e8f0 !important;
+  border-color: #1f293d !important;
+}
+
+html.dark table td {
+  border-color: #1f293d !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark tr:hover td {
+  background-color: #1a233a !important;
+}
+
+/* Sombras y elevación en Modo Noche */
+html.dark .shadow-sm {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.4) !important;
+}
+
+html.dark .shadow,
+html.dark .shadow-md,
+html.dark .shadow-lg,
+html.dark .shadow-xl,
+html.dark .shadow-2xl {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6) !important;
+}
