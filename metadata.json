@@ -1,0 +1,6 @@
+{
+  "name": "Punto de Venta",
+  "description": "Aplicación web y punto de venta para una tienda con inventario, ventas, compras, kardex y facturación.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
