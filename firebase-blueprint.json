@@ -1,0 +1,418 @@
+{
+  "entities": {
+    "empresa": {
+      "title": "Empresa",
+      "description": "Configuración y datos fiscales de Imperio Lux",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nombre": { "type": "string" },
+        "propietario": { "type": "string" },
+        "ruc": { "type": "string" },
+        "porcentaje_impuesto": { "type": "number" },
+        "abreviatura_impuesto": { "type": "string" },
+        "direccion": { "type": "string" },
+        "ubicacion": { "type": "string" },
+        "telefono": { "type": "string" },
+        "correo": { "type": "string" },
+        "moneda_id": { "type": "number" }
+      },
+      "required": ["nombre", "ruc", "porcentaje_impuesto", "moneda_id"]
+    },
+    "categoria": {
+      "title": "Categoria",
+      "description": "Categorías de productos para Imperio Lux",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nombre": { "type": "string" },
+        "descripcion": { "type": "string" },
+        "estado": { "type": "boolean" }
+      },
+      "required": ["nombre", "estado"]
+    },
+    "marca": {
+      "title": "Marca",
+      "description": "Marcas del catálogo",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nombre": { "type": "string" },
+        "descripcion": { "type": "string" },
+        "estado": { "type": "boolean" }
+      },
+      "required": ["nombre", "estado"]
+    },
+    "presentacion": {
+      "title": "Presentacion",
+      "description": "Unidades de medida y presentaciones",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nombre": { "type": "string" },
+        "sigla": { "type": "string" },
+        "descripcion": { "type": "string" },
+        "estado": { "type": "boolean" }
+      },
+      "required": ["nombre", "sigla", "estado"]
+    },
+    "producto": {
+      "title": "Producto",
+      "description": "Producto de la tienda virtual Imperio Lux",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "codigo": { "type": "string" },
+        "nombre": { "type": "string" },
+        "descripcion": { "type": "string" },
+        "fecha_vencimiento": { "type": "string" },
+        "imagen": { "type": "string" },
+        "marca_id": { "type": "number" },
+        "presentacione_id": { "type": "number" },
+        "categoria_ids": { "type": "array" },
+        "cantidad": { "type": "number" },
+        "precio_compra": { "type": "number" },
+        "precio_venta": { "type": "number" },
+        "estado": { "type": "boolean" }
+      },
+      "required": ["codigo", "nombre", "cantidad", "precio_venta", "estado"]
+    },
+    "cliente": {
+      "title": "Cliente",
+      "description": "Clientes de la tienda",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "tipo_persona": { "type": "string" },
+        "razon_social": { "type": "string" },
+        "documento_id": { "type": "number" },
+        "numero_documento": { "type": "string" },
+        "email": { "type": "string" },
+        "telefono": { "type": "string" },
+        "direccion": { "type": "string" },
+        "estado": { "type": "boolean" }
+      },
+      "required": ["razon_social", "numero_documento", "estado"]
+    },
+    "proveedor": {
+      "title": "Proveedor",
+      "description": "Proveedores comerciales",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "tipo_persona": { "type": "string" },
+        "razon_social": { "type": "string" },
+        "documento_id": { "type": "number" },
+        "numero_documento": { "type": "string" },
+        "email": { "type": "string" },
+        "telefono": { "type": "string" },
+        "direccion": { "type": "string" },
+        "estado": { "type": "boolean" }
+      },
+      "required": ["razon_social", "numero_documento", "estado"]
+    },
+    "venta": {
+      "title": "Venta",
+      "description": "Transacciones de venta y facturación",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "numero_comprobante": { "type": "string" },
+        "comprobante_id": { "type": "number" },
+        "cliente_id": { "type": "number" },
+        "user_id": { "type": "number" },
+        "caja_id": { "type": "number" },
+        "fecha_hora": { "type": "string" },
+        "subtotal": { "type": "number" },
+        "impuesto": { "type": "number" },
+        "total": { "type": "number" },
+        "metodo_pago": { "type": "string" },
+        "monto_recibido": { "type": "number" },
+        "vuelto_entregado": { "type": "number" },
+        "estado": { "type": "string" },
+        "items": { "type": "array" }
+      },
+      "required": ["numero_comprobante", "total", "estado", "fecha_hora"]
+    },
+    "compra": {
+      "title": "Compra",
+      "description": "Órdenes de abastecimiento y compras",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "numero_comprobante": { "type": "string" },
+        "comprobante_id": { "type": "number" },
+        "proveedor_id": { "type": "number" },
+        "user_id": { "type": "number" },
+        "fecha_hora": { "type": "string" },
+        "subtotal": { "type": "number" },
+        "impuesto": { "type": "number" },
+        "total": { "type": "number" },
+        "estado": { "type": "string" },
+        "items": { "type": "array" }
+      },
+      "required": ["numero_comprobante", "total", "estado"]
+    },
+    "caja": {
+      "title": "Caja",
+      "description": "Apertura, arqueo y cierre de caja",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nombre": { "type": "string" },
+        "user_id": { "type": "number" },
+        "fecha_apertura": { "type": "string" },
+        "monto_inicial": { "type": "number" },
+        "ingresos_ventas": { "type": "number" },
+        "ingresos_movimientos": { "type": "number" },
+        "egresos_movimientos": { "type": "number" },
+        "saldo_estimado": { "type": "number" },
+        "fecha_cierre": { "type": "string" },
+        "monto_final": { "type": "number" },
+        "diferencia": { "type": "number" },
+        "estado": { "type": "string" }
+      },
+      "required": ["nombre", "fecha_apertura", "monto_inicial", "estado"]
+    },
+    "movimiento_caja": {
+      "title": "MovimientoCaja",
+      "description": "Ingresos y egresos manuales de caja",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "caja_id": { "type": "number" },
+        "tipo": { "type": "string" },
+        "concepto": { "type": "string" },
+        "monto": { "type": "number" },
+        "fecha_hora": { "type": "string" },
+        "user_id": { "type": "number" }
+      },
+      "required": ["caja_id", "tipo", "concepto", "monto"]
+    },
+    "kardex": {
+      "title": "KardexItem",
+      "description": "Movimientos de inventario y saldos valorizados",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "producto_id": { "type": "number" },
+        "fecha": { "type": "string" },
+        "tipo_movimiento": { "type": "string" },
+        "documento_ref": { "type": "string" },
+        "entrada_cantidad": { "type": "number" },
+        "entrada_costo": { "type": "number" },
+        "entrada_total": { "type": "number" },
+        "salida_cantidad": { "type": "number" },
+        "salida_costo": { "type": "number" },
+        "salida_total": { "type": "number" },
+        "saldo_cantidad": { "type": "number" },
+        "saldo_costo": { "type": "number" },
+        "saldo_total": { "type": "number" }
+      },
+      "required": ["producto_id", "fecha", "tipo_movimiento", "saldo_cantidad"]
+    },
+    "activity_log": {
+      "title": "ActivityLog",
+      "description": "Registro de auditoría del sistema",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "accion": { "type": "string" },
+        "modulo": { "type": "string" },
+        "descripcion": { "type": "string" },
+        "user_name": { "type": "string" },
+        "fecha": { "type": "string" }
+      },
+      "required": ["accion", "modulo", "descripcion", "fecha"]
+    },
+    "empleado": {
+      "title": "Empleado",
+      "description": "Personal y colaboradores de Imperio Lux",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nombre": { "type": "string" },
+        "apellido": { "type": "string" },
+        "documento_id": { "type": "number" },
+        "numero_documento": { "type": "string" },
+        "cargo": { "type": "string" },
+        "telefono": { "type": "string" },
+        "email": { "type": "string" },
+        "estado": { "type": "boolean" }
+      },
+      "required": ["nombre", "apellido", "cargo", "estado"]
+    },
+    "inventario_ajuste": {
+      "title": "InventarioAjuste",
+      "description": "Ajustes físicos manuales de inventario",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "producto_id": { "type": "number" },
+        "tipo": { "type": "string" },
+        "cantidad": { "type": "number" },
+        "motivo": { "type": "string" },
+        "fecha": { "type": "string" },
+        "user_id": { "type": "number" }
+      },
+      "required": ["producto_id", "tipo", "cantidad", "motivo", "fecha"]
+    },
+    "user": {
+      "title": "User",
+      "description": "Usuarios del sistema",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "avatar": { "type": "string" }
+      },
+      "required": ["name", "email", "role"]
+    },
+    "role": {
+      "title": "Role",
+      "description": "Roles y matriz de permisos",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nombre": { "type": "string" },
+        "permisos": { "type": "array" }
+      },
+      "required": ["nombre", "permisos"]
+    },
+    "moneda": {
+      "title": "Moneda",
+      "description": "Monedas y divisas comerciales",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "estandar_iso": { "type": "string" },
+        "nombre_completo": { "type": "string" },
+        "simbolo": { "type": "string" }
+      },
+      "required": ["estandar_iso", "nombre_completo", "simbolo"]
+    },
+    "documento_tipo": {
+      "title": "DocumentoTipo",
+      "description": "Tipos de documento de identidad",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nombre": { "type": "string" }
+      },
+      "required": ["nombre"]
+    },
+    "comprobante_tipo": {
+      "title": "ComprobanteTipo",
+      "description": "Tipos de comprobante de pago",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "nombre": { "type": "string" },
+        "serie_default": { "type": "string" }
+      },
+      "required": ["nombre", "serie_default"]
+    },
+    "notificacion": {
+      "title": "Notificacion",
+      "description": "Alertas y notificaciones del sistema",
+      "type": "object",
+      "properties": {
+        "id": { "type": "number" },
+        "titulo": { "type": "string" },
+        "mensaje": { "type": "string" },
+        "fecha": { "type": "string" },
+        "leida": { "type": "boolean" },
+        "tipo": { "type": "string" }
+      },
+      "required": ["titulo", "mensaje", "fecha"]
+    }
+  },
+  "firestore": {
+    "/empresas/{empresaId}": {
+      "schema": "empresa",
+      "description": "Configuración de la tienda Imperio Lux"
+    },
+    "/categorias/{categoriaId}": {
+      "schema": "categoria",
+      "description": "Categorías de productos de Imperio Lux"
+    },
+    "/marcas/{marcaId}": {
+      "schema": "marca",
+      "description": "Marcas del catálogo"
+    },
+    "/presentaciones/{presentacionId}": {
+      "schema": "presentacion",
+      "description": "Presentaciones y unidades de medida"
+    },
+    "/productos/{productoId}": {
+      "schema": "producto",
+      "description": "Catálogo de productos de Imperio Lux"
+    },
+    "/clientes/{clienteId}": {
+      "schema": "cliente",
+      "description": "Directorio de clientes"
+    },
+    "/proveedores/{proveedorId}": {
+      "schema": "proveedor",
+      "description": "Directorio de proveedores"
+    },
+    "/ventas/{ventaId}": {
+      "schema": "venta",
+      "description": "Registro de ventas y facturación"
+    },
+    "/compras/{compraId}": {
+      "schema": "compra",
+      "description": "Registro de compras y abastecimiento"
+    },
+    "/cajas/{cajaId}": {
+      "schema": "caja",
+      "description": "Control de cajas y turnos"
+    },
+    "/movimientos_caja/{movimientoId}": {
+      "schema": "movimiento_caja",
+      "description": "Movimientos de efectivo en caja"
+    },
+    "/kardex/{kardexId}": {
+      "schema": "kardex",
+      "description": "Control de inventario Kardex"
+    },
+    "/empleados/{empleadoId}": {
+      "schema": "empleado",
+      "description": "Personal y empleados de la tienda"
+    },
+    "/inventario_ajustes/{ajusteId}": {
+      "schema": "inventario_ajuste",
+      "description": "Ajustes de inventario manuales"
+    },
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "Usuarios del sistema"
+    },
+    "/roles/{roleId}": {
+      "schema": "role",
+      "description": "Roles y permisos del sistema"
+    },
+    "/monedas/{monedaId}": {
+      "schema": "moneda",
+      "description": "Monedas y divisas configuradas"
+    },
+    "/documentos/{documentoId}": {
+      "schema": "documento_tipo",
+      "description": "Tipos de documento de identidad"
+    },
+    "/comprobantes/{comprobanteId}": {
+      "schema": "comprobante_tipo",
+      "description": "Tipos de comprobante de pago"
+    },
+    "/notificaciones/{notificacionId}": {
+      "schema": "notificacion",
+      "description": "Notificaciones y alertas del sistema"
+    },
+    "/activity_logs/{logId}": {
+      "schema": "activity_log",
+      "description": "Historial de auditoría"
+    }
+  }
+}

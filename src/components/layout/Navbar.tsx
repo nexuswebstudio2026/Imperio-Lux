@@ -12,6 +12,7 @@ import {
   Search,
   ShoppingCart,
   Store,
+  Database,
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -26,6 +27,8 @@ export const Navbar: React.FC = () => {
     notificaciones,
     markNotificationsAsRead,
     resetAllDataToDefaults,
+    firebaseStatus,
+    setShowFirebaseModal,
   } = useApp();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -87,12 +90,35 @@ export const Navbar: React.FC = () => {
         </div>
       </div>
 
-      {/* Quick Action POS Button */}
-      <div className="hidden sm:flex items-center gap-2">
+      {/* Quick Action POS Button & Firebase Status */}
+      <div className="flex items-center gap-2">
+        <button
+          id="btn-firebase-status"
+          onClick={() => setShowFirebaseModal(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-amber-500/40 hover:border-amber-400 transition-colors cursor-pointer shadow-xs"
+          title="Ver estado de base de datos Firebase Firestore"
+        >
+          <span className="relative flex h-2 w-2">
+            <span
+              className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                firebaseStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400'
+              }`}
+            ></span>
+            <span
+              className={`relative inline-flex rounded-full h-2 w-2 ${
+                firebaseStatus === 'connected' ? 'bg-emerald-500' : 'bg-amber-500'
+              }`}
+            ></span>
+          </span>
+          <Database className="w-3.5 h-3.5 text-amber-400" />
+          <span className="font-semibold text-[11px] text-amber-300">Firebase</span>
+          <span className="text-[10px] text-slate-400 hidden md:inline">| Firestore</span>
+        </button>
+
         <button
           id="nav-btn-nueva-venta"
           onClick={() => setActiveTab('ventas_create')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
+          className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${
             activeTab === 'ventas_create'
               ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-400/40'
               : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'

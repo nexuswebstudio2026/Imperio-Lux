@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
   Empresa,
   Moneda,
@@ -45,6 +45,21 @@ import {
   initialActivityLogs,
   initialNotificaciones,
 } from '../data/initialData';
+import {
+  testFirestoreConnection,
+  saveDocument,
+  deleteDocument,
+  fetchCollection,
+  batchSaveCollection,
+  subscribeFirebaseStatus,
+  subscribeToCollection,
+  FirebaseSyncStatus,
+  firebaseConfig,
+  getActiveFirebaseConfig,
+  switchFirebaseProject,
+  resetToDefaultFirebase,
+  FirebaseConfigObject,
+} from '../lib/firebase';
 
 export type AppTab =
   | 'panel'
@@ -74,6 +89,19 @@ interface AppContextType {
   setActiveTab: (tab: AppTab) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
+
+  // Firebase
+  firebaseStatus: FirebaseSyncStatus;
+  firebaseMessage: string;
+  firebaseProjectId: string;
+  firebaseDatabaseId: string;
+  activeFirebaseConfig: FirebaseConfigObject;
+  switchFirebaseProject: (newConfig: FirebaseConfigObject) => Promise<boolean>;
+  resetToDefaultFirebase: () => Promise<boolean>;
+  syncNowWithFirebase: () => Promise<void>;
+  seedFirebaseDatabase: () => Promise<void>;
+  showFirebaseModal: boolean;
+  setShowFirebaseModal: (show: boolean) => void;
 
   empresa: Empresa;
   updateEmpresa: (empresa: Partial<Empresa>) => void;
@@ -170,6 +198,29 @@ function saveStorage<T>(key: string, val: T): void {
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [firebaseStatus, setFirebaseStatus] = useState<FirebaseSyncStatus>('connecting');
+  const [firebaseMessage, setFirebaseMessage] = useState<string>('Iniciando Firebase...');
+  const [showFirebaseModal, setShowFirebaseModal] = useState<boolean>(false);
+  const [activeConfig, setActiveConfig] = useState<FirebaseConfigObject>(() => getActiveFirebaseConfig());
+
+  const handleSwitchFirebaseProject = async (newConfig: FirebaseConfigObject) => {
+    const ok = await switchFirebaseProject(newConfig);
+    if (ok) {
+      setActiveConfig(newConfig);
+      await syncNowWithFirebase();
+    }
+    return ok;
+  };
+
+  const handleResetFirebase = async () => {
+    const ok = await resetToDefaultFirebase();
+    if (ok) {
+      setActiveConfig(getActiveFirebaseConfig());
+      await syncNowWithFirebase();
+    }
+    return ok;
+  };
+
   const [currentUser, setCurrentUser] = useState<User | null>(() =>
     loadStorage<User | null>('currentUser', initialUsers[0])
   );
@@ -256,6 +307,129 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => saveStorage('activityLogs', activityLogs), [activityLogs]);
   useEffect(() => saveStorage('notificaciones', notificaciones), [notificaciones]);
 
+  // Listen to Firebase status
+  useEffect(() => {
+    const unsub = subscribeFirebaseStatus((status, msg) => {
+      setFirebaseStatus(status);
+      if (msg) setFirebaseMessage(msg);
+    });
+    return unsub;
+  }, []);
+
+  // Initialize and seed Firebase on first load with all 21 database tables
+  const seedFirebaseDatabase = useCallback(async () => {
+    try {
+      setFirebaseStatus('syncing');
+      setFirebaseMessage('Poblando todas las tablas en Firebase Firestore...');
+      await saveDocument('empresas', 1, initialEmpresa);
+      await batchSaveCollection('categorias', initialCategorias);
+      await batchSaveCollection('presentaciones', initialPresentaciones);
+      await batchSaveCollection('marcas', initialMarcas);
+      await batchSaveCollection('productos', initialProductos);
+      await batchSaveCollection('clientes', initialClientes);
+      await batchSaveCollection('proveedores', initialProveedores);
+      await batchSaveCollection('empleados', initialEmpleados);
+      await batchSaveCollection('cajas', initialCajas);
+      await batchSaveCollection('movimientos_caja', initialMovimientosCaja);
+      await batchSaveCollection('ventas', initialVentas);
+      await batchSaveCollection('compras', initialCompras);
+      await batchSaveCollection('inventario_ajustes', initialInventarioAjustes);
+      await batchSaveCollection('kardex', initialKardex);
+      await batchSaveCollection('users', initialUsers);
+      await batchSaveCollection('roles', initialRoles);
+      await batchSaveCollection('monedas', initialMonedas);
+      await batchSaveCollection('documentos', initialDocumentos);
+      await batchSaveCollection('comprobantes', initialComprobantes);
+      await batchSaveCollection('activity_logs', initialActivityLogs);
+      await batchSaveCollection('notificaciones', initialNotificaciones);
+      setFirebaseStatus('connected');
+      setFirebaseMessage('Todas las tablas pobladas exitosamente en Firebase');
+    } catch (e) {
+      console.error('Error seeding Firebase:', e);
+      setFirebaseStatus('error');
+      setFirebaseMessage('Error al sincronizar con Firebase');
+    }
+  }, []);
+
+  const syncNowWithFirebase = useCallback(async () => {
+    setFirebaseStatus('syncing');
+    setFirebaseMessage('Sincronizando todas las tablas con Firestore...');
+    try {
+      await testFirestoreConnection();
+
+      // Check if products exist in Firestore
+      const firestoreProducts = await fetchCollection<Producto>('productos');
+      if (firestoreProducts && firestoreProducts.length > 0) {
+        // Hydrate from Firestore
+        setProductos(firestoreProducts);
+        const [
+          cats,
+          marcasList,
+          presList,
+          clientesList,
+          provsList,
+          empleadosList,
+          ventasList,
+          comprasList,
+          cajasList,
+          movimientosList,
+          ajustesList,
+          kardexList,
+          empList,
+          logsList,
+          notifsList,
+        ] = await Promise.all([
+          fetchCollection<Categoria>('categorias'),
+          fetchCollection<Marca>('marcas'),
+          fetchCollection<Presentacion>('presentaciones'),
+          fetchCollection<Cliente>('clientes'),
+          fetchCollection<Proveedor>('proveedores'),
+          fetchCollection<Empleado>('empleados'),
+          fetchCollection<Venta>('ventas'),
+          fetchCollection<Compra>('compras'),
+          fetchCollection<Caja>('cajas'),
+          fetchCollection<MovimientoCaja>('movimientos_caja'),
+          fetchCollection<InventarioAjuste>('inventario_ajustes'),
+          fetchCollection<KardexItem>('kardex'),
+          fetchCollection<Empresa>('empresas'),
+          fetchCollection<ActivityLog>('activity_logs'),
+          fetchCollection<Notificacion>('notificaciones'),
+        ]);
+
+        if (cats.length) setCategorias(cats);
+        if (marcasList.length) setMarcas(marcasList);
+        if (presList.length) setPresentaciones(presList);
+        if (clientesList.length) setClientes(clientesList);
+        if (provsList.length) setProveedores(provsList);
+        if (empleadosList.length) setEmpleados(empleadosList);
+        if (ventasList.length) setVentas(ventasList);
+        if (comprasList.length) setCompras(comprasList);
+        if (cajasList.length) setCajas(cajasList);
+        if (movimientosList.length) setMovimientosCaja(movimientosList);
+        if (ajustesList.length) setInventarioAjustes(ajustesList);
+        if (kardexList.length) setKardex(kardexList);
+        if (empList.length && empList[0]) setEmpresa(empList[0]);
+        if (logsList.length) setActivityLogs(logsList);
+        if (notifsList.length) setNotificaciones(notifsList);
+
+        setFirebaseStatus('connected');
+        setFirebaseMessage('Todas las tablas sincronizadas desde Firebase Firestore');
+      } else {
+        // First run on empty Firestore -> seed with complete luxury dataset
+        await seedFirebaseDatabase();
+      }
+    } catch (err) {
+      console.error('Error in syncNowWithFirebase:', err);
+      setFirebaseStatus('error');
+      setFirebaseMessage('Error al conectar con Firestore');
+    }
+  }, [seedFirebaseDatabase]);
+
+  // Connect and sync on boot
+  useEffect(() => {
+    syncNowWithFirebase();
+  }, [syncNowWithFirebase]);
+
   const activeCaja = cajas.find((c) => c.estado === 'Abierta') || null;
 
   const logActivity = (accion: string, modulo: string, descripcion: string) => {
@@ -268,11 +442,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       fecha: new Date().toISOString().replace('T', ' ').substring(0, 19),
     };
     setActivityLogs((prev) => [newLog, ...prev]);
+    saveDocument('activity_logs', newLog.id, newLog).catch(() => {});
   };
 
   const updateEmpresa = (partial: Partial<Empresa>) => {
-    setEmpresa((prev) => ({ ...prev, ...partial }));
-    logActivity('Actualización', 'Empresa', 'Datos generales de la empresa actualizados');
+    const updated = { ...empresa, ...partial };
+    setEmpresa(updated);
+    saveDocument('empresas', 1, updated).catch(() => {});
+    logActivity('Actualización', 'Empresa', 'Datos generales de Imperio Lux actualizados');
   };
 
   // Categorías
@@ -280,16 +457,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = categorias.length > 0 ? Math.max(...categorias.map((c) => c.id)) + 1 : 1;
     const item: Categoria = { ...cat, id: newId };
     setCategorias((prev) => [...prev, item]);
+    saveDocument('categorias', newId, item).catch(() => {});
     logActivity('Creación', 'Categorías', `Categoría "${cat.nombre}" creada`);
   };
 
   const updateCategoria = (id: number, cat: Partial<Categoria>) => {
-    setCategorias((prev) => prev.map((c) => (c.id === id ? { ...c, ...cat } : c)));
+    setCategorias((prev) =>
+      prev.map((c) => {
+        if (c.id === id) {
+          const updated = { ...c, ...cat };
+          saveDocument('categorias', id, updated).catch(() => {});
+          return updated;
+        }
+        return c;
+      })
+    );
     logActivity('Edición', 'Categorías', `Categoría #${id} actualizada`);
   };
 
   const deleteCategoria = (id: number) => {
     setCategorias((prev) => prev.filter((c) => c.id !== id));
+    deleteDocument('categorias', id).catch(() => {});
     logActivity('Eliminación', 'Categorías', `Categoría #${id} eliminada`);
   };
 
@@ -298,16 +486,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = presentaciones.length > 0 ? Math.max(...presentaciones.map((p) => p.id)) + 1 : 1;
     const item: Presentacion = { ...pres, id: newId };
     setPresentaciones((prev) => [...prev, item]);
+    saveDocument('presentaciones', newId, item).catch(() => {});
     logActivity('Creación', 'Presentaciones', `Presentación "${pres.nombre}" creada`);
   };
 
   const updatePresentacion = (id: number, pres: Partial<Presentacion>) => {
-    setPresentaciones((prev) => prev.map((p) => (p.id === id ? { ...p, ...pres } : p)));
+    setPresentaciones((prev) =>
+      prev.map((p) => {
+        if (p.id === id) {
+          const updated = { ...p, ...pres };
+          saveDocument('presentaciones', id, updated).catch(() => {});
+          return updated;
+        }
+        return p;
+      })
+    );
     logActivity('Edición', 'Presentaciones', `Presentación #${id} actualizada`);
   };
 
   const deletePresentacion = (id: number) => {
     setPresentaciones((prev) => prev.filter((p) => p.id !== id));
+    deleteDocument('presentaciones', id).catch(() => {});
     logActivity('Eliminación', 'Presentaciones', `Presentación #${id} eliminada`);
   };
 
@@ -316,16 +515,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = marcas.length > 0 ? Math.max(...marcas.map((item) => item.id)) + 1 : 1;
     const item: Marca = { ...m, id: newId };
     setMarcas((prev) => [...prev, item]);
+    saveDocument('marcas', newId, item).catch(() => {});
     logActivity('Creación', 'Marcas', `Marca "${m.nombre}" creada`);
   };
 
   const updateMarca = (id: number, m: Partial<Marca>) => {
-    setMarcas((prev) => prev.map((item) => (item.id === id ? { ...item, ...m } : item)));
+    setMarcas((prev) =>
+      prev.map((item) => {
+        if (item.id === id) {
+          const updated = { ...item, ...m };
+          saveDocument('marcas', id, updated).catch(() => {});
+          return updated;
+        }
+        return item;
+      })
+    );
     logActivity('Edición', 'Marcas', `Marca #${id} actualizada`);
   };
 
   const deleteMarca = (id: number) => {
     setMarcas((prev) => prev.filter((item) => item.id !== id));
+    deleteDocument('marcas', id).catch(() => {});
     logActivity('Eliminación', 'Marcas', `Marca #${id} eliminada`);
   };
 
@@ -334,6 +544,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = productos.length > 0 ? Math.max(...productos.map((p) => p.id)) + 1 : 1;
     const item: Producto = { ...prod, id: newId };
     setProductos((prev) => [...prev, item]);
+    saveDocument('productos', newId, item).catch(() => {});
+
     // Kardex initial stock
     if (prod.cantidad > 0) {
       const kardexEntry: KardexItem = {
@@ -353,17 +565,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saldo_total: prod.cantidad * prod.precio_compra,
       };
       setKardex((prev) => [kardexEntry, ...prev]);
+      saveDocument('kardex', kardexEntry.id, kardexEntry).catch(() => {});
     }
     logActivity('Creación', 'Productos', `Producto "${prod.nombre}" registrado`);
   };
 
   const updateProducto = (id: number, prod: Partial<Producto>) => {
-    setProductos((prev) => prev.map((p) => (p.id === id ? { ...p, ...prod } : p)));
+    setProductos((prev) =>
+      prev.map((p) => {
+        if (p.id === id) {
+          const updated = { ...p, ...prod };
+          saveDocument('productos', id, updated).catch(() => {});
+          return updated;
+        }
+        return p;
+      })
+    );
     logActivity('Edición', 'Productos', `Producto #${id} actualizado`);
   };
 
   const deleteProducto = (id: number) => {
     setProductos((prev) => prev.filter((p) => p.id !== id));
+    deleteDocument('productos', id).catch(() => {});
     logActivity('Eliminación', 'Productos', `Producto #${id} eliminado`);
   };
 
@@ -372,17 +595,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = clientes.length > 0 ? Math.max(...clientes.map((item) => item.id)) + 1 : 1;
     const item: Cliente = { ...c, id: newId };
     setClientes((prev) => [...prev, item]);
+    saveDocument('clientes', newId, item).catch(() => {});
     logActivity('Creación', 'Clientes', `Cliente "${c.razon_social}" registrado`);
     return item;
   };
 
   const updateCliente = (id: number, c: Partial<Cliente>) => {
-    setClientes((prev) => prev.map((item) => (item.id === id ? { ...item, ...c } : item)));
+    setClientes((prev) =>
+      prev.map((item) => {
+        if (item.id === id) {
+          const updated = { ...item, ...c };
+          saveDocument('clientes', id, updated).catch(() => {});
+          return updated;
+        }
+        return item;
+      })
+    );
     logActivity('Edición', 'Clientes', `Cliente #${id} actualizado`);
   };
 
   const deleteCliente = (id: number) => {
     setClientes((prev) => prev.filter((item) => item.id !== id));
+    deleteDocument('clientes', id).catch(() => {});
     logActivity('Eliminación', 'Clientes', `Cliente #${id} eliminado`);
   };
 
@@ -391,16 +625,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = proveedores.length > 0 ? Math.max(...proveedores.map((item) => item.id)) + 1 : 1;
     const item: Proveedor = { ...p, id: newId };
     setProveedores((prev) => [...prev, item]);
+    saveDocument('proveedores', newId, item).catch(() => {});
     logActivity('Creación', 'Proveedores', `Proveedor "${p.razon_social}" registrado`);
   };
 
   const updateProveedor = (id: number, p: Partial<Proveedor>) => {
-    setProveedores((prev) => prev.map((item) => (item.id === id ? { ...item, ...p } : item)));
+    setProveedores((prev) =>
+      prev.map((item) => {
+        if (item.id === id) {
+          const updated = { ...item, ...p };
+          saveDocument('proveedores', id, updated).catch(() => {});
+          return updated;
+        }
+        return item;
+      })
+    );
     logActivity('Edición', 'Proveedores', `Proveedor #${id} actualizado`);
   };
 
   const deleteProveedor = (id: number) => {
     setProveedores((prev) => prev.filter((item) => item.id !== id));
+    deleteDocument('proveedores', id).catch(() => {});
     logActivity('Eliminación', 'Proveedores', `Proveedor #${id} eliminado`);
   };
 
@@ -425,7 +670,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const itemInVenta = ventaData.items.find((it) => it.producto_id === prod.id);
         if (itemInVenta) {
           const nuevaCantidad = Math.max(0, prod.cantidad - itemInVenta.cantidad);
-          return { ...prod, cantidad: nuevaCantidad };
+          const updated = { ...prod, cantidad: nuevaCantidad };
+          saveDocument('productos', prod.id, updated).catch(() => {});
+          return updated;
         }
         return prod;
       })
@@ -456,45 +703,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setKardex((prev) => [...kardexEntries, ...prev]);
+    kardexEntries.forEach((ke) => saveDocument('kardex', ke.id, ke).catch(() => {}));
 
-    // Sumar a caja si es pago en efectivo
+    // Update active caja if cash or recorded
     if (activeCaja) {
       setCajas((prev) =>
-        prev.map((c) =>
-          c.id === activeCaja.id
-            ? {
-                ...c,
-                ingresos_ventas: c.ingresos_ventas + newVenta.total,
-                saldo_estimado: c.saldo_estimado + newVenta.total,
-              }
-            : c
-        )
+        prev.map((c) => {
+          if (c.id === activeCaja.id) {
+            const updated = {
+              ...c,
+              ingresos_ventas: c.ingresos_ventas + newVenta.total,
+              saldo_estimado: c.saldo_estimado + newVenta.total,
+            };
+            saveDocument('cajas', c.id, updated).catch(() => {});
+            return updated;
+          }
+          return c;
+        })
       );
     }
 
     setVentas((prev) => [newVenta, ...prev]);
-    logActivity('Creación', 'Ventas', `Comprobante ${numero_comprobante} emitido por ${currentMoneda.simbolo} ${newVenta.total.toFixed(2)}`);
+    saveDocument('ventas', newVenta.id, newVenta).catch(() => {});
 
+    logActivity('Venta', 'Ventas', `Comprobante ${numero_comprobante} emitido por ${currentMoneda.simbolo} ${newVenta.total.toFixed(2)}`);
     return newVenta;
   };
 
   const anularVenta = (id: number) => {
-    const ventaToAnular = ventas.find((v) => v.id === id);
-    if (!ventaToAnular || ventaToAnular.estado === 'Anulada') return;
+    const venta = ventas.find((v) => v.id === id);
+    if (!venta || venta.estado === 'Anulada') return;
 
-    // Restaurar stock
+    // Reponer stock
     setProductos((prev) =>
       prev.map((prod) => {
-        const itemInVenta = ventaToAnular.items.find((it) => it.producto_id === prod.id);
+        const itemInVenta = venta.items.find((it) => it.producto_id === prod.id);
         if (itemInVenta) {
-          return { ...prod, cantidad: prod.cantidad + itemInVenta.cantidad };
+          const nuevaCantidad = prod.cantidad + itemInVenta.cantidad;
+          const updated = { ...prod, cantidad: nuevaCantidad };
+          saveDocument('productos', prod.id, updated).catch(() => {});
+          return updated;
         }
         return prod;
       })
     );
 
-    // Kardex entries para devolución
-    const kardexEntries: KardexItem[] = ventaToAnular.items.map((it) => {
+    // Add reversal entries in Kardex
+    const kardexReversals: KardexItem[] = venta.items.map((it) => {
       const prod = productos.find((p) => p.id === it.producto_id);
       const stockAnterior = prod ? prod.cantidad : 0;
       const costoUnit = prod ? prod.precio_compra : 0;
@@ -504,7 +759,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         producto_id: it.producto_id,
         fecha: new Date().toISOString().replace('T', ' ').substring(0, 19),
         tipo_movimiento: 'Ajuste Entrada',
-        documento_ref: `ANULACION-${ventaToAnular.numero_comprobante}`,
+        documento_ref: `ANULACIÓN-${venta.numero_comprobante}`,
         entrada_cantidad: it.cantidad,
         entrada_costo: costoUnit,
         entrada_total: it.cantidad * costoUnit,
@@ -517,13 +772,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
 
-    setKardex((prev) => [...kardexEntries, ...prev]);
+    setKardex((prev) => [...kardexReversals, ...prev]);
+    kardexReversals.forEach((kr) => saveDocument('kardex', kr.id, kr).catch(() => {}));
+
+    // Update active caja
+    if (venta.caja_id) {
+      setCajas((prev) =>
+        prev.map((c) => {
+          if (c.id === venta.caja_id) {
+            const updated = {
+              ...c,
+              ingresos_ventas: Math.max(0, c.ingresos_ventas - venta.total),
+              saldo_estimado: Math.max(0, c.saldo_estimado - venta.total),
+            };
+            saveDocument('cajas', c.id, updated).catch(() => {});
+            return updated;
+          }
+          return c;
+        })
+      );
+    }
 
     setVentas((prev) =>
-      prev.map((v) => (v.id === id ? { ...v, estado: 'Anulada' } : v))
+      prev.map((v) => {
+        if (v.id === id) {
+          const updated = { ...v, estado: 'Anulada' as const };
+          saveDocument('ventas', id, updated).catch(() => {});
+          return updated;
+        }
+        return v;
+      })
     );
 
-    logActivity('Anulación', 'Ventas', `Comprobante ${ventaToAnular.numero_comprobante} anulado`);
+    logActivity('Anulación', 'Ventas', `Comprobante ${venta.numero_comprobante} anulado`);
   };
 
   // Compras
@@ -531,17 +812,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = compras.length > 0 ? Math.max(...compras.map((c) => c.id)) + 1 : 1;
     const newCompra: Compra = { ...compraData, id: newId };
 
-    // Incrementar stock y actualizar costos de productos
+    // Increase product stock & update suggested price if specified
     setProductos((prev) =>
       prev.map((prod) => {
         const itemInCompra = compraData.items.find((it) => it.producto_id === prod.id);
         if (itemInCompra) {
-          return {
+          const nuevaCantidad = prod.cantidad + itemInCompra.cantidad;
+          const updated = {
             ...prod,
-            cantidad: prod.cantidad + itemInCompra.cantidad,
-            precio_compra: itemInCompra.precio_compra,
-            precio_venta: itemInCompra.precio_venta_sugerido || prod.precio_venta,
+            cantidad: nuevaCantidad,
+            precio_compra: itemInCompra.precio_compra > 0 ? itemInCompra.precio_compra : prod.precio_compra,
+            precio_venta: itemInCompra.precio_venta_sugerido > 0 ? itemInCompra.precio_venta_sugerido : prod.precio_venta,
           };
+          saveDocument('productos', prod.id, updated).catch(() => {});
+          return updated;
         }
         return prod;
       })
@@ -571,14 +855,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setKardex((prev) => [...kardexEntries, ...prev]);
+    kardexEntries.forEach((ke) => saveDocument('kardex', ke.id, ke).catch(() => {}));
+
     setCompras((prev) => [newCompra, ...prev]);
-    logActivity('Creación', 'Compras', `Compra ${compraData.numero_comprobante} registrada`);
+    saveDocument('compras', newCompra.id, newCompra).catch(() => {});
+
+    logActivity('Compra', 'Compras', `Compra ${compraData.numero_comprobante} registrada por ${currentMoneda.simbolo} ${newCompra.total.toFixed(2)}`);
   };
 
   // Cajas
   const openCaja = (nombre: string, montoInicial: number) => {
     const newId = cajas.length > 0 ? Math.max(...cajas.map((c) => c.id)) + 1 : 1;
-    const newCaja: Caja = {
+    const nuevaCaja: Caja = {
       id: newId,
       nombre,
       user_id: currentUser ? currentUser.id : 1,
@@ -590,7 +878,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       saldo_estimado: montoInicial,
       estado: 'Abierta',
     };
-    setCajas((prev) => [newCaja, ...prev]);
+
+    setCajas((prev) => [nuevaCaja, ...prev]);
+    saveDocument('cajas', nuevaCaja.id, nuevaCaja).catch(() => {});
     logActivity('Apertura', 'Cajas', `Caja "${nombre}" abierta con ${currentMoneda.simbolo} ${montoInicial.toFixed(2)}`);
   };
 
@@ -599,13 +889,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((c) => {
         if (c.id === id) {
           const diff = montoFinal - c.saldo_estimado;
-          return {
+          const updated: Caja = {
             ...c,
             estado: 'Cerrada',
             fecha_cierre: new Date().toISOString().replace('T', ' ').substring(0, 19),
             monto_final: montoFinal,
             diferencia: diff,
           };
+          saveDocument('cajas', id, updated).catch(() => {});
+          return updated;
         }
         return c;
       })
@@ -627,6 +919,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setMovimientosCaja((prev) => [nuevoMovimiento, ...prev]);
+    saveDocument('movimientos_caja', nuevoMovimiento.id, nuevoMovimiento).catch(() => {});
 
     setCajas((prev) =>
       prev.map((c) => {
@@ -634,12 +927,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const nuevoIngreso = tipo === 'Ingreso' ? c.ingresos_movimientos + monto : c.ingresos_movimientos;
           const nuevoEgreso = tipo === 'Egreso' ? c.egresos_movimientos + monto : c.egresos_movimientos;
           const delta = tipo === 'Ingreso' ? monto : -monto;
-          return {
+          const updated = {
             ...c,
             ingresos_movimientos: nuevoIngreso,
             egresos_movimientos: nuevoEgreso,
             saldo_estimado: c.saldo_estimado + delta,
           };
+          saveDocument('cajas', c.id, updated).catch(() => {});
+          return updated;
         }
         return c;
       })
@@ -662,13 +957,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setInventarioAjustes((prev) => [ajuste, ...prev]);
+    saveDocument('inventario_ajustes', ajuste.id, ajuste).catch(() => {});
 
     // Update product stock
     setProductos((prev) =>
       prev.map((p) => {
         if (p.id === productoId) {
           const nuevaCant = tipo === 'Entrada' ? p.cantidad + cantidad : Math.max(0, p.cantidad - cantidad);
-          return { ...p, cantidad: nuevaCant };
+          const updated = { ...p, cantidad: nuevaCant };
+          saveDocument('productos', p.id, updated).catch(() => {});
+          return updated;
         }
         return p;
       })
@@ -697,6 +995,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saldo_total: nuevoStock * costo,
       };
       setKardex((prev) => [kardexEntry, ...prev]);
+      saveDocument('kardex', kardexEntry.id, kardexEntry).catch(() => {});
     }
 
     logActivity('Ajuste', 'Inventario', `Ajuste ${tipo} de ${cantidad} unid. (${motivo})`);
@@ -705,17 +1004,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Empleados
   const addEmpleado = (emp: Omit<Empleado, 'id'>) => {
     const newId = empleados.length > 0 ? Math.max(...empleados.map((e) => e.id)) + 1 : 1;
-    setEmpleados((prev) => [...prev, { ...emp, id: newId }]);
+    const nuevo = { ...emp, id: newId };
+    setEmpleados((prev) => [...prev, nuevo]);
+    saveDocument('empleados', newId, nuevo).catch(() => {});
     logActivity('Creación', 'Empleados', `Empleado "${emp.nombre} ${emp.apellido}" registrado`);
   };
 
   const updateEmpleado = (id: number, emp: Partial<Empleado>) => {
-    setEmpleados((prev) => prev.map((e) => (e.id === id ? { ...e, ...emp } : e)));
+    setEmpleados((prev) =>
+      prev.map((e) => {
+        if (e.id === id) {
+          const updated = { ...e, ...emp };
+          saveDocument('empleados', id, updated).catch(() => {});
+          return updated;
+        }
+        return e;
+      })
+    );
     logActivity('Edición', 'Empleados', `Empleado #${id} actualizado`);
   };
 
   const deleteEmpleado = (id: number) => {
     setEmpleados((prev) => prev.filter((e) => e.id !== id));
+    deleteDocument('empleados', id).catch(() => {});
     logActivity('Eliminación', 'Empleados', `Empleado #${id} eliminado`);
   };
 
@@ -723,7 +1034,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
   };
 
-  const resetAllDataToDefaults = () => {
+  const resetAllDataToDefaults = async () => {
     localStorage.clear();
     setEmpresa(initialEmpresa);
     setCategorias(initialCategorias);
@@ -742,6 +1053,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActivityLogs(initialActivityLogs);
     setNotificaciones(initialNotificaciones);
     setActiveTab('panel');
+    await seedFirebaseDatabase();
   };
 
   return (
@@ -753,6 +1065,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveTab,
         sidebarOpen,
         setSidebarOpen,
+
+        firebaseStatus,
+        firebaseMessage,
+        firebaseProjectId: activeConfig.projectId,
+        firebaseDatabaseId: activeConfig.firestoreDatabaseId || '(default)',
+        activeFirebaseConfig: activeConfig,
+        switchFirebaseProject: handleSwitchFirebaseProject,
+        resetToDefaultFirebase: handleResetFirebase,
+        syncNowWithFirebase,
+        seedFirebaseDatabase,
+        showFirebaseModal,
+        setShowFirebaseModal,
+
         empresa,
         updateEmpresa,
         monedas,

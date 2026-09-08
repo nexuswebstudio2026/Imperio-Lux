@@ -2,6 +2,7 @@ import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
+import { FirebaseModal } from './components/layout/FirebaseModal';
 
 // Views
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -75,6 +76,7 @@ const MainContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-800">
       <Navbar />
+      <FirebaseModal />
       <div className="flex-1 flex overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
