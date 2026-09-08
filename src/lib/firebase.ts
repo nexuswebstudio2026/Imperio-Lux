@@ -1,5 +1,6 @@
-import { initializeApp, getApps, getApp, deleteApp, FirebaseApp } from 'firebase/app';
+import { initializeApp, getApps, deleteApp, FirebaseApp } from 'firebase/app';
 import {
+  initializeFirestore,
   getFirestore,
   doc,
   setDoc,
@@ -11,8 +12,12 @@ import {
   writeBatch,
   DocumentData,
   Firestore,
+  setLogLevel,
 } from 'firebase/firestore';
 import firebaseConfigData from '../../firebase-applet-config.json';
+
+// Silence benign connection retry warnings in console
+setLogLevel('error');
 
 export interface FirebaseConfigObject {
   projectId: string;
@@ -67,10 +72,26 @@ export let app: FirebaseApp = (() => {
   return initializeApp(firebaseConfig);
 })();
 
+// Factory to initialize Firestore with robust transport settings
+export function initFirestoreInstance(targetApp: FirebaseApp, databaseId?: string): Firestore {
+  const dbId = databaseId && databaseId !== '(default)' ? databaseId : undefined;
+  try {
+    // experimentalForceLongPolling avoids WebChannel streaming drops in iframe sandboxes
+    return initializeFirestore(
+      targetApp,
+      {
+        experimentalForceLongPolling: true,
+      },
+      dbId
+    );
+  } catch (err) {
+    // If already initialized for this app, retrieve instance
+    return dbId ? getFirestore(targetApp, dbId) : getFirestore(targetApp);
+  }
+}
+
 // Initialize or get Firestore
-export let db: Firestore = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+export let db: Firestore = initFirestoreInstance(app, firebaseConfig.firestoreDatabaseId);
 
 export type FirebaseSyncStatus = 'connecting' | 'connected' | 'syncing' | 'offline' | 'error';
 
@@ -108,13 +129,13 @@ export async function switchFirebaseProject(newConfig: FirebaseConfigObject): Pr
     }
 
     app = initializeApp(newConfig);
-    db = newConfig.firestoreDatabaseId && newConfig.firestoreDatabaseId !== '(default)'
-      ? getFirestore(app, newConfig.firestoreDatabaseId)
-      : getFirestore(app);
+    db = initFirestoreInstance(app, newConfig.firestoreDatabaseId);
 
-    await testFirestoreConnection();
-    updateFirebaseStatus('connected', `Conectado exitosamente al proyecto ${newConfig.projectId}`);
-    return true;
+    const isConnected = await testFirestoreConnection();
+    if (isConnected) {
+      updateFirebaseStatus('connected', `Conectado exitosamente al proyecto ${newConfig.projectId}`);
+    }
+    return isConnected;
   } catch (err: any) {
     console.error('Error switching Firebase project:', err);
     updateFirebaseStatus('error', `Error al conectar con ${newConfig.projectId}: ${err?.message || ''}`);
@@ -143,24 +164,22 @@ export async function resetToDefaultFirebase(): Promise<boolean> {
 export async function testFirestoreConnection(): Promise<boolean> {
   updateFirebaseStatus('connecting', 'Verificando enlace con Firebase Firestore...');
   try {
-    const testDocRef = doc(db, '_connection_test', 'imperio_lux_ping');
-    await setDoc(testDocRef, {
-      ping: true,
-      store: 'Imperio Lux',
-      timestamp: new Date().toISOString(),
-      projectId: firebaseConfig.projectId,
-    }, { merge: true });
-    
+    const testDocRef = doc(db, 'test', 'connection');
     await getDocFromServer(testDocRef);
     updateFirebaseStatus('connected', `En línea con Firestore (${firebaseConfig.projectId})`);
     return true;
-  } catch (error) {
-    console.warn('Firestore connection check result:', error);
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      updateFirebaseStatus('offline', 'Cliente de Firebase fuera de línea');
-    } else {
-      updateFirebaseStatus('connected', `En línea con Firestore (${firebaseConfig.projectId})`);
+  } catch (error: any) {
+    const isOffline =
+      (error instanceof Error && error.message.includes('the client is offline')) ||
+      error?.code === 'unavailable';
+
+    if (isOffline) {
+      console.warn('Firebase en modo offline o esperando backend:', error?.message || error);
+      updateFirebaseStatus('offline', 'Modo offline: Los datos se conservan localmente');
+      return false;
     }
+    // Any other response (such as document not found) confirms the server was reached successfully
+    updateFirebaseStatus('connected', `En línea con Firestore (${firebaseConfig.projectId})`);
     return true;
   }
 }
@@ -176,9 +195,13 @@ export async function saveDocument<T extends DocumentData>(
     const docRef = doc(db, collectionName, String(docId));
     await setDoc(docRef, data, { merge: true });
     updateFirebaseStatus('connected', `Tabla ${collectionName} sincronizada con Firestore`);
-  } catch (err) {
-    console.error(`Error saving to Firestore [${collectionName}/${docId}]:`, err);
-    updateFirebaseStatus('error', `Error al guardar en tabla ${collectionName}`);
+  } catch (err: any) {
+    console.warn(`Aviso al guardar en Firestore [${collectionName}/${docId}]:`, err?.message || err);
+    if (err?.code === 'unavailable') {
+      updateFirebaseStatus('offline', 'Guardado localmente. Se sincronizará al reconectar.');
+    } else {
+      updateFirebaseStatus('error', `Error al guardar en tabla ${collectionName}`);
+    }
   }
 }
 
@@ -192,9 +215,13 @@ export async function deleteDocument(
     const docRef = doc(db, collectionName, String(docId));
     await deleteDoc(docRef);
     updateFirebaseStatus('connected', `Documento eliminado de ${collectionName}`);
-  } catch (err) {
-    console.error(`Error deleting from Firestore [${collectionName}/${docId}]:`, err);
-    updateFirebaseStatus('error', `Error al eliminar en ${collectionName}`);
+  } catch (err: any) {
+    console.warn(`Aviso al eliminar en Firestore [${collectionName}/${docId}]:`, err?.message || err);
+    if (err?.code === 'unavailable') {
+      updateFirebaseStatus('offline', 'Eliminado localmente. Se sincronizará al reconectar.');
+    } else {
+      updateFirebaseStatus('error', `Error al eliminar en ${collectionName}`);
+    }
   }
 }
 
@@ -208,8 +235,8 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
       items.push(d.data() as T);
     });
     return items;
-  } catch (err) {
-    console.error(`Error fetching collection [${collectionName}]:`, err);
+  } catch (err: any) {
+    console.warn(`Aviso al obtener colección [${collectionName}]:`, err?.message || err);
     return [];
   }
 }
@@ -229,8 +256,11 @@ export async function batchSaveCollection<T extends { id: string | number }>(
     });
     await batch.commit();
     updateFirebaseStatus('connected', `Tabla ${collectionName} sincronizada`);
-  } catch (err) {
-    console.error(`Error batch saving [${collectionName}]:`, err);
+  } catch (err: any) {
+    console.warn(`Aviso al guardar lote en [${collectionName}]:`, err?.message || err);
+    if (err?.code === 'unavailable') {
+      updateFirebaseStatus('offline', 'Lote registrado localmente.');
+    }
   }
 }
 
@@ -250,7 +280,7 @@ export function subscribeToCollection<T>(
       onData(list);
     },
     (err) => {
-      console.warn(`Listener warning for ${collectionName}:`, err);
+      console.warn(`Aviso en tiempo real para ${collectionName}:`, err?.message || err);
     }
   );
 }

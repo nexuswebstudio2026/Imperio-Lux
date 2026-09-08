@@ -355,7 +355,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFirebaseStatus('syncing');
     setFirebaseMessage('Sincronizando todas las tablas con Firestore...');
     try {
-      await testFirestoreConnection();
+      const isOnline = await testFirestoreConnection();
+      if (!isOnline) {
+        setFirebaseStatus('offline');
+        setFirebaseMessage('Modo offline: operando con datos locales de Imperio Lux');
+        return;
+      }
 
       // Check if products exist in Firestore
       const firestoreProducts = await fetchCollection<Producto>('productos');
@@ -418,16 +423,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // First run on empty Firestore -> seed with complete luxury dataset
         await seedFirebaseDatabase();
       }
-    } catch (err) {
-      console.error('Error in syncNowWithFirebase:', err);
-      setFirebaseStatus('error');
-      setFirebaseMessage('Error al conectar con Firestore');
+    } catch (err: any) {
+      console.warn('Notice during syncNowWithFirebase:', err?.message || err);
+      setFirebaseStatus('offline');
+      setFirebaseMessage('Operando en modo local (sin conexión con Firestore)');
     }
   }, [seedFirebaseDatabase]);
 
-  // Connect and sync on boot
+  // Connect and sync on boot, and manage network transitions
   useEffect(() => {
     syncNowWithFirebase();
+
+    const handleOnline = () => {
+      syncNowWithFirebase();
+    };
+    const handleOffline = () => {
+      setFirebaseStatus('offline');
+      setFirebaseMessage('Dispositivo fuera de línea: operando localmente');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, [syncNowWithFirebase]);
 
   const activeCaja = cajas.find((c) => c.estado === 'Abierta') || null;
