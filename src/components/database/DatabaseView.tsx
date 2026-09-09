@@ -448,6 +448,17 @@ export const DatabaseView: React.FC = () => {
               <Server className="w-3.5 h-3.5" />
               <span>Configuración Cloud</span>
             </button>
+
+            <a
+              id="btn-open-firebase-console-direct"
+              href={`https://console.firebase.google.com/project/${firebaseProjectId}/firestore/databases/${firebaseDatabaseId}/data`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>Abrir en Firebase Console</span>
+            </a>
           </div>
         }
       />
@@ -504,6 +515,46 @@ export const DatabaseView: React.FC = () => {
               </span>
               <span className="text-sm font-black text-blue-400">Activas</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Guía rápida para encontrar la base de datos en Firebase Console */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-slate-800 dark:text-slate-200">
+        <div className="flex items-start gap-3">
+          <div className="p-2 rounded-lg bg-amber-500/20 text-amber-500 shrink-0 mt-0.5">
+            <Search className="w-5 h-5" />
+          </div>
+          <div className="space-y-2 text-xs flex-1">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                <span>¿Cómo encontrar esta base de datos en la Consola de Firebase?</span>
+              </h3>
+              <a
+                href={`https://console.firebase.google.com/project/${firebaseProjectId}/firestore/databases/${firebaseDatabaseId}/data`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white font-semibold text-[11px] transition-colors shadow-xs"
+              >
+                <ExternalLink className="w-3 h-3" />
+                <span>Ir directo a la Base de Datos</span>
+              </a>
+            </div>
+
+            <ol className="list-decimal list-inside space-y-1.5 text-slate-700 dark:text-slate-300">
+              <li>
+                Entra a <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline font-semibold">console.firebase.google.com</a> y selecciona tu proyecto <strong className="text-slate-900 dark:text-white font-mono bg-slate-200/60 dark:bg-slate-800 px-1.5 py-0.5 rounded">{firebaseProjectId}</strong> (Milenia App Restaurantes).
+              </li>
+              <li>
+                En el menú lateral izquierdo, haz clic en <strong className="text-slate-900 dark:text-white">Compilación (Build)</strong> &rarr; <strong className="text-slate-900 dark:text-white">Firestore Database</strong>.
+              </li>
+              <li>
+                <strong className="text-amber-700 dark:text-amber-400 font-bold">Paso clave:</strong> En la parte superior de la página, junto a "Firestore Database", verás un <strong className="text-slate-900 dark:text-white">menú desplegable</strong> con las bases de datos. Por defecto a veces muestra <em>(default)</em>.
+              </li>
+              <li>
+                Haz clic en ese desplegable y selecciona: <strong className="text-emerald-700 dark:text-emerald-400 font-mono bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-500/30">{firebaseDatabaseId}</strong>. ¡Allí verás inmediatamente las 21 tablas con todos sus documentos!
+              </li>
+            </ol>
           </div>
         </div>
       </div>

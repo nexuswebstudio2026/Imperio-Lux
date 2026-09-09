@@ -385,7 +385,17 @@ export const initialCajas: Caja[] = [
   },
 ];
 
-export const initialMovimientosCaja: MovimientoCaja[] = [];
+export const initialMovimientosCaja: MovimientoCaja[] = [
+  {
+    id: 1,
+    caja_id: 1,
+    tipo: 'Ingreso',
+    monto: 500.0,
+    concepto: 'Fondo de contingencia en efectivo',
+    fecha_hora: new Date(Date.now() - 3600000 * 2).toISOString().replace('T', ' ').substring(0, 19),
+    user_id: 1,
+  },
+];
 
 export const initialVentas: Venta[] = [
   {
@@ -461,7 +471,17 @@ export const initialCompras: Compra[] = [
   },
 ];
 
-export const initialInventarioAjustes: InventarioAjuste[] = [];
+export const initialInventarioAjustes: InventarioAjuste[] = [
+  {
+    id: 1,
+    producto_id: 1,
+    tipo: 'Entrada',
+    cantidad: 1,
+    motivo: 'Inventario físico inicial verificado',
+    fecha: new Date(Date.now() - 86400000).toISOString().replace('T', ' ').substring(0, 19),
+    user_id: 1,
+  },
+];
 
 export const initialKardex: KardexItem[] = [
   {
