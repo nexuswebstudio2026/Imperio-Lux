@@ -479,7 +479,7 @@ export const DatabaseView: React.FC = () => {
                 ¡Sincronización con Firestore exitosa!
               </p>
               <p className="text-[11px] text-emerald-800 dark:text-emerald-400">
-                Las 21 tablas de la base de datos están conectadas y sincronizadas. Mostrando los 4 clientes registrados y todos los registros en vivo.
+                Las 21 tablas de la base de datos están conectadas y sincronizadas en vivo con Firestore.
               </p>
             </div>
           </div>

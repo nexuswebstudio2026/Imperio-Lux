@@ -482,65 +482,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         kardexList.length +
         empList.length;
 
-      if (totalDocs === 0) {
-        // If Firestore is completely empty, populate with full initial dataset
-        await seedFirebaseDatabase();
-        return;
-      }
-
       // Reflect all Firestore data in React state and synchronize local storage
-      if (prods.length > 0) {
-        setProductos(prods);
-        saveStorage('productos', prods);
-      }
-      if (cats.length > 0) {
-        setCategorias(cats);
-        saveStorage('categorias', cats);
-      }
-      if (marcasList.length > 0) {
-        setMarcas(marcasList);
-        saveStorage('marcas', marcasList);
-      }
-      if (presList.length > 0) {
-        setPresentaciones(presList);
-        saveStorage('presentaciones', presList);
-      }
-      if (clientesList.length > 0) {
-        setClientes(clientesList);
-        saveStorage('clientes', clientesList);
-      }
-      if (provsList.length > 0) {
-        setProveedores(provsList);
-        saveStorage('proveedores', provsList);
-      }
-      if (empleadosList.length > 0) {
-        setEmpleados(empleadosList);
-        saveStorage('empleados', empleadosList);
-      }
-      if (ventasList.length > 0) {
-        setVentas(ventasList);
-        saveStorage('ventas', ventasList);
-      }
-      if (comprasList.length > 0) {
-        setCompras(comprasList);
-        saveStorage('compras', comprasList);
-      }
-      if (cajasList.length > 0) {
-        setCajas(cajasList);
-        saveStorage('cajas', cajasList);
-      }
-      if (movimientosList.length > 0) {
-        setMovimientosCaja(movimientosList);
-        saveStorage('movimientosCaja', movimientosList);
-      }
-      if (ajustesList.length > 0) {
-        setInventarioAjustes(ajustesList);
-        saveStorage('inventarioAjustes', ajustesList);
-      }
-      if (kardexList.length > 0) {
-        setKardex(kardexList);
-        saveStorage('kardex', kardexList);
-      }
+      setProductos(prods);
+      saveStorage('productos', prods);
+
+      setCategorias(cats);
+      saveStorage('categorias', cats);
+
+      setMarcas(marcasList);
+      saveStorage('marcas', marcasList);
+
+      setPresentaciones(presList);
+      saveStorage('presentaciones', presList);
+
+      setClientes(clientesList);
+      saveStorage('clientes', clientesList);
+
+      setProveedores(provsList);
+      saveStorage('proveedores', provsList);
+
+      setEmpleados(empleadosList);
+      saveStorage('empleados', empleadosList);
+
+      setVentas(ventasList);
+      saveStorage('ventas', ventasList);
+
+      setCompras(comprasList);
+      saveStorage('compras', comprasList);
+
+      setCajas(cajasList);
+      saveStorage('cajas', cajasList);
+
+      setMovimientosCaja(movimientosList);
+      saveStorage('movimientosCaja', movimientosList);
+
+      setInventarioAjustes(ajustesList);
+      saveStorage('inventarioAjustes', ajustesList);
+
+      setKardex(kardexList);
+      saveStorage('kardex', kardexList);
+
       if (empList.length > 0 && empList[0]) {
         setEmpresa(empList[0]);
         saveStorage('empresa', empList[0]);
@@ -575,13 +556,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       setFirebaseStatus('connected');
-      setFirebaseMessage(`Sincronización exitosa: ${clientesList.length} clientes y 21 tablas reflejadas`);
+      setFirebaseMessage(`Sincronización exitosa: ${clientesList.length} clientes en Firestore`);
     } catch (err: any) {
       console.warn('Notice during syncNowWithFirebase:', err?.message || err);
       setFirebaseStatus('offline');
       setFirebaseMessage('Operando en modo local (sin conexión con Firestore)');
     }
-  }, [seedFirebaseDatabase]);
+  }, []);
 
   // Connect and sync on boot, and manage network transitions + real-time subscriptions
   useEffect(() => {
@@ -603,106 +584,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       unsubs.push(
         subscribeToCollection<Cliente>('clientes', (items) => {
-          if (items && items.length > 0) {
-            setClientes(items);
-            saveStorage('clientes', items);
-          }
+          setClientes(items || []);
+          saveStorage('clientes', items || []);
         })
       );
       unsubs.push(
         subscribeToCollection<Producto>('productos', (items) => {
-          if (items && items.length > 0) {
-            setProductos(items);
-            saveStorage('productos', items);
-          }
+          setProductos(items || []);
+          saveStorage('productos', items || []);
         })
       );
       unsubs.push(
         subscribeToCollection<Categoria>('categorias', (items) => {
-          if (items && items.length > 0) {
-            setCategorias(items);
-            saveStorage('categorias', items);
-          }
+          setCategorias(items || []);
+          saveStorage('categorias', items || []);
         })
       );
       unsubs.push(
         subscribeToCollection<Marca>('marcas', (items) => {
-          if (items && items.length > 0) {
-            setMarcas(items);
-            saveStorage('marcas', items);
-          }
+          setMarcas(items || []);
+          saveStorage('marcas', items || []);
         })
       );
       unsubs.push(
         subscribeToCollection<Presentacion>('presentaciones', (items) => {
-          if (items && items.length > 0) {
-            setPresentaciones(items);
-            saveStorage('presentaciones', items);
-          }
+          setPresentaciones(items || []);
+          saveStorage('presentaciones', items || []);
         })
       );
       unsubs.push(
         subscribeToCollection<Proveedor>('proveedores', (items) => {
-          if (items && items.length > 0) {
-            setProveedores(items);
-            saveStorage('proveedores', items);
-          }
+          setProveedores(items || []);
+          saveStorage('proveedores', items || []);
         })
       );
       unsubs.push(
         subscribeToCollection<Empleado>('empleados', (items) => {
-          if (items && items.length > 0) {
-            setEmpleados(items);
-            saveStorage('empleados', items);
-          }
+          setEmpleados(items || []);
+          saveStorage('empleados', items || []);
         })
       );
       unsubs.push(
         subscribeToCollection<Caja>('cajas', (items) => {
-          if (items && items.length > 0) {
-            setCajas(items);
-            saveStorage('cajas', items);
-          }
+          setCajas(items || []);
+          saveStorage('cajas', items || []);
         })
       );
       unsubs.push(
         subscribeToCollection<MovimientoCaja>('movimientos_caja', (items) => {
-          if (items && items.length > 0) {
-            setMovimientosCaja(items);
-            saveStorage('movimientosCaja', items);
-          }
+          setMovimientosCaja(items || []);
+          saveStorage('movimientosCaja', items || []);
         })
       );
       unsubs.push(
         subscribeToCollection<Venta>('ventas', (items) => {
-          if (items && items.length > 0) {
-            setVentas(items);
-            saveStorage('ventas', items);
-          }
+          setVentas(items || []);
+          saveStorage('ventas', items || []);
         })
       );
       unsubs.push(
         subscribeToCollection<Compra>('compras', (items) => {
-          if (items && items.length > 0) {
-            setCompras(items);
-            saveStorage('compras', items);
-          }
+          setCompras(items || []);
+          saveStorage('compras', items || []);
         })
       );
       unsubs.push(
         subscribeToCollection<InventarioAjuste>('inventario_ajustes', (items) => {
-          if (items && items.length > 0) {
-            setInventarioAjustes(items);
-            saveStorage('inventarioAjustes', items);
-          }
+          setInventarioAjustes(items || []);
+          saveStorage('inventarioAjustes', items || []);
         })
       );
       unsubs.push(
         subscribeToCollection<KardexItem>('kardex', (items) => {
-          if (items && items.length > 0) {
-            setKardex(items);
-            saveStorage('kardex', items);
-          }
+          setKardex(items || []);
+          saveStorage('kardex', items || []);
         })
       );
       unsubs.push(
