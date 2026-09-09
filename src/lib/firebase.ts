@@ -232,8 +232,10 @@ export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
     const snapshot = await getDocs(colRef);
     const items: T[] = [];
     snapshot.forEach((d) => {
-      items.push(d.data() as T);
+      const data = d.data();
+      items.push({ ...data, id: data.id !== undefined ? data.id : (Number(d.id) || d.id) } as T);
     });
+    items.sort((a: any, b: any) => (Number(a.id) || 0) - (Number(b.id) || 0));
     return items;
   } catch (err: any) {
     console.warn(`Aviso al obtener colección [${collectionName}]:`, err?.message || err);
@@ -275,8 +277,10 @@ export function subscribeToCollection<T>(
     (snapshot) => {
       const list: T[] = [];
       snapshot.forEach((d) => {
-        list.push(d.data() as T);
+        const data = d.data();
+        list.push({ ...data, id: data.id !== undefined ? data.id : (Number(d.id) || d.id) } as T);
       });
+      list.sort((a: any, b: any) => (Number(a.id) || 0) - (Number(b.id) || 0));
       onData(list);
     },
     (err) => {

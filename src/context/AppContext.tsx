@@ -476,7 +476,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [seedFirebaseDatabase]);
 
-  // Connect and sync on boot, and manage network transitions
+  // Connect and sync on boot, and manage network transitions + real-time subscriptions
   useEffect(() => {
     syncNowWithFirebase();
 
@@ -490,9 +490,116 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+
+    // Active real-time listeners for live updates from Firestore
+    const unsubs: (() => void)[] = [];
+    try {
+      unsubs.push(
+        subscribeToCollection<Cliente>('clientes', (items) => {
+          if (items && items.length > 0) {
+            setClientes(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<Producto>('productos', (items) => {
+          if (items && items.length > 0) {
+            setProductos(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<Categoria>('categorias', (items) => {
+          if (items && items.length > 0) {
+            setCategorias(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<Marca>('marcas', (items) => {
+          if (items && items.length > 0) {
+            setMarcas(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<Presentacion>('presentaciones', (items) => {
+          if (items && items.length > 0) {
+            setPresentaciones(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<Proveedor>('proveedores', (items) => {
+          if (items && items.length > 0) {
+            setProveedores(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<Empleado>('empleados', (items) => {
+          if (items && items.length > 0) {
+            setEmpleados(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<Caja>('cajas', (items) => {
+          if (items && items.length > 0) {
+            setCajas(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<MovimientoCaja>('movimientos_caja', (items) => {
+          if (items && items.length > 0) {
+            setMovimientosCaja(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<Venta>('ventas', (items) => {
+          if (items && items.length > 0) {
+            setVentas(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<Compra>('compras', (items) => {
+          if (items && items.length > 0) {
+            setCompras(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<InventarioAjuste>('inventario_ajustes', (items) => {
+          if (items && items.length > 0) {
+            setInventarioAjustes(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<KardexItem>('kardex', (items) => {
+          if (items && items.length > 0) {
+            setKardex(items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<Empresa>('empresas', (items) => {
+          if (items && items.length > 0 && items[0]) {
+            setEmpresa(items[0]);
+          }
+        })
+      );
+    } catch (subErr) {
+      console.warn('Notice setting up Firestore real-time listeners:', subErr);
+    }
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      unsubs.forEach((u) => u());
     };
   }, [syncNowWithFirebase]);
 
