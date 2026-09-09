@@ -25,6 +25,7 @@ import {
   UsuariosRolesView,
   ActivityLogView,
 } from './components/configuracion/ConfigViews';
+import { DatabaseView } from './components/database/DatabaseView';
 
 const MainContent: React.FC = () => {
   const { activeTab } = useApp();
@@ -68,6 +69,8 @@ const MainContent: React.FC = () => {
         return <UsuariosRolesView />;
       case 'activity_log':
         return <ActivityLogView />;
+      case 'database':
+        return <DatabaseView />;
       default:
         return <DashboardView />;
     }

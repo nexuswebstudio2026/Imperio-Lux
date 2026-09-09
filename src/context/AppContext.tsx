@@ -80,7 +80,8 @@ export type AppTab =
   | 'empresa'
   | 'users'
   | 'roles'
-  | 'activity_log';
+  | 'activity_log'
+  | 'database';
 
 interface AppContextType {
   currentUser: User | null;
