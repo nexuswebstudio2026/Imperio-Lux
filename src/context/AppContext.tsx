@@ -278,10 +278,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [empresa, setEmpresa] = useState<Empresa>(() =>
     loadStorage<Empresa>('empresa', initialEmpresa)
   );
-  const [monedas] = useState<Moneda[]>(initialMonedas);
+  const [monedas, setMonedas] = useState<Moneda[]>(() =>
+    loadStorage<Moneda[]>('monedas', initialMonedas)
+  );
   const currentMoneda = monedas.find((m) => m.id === empresa.moneda_id) || monedas[0];
-  const [documentos] = useState<DocumentoTipo[]>(initialDocumentos);
-  const [comprobantes] = useState<ComprobanteTipo[]>(initialComprobantes);
+  const [documentos, setDocumentos] = useState<DocumentoTipo[]>(() =>
+    loadStorage<DocumentoTipo[]>('documentos', initialDocumentos)
+  );
+  const [comprobantes, setComprobantes] = useState<ComprobanteTipo[]>(() =>
+    loadStorage<ComprobanteTipo[]>('comprobantes', initialComprobantes)
+  );
 
   const [categorias, setCategorias] = useState<Categoria[]>(() =>
     loadStorage<Categoria[]>('categorias', initialCategorias)
@@ -322,8 +328,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [empleados, setEmpleados] = useState<Empleado[]>(() =>
     loadStorage<Empleado[]>('empleados', initialEmpleados)
   );
-  const [users] = useState<User[]>(initialUsers);
-  const [roles] = useState<Role[]>(initialRoles);
+  const [users, setUsers] = useState<User[]>(() =>
+    loadStorage<User[]>('users', initialUsers)
+  );
+  const [roles, setRoles] = useState<Role[]>(() =>
+    loadStorage<Role[]>('roles', initialRoles)
+  );
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() =>
     loadStorage<ActivityLog[]>('activityLogs', initialActivityLogs)
   );
@@ -350,6 +360,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => saveStorage('inventarioAjustes', inventarioAjustes), [inventarioAjustes]);
   useEffect(() => saveStorage('kardex', kardex), [kardex]);
   useEffect(() => saveStorage('empleados', empleados), [empleados]);
+  useEffect(() => saveStorage('users', users), [users]);
+  useEffect(() => saveStorage('roles', roles), [roles]);
+  useEffect(() => saveStorage('monedas', monedas), [monedas]);
+  useEffect(() => saveStorage('documentos', documentos), [documentos]);
+  useEffect(() => saveStorage('comprobantes', comprobantes), [comprobantes]);
   useEffect(() => saveStorage('activityLogs', activityLogs), [activityLogs]);
   useEffect(() => saveStorage('notificaciones', notificaciones), [notificaciones]);
 
@@ -401,74 +416,166 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setFirebaseStatus('syncing');
     setFirebaseMessage('Sincronizando todas las tablas con Firestore...');
     try {
-      const isOnline = await testFirestoreConnection();
-      if (!isOnline) {
-        setFirebaseStatus('offline');
-        setFirebaseMessage('Modo offline: operando con datos locales de Imperio Lux');
+      // Non-blocking background connectivity verification
+      testFirestoreConnection().catch(() => {});
+
+      // Fetch all 21 database tables in parallel from Firestore
+      const [
+        prods,
+        cats,
+        marcasList,
+        presList,
+        clientesList,
+        provsList,
+        empleadosList,
+        ventasList,
+        comprasList,
+        cajasList,
+        movimientosList,
+        ajustesList,
+        kardexList,
+        empList,
+        usersList,
+        rolesList,
+        monedasList,
+        docsList,
+        comprobantesList,
+        logsList,
+        notifsList,
+      ] = await Promise.all([
+        fetchCollection<Producto>('productos'),
+        fetchCollection<Categoria>('categorias'),
+        fetchCollection<Marca>('marcas'),
+        fetchCollection<Presentacion>('presentaciones'),
+        fetchCollection<Cliente>('clientes'),
+        fetchCollection<Proveedor>('proveedores'),
+        fetchCollection<Empleado>('empleados'),
+        fetchCollection<Venta>('ventas'),
+        fetchCollection<Compra>('compras'),
+        fetchCollection<Caja>('cajas'),
+        fetchCollection<MovimientoCaja>('movimientos_caja'),
+        fetchCollection<InventarioAjuste>('inventario_ajustes'),
+        fetchCollection<KardexItem>('kardex'),
+        fetchCollection<Empresa>('empresas'),
+        fetchCollection<User>('users'),
+        fetchCollection<Role>('roles'),
+        fetchCollection<Moneda>('monedas'),
+        fetchCollection<DocumentoTipo>('documentos'),
+        fetchCollection<ComprobanteTipo>('comprobantes'),
+        fetchCollection<ActivityLog>('activity_logs'),
+        fetchCollection<Notificacion>('notificaciones'),
+      ]);
+
+      const totalDocs =
+        prods.length +
+        cats.length +
+        marcasList.length +
+        presList.length +
+        clientesList.length +
+        provsList.length +
+        empleadosList.length +
+        ventasList.length +
+        comprasList.length +
+        cajasList.length +
+        movimientosList.length +
+        ajustesList.length +
+        kardexList.length +
+        empList.length;
+
+      if (totalDocs === 0) {
+        // If Firestore is completely empty, populate with full initial dataset
+        await seedFirebaseDatabase();
         return;
       }
 
-      // Check if products exist in Firestore
-      const firestoreProducts = await fetchCollection<Producto>('productos');
-      if (firestoreProducts && firestoreProducts.length > 0) {
-        // Hydrate from Firestore
-        setProductos(firestoreProducts);
-        const [
-          cats,
-          marcasList,
-          presList,
-          clientesList,
-          provsList,
-          empleadosList,
-          ventasList,
-          comprasList,
-          cajasList,
-          movimientosList,
-          ajustesList,
-          kardexList,
-          empList,
-          logsList,
-          notifsList,
-        ] = await Promise.all([
-          fetchCollection<Categoria>('categorias'),
-          fetchCollection<Marca>('marcas'),
-          fetchCollection<Presentacion>('presentaciones'),
-          fetchCollection<Cliente>('clientes'),
-          fetchCollection<Proveedor>('proveedores'),
-          fetchCollection<Empleado>('empleados'),
-          fetchCollection<Venta>('ventas'),
-          fetchCollection<Compra>('compras'),
-          fetchCollection<Caja>('cajas'),
-          fetchCollection<MovimientoCaja>('movimientos_caja'),
-          fetchCollection<InventarioAjuste>('inventario_ajustes'),
-          fetchCollection<KardexItem>('kardex'),
-          fetchCollection<Empresa>('empresas'),
-          fetchCollection<ActivityLog>('activity_logs'),
-          fetchCollection<Notificacion>('notificaciones'),
-        ]);
-
-        if (cats.length) setCategorias(cats);
-        if (marcasList.length) setMarcas(marcasList);
-        if (presList.length) setPresentaciones(presList);
-        if (clientesList.length) setClientes(clientesList);
-        if (provsList.length) setProveedores(provsList);
-        if (empleadosList.length) setEmpleados(empleadosList);
-        if (ventasList.length) setVentas(ventasList);
-        if (comprasList.length) setCompras(comprasList);
-        if (cajasList.length) setCajas(cajasList);
-        if (movimientosList.length) setMovimientosCaja(movimientosList);
-        if (ajustesList.length) setInventarioAjustes(ajustesList);
-        if (kardexList.length) setKardex(kardexList);
-        if (empList.length && empList[0]) setEmpresa(empList[0]);
-        if (logsList.length) setActivityLogs(logsList);
-        if (notifsList.length) setNotificaciones(notifsList);
-
-        setFirebaseStatus('connected');
-        setFirebaseMessage('Todas las tablas sincronizadas desde Firebase Firestore');
-      } else {
-        // First run on empty Firestore -> seed with complete luxury dataset
-        await seedFirebaseDatabase();
+      // Reflect all Firestore data in React state and synchronize local storage
+      if (prods.length > 0) {
+        setProductos(prods);
+        saveStorage('productos', prods);
       }
+      if (cats.length > 0) {
+        setCategorias(cats);
+        saveStorage('categorias', cats);
+      }
+      if (marcasList.length > 0) {
+        setMarcas(marcasList);
+        saveStorage('marcas', marcasList);
+      }
+      if (presList.length > 0) {
+        setPresentaciones(presList);
+        saveStorage('presentaciones', presList);
+      }
+      if (clientesList.length > 0) {
+        setClientes(clientesList);
+        saveStorage('clientes', clientesList);
+      }
+      if (provsList.length > 0) {
+        setProveedores(provsList);
+        saveStorage('proveedores', provsList);
+      }
+      if (empleadosList.length > 0) {
+        setEmpleados(empleadosList);
+        saveStorage('empleados', empleadosList);
+      }
+      if (ventasList.length > 0) {
+        setVentas(ventasList);
+        saveStorage('ventas', ventasList);
+      }
+      if (comprasList.length > 0) {
+        setCompras(comprasList);
+        saveStorage('compras', comprasList);
+      }
+      if (cajasList.length > 0) {
+        setCajas(cajasList);
+        saveStorage('cajas', cajasList);
+      }
+      if (movimientosList.length > 0) {
+        setMovimientosCaja(movimientosList);
+        saveStorage('movimientosCaja', movimientosList);
+      }
+      if (ajustesList.length > 0) {
+        setInventarioAjustes(ajustesList);
+        saveStorage('inventarioAjustes', ajustesList);
+      }
+      if (kardexList.length > 0) {
+        setKardex(kardexList);
+        saveStorage('kardex', kardexList);
+      }
+      if (empList.length > 0 && empList[0]) {
+        setEmpresa(empList[0]);
+        saveStorage('empresa', empList[0]);
+      }
+      if (usersList.length > 0) {
+        setUsers(usersList);
+        saveStorage('users', usersList);
+      }
+      if (rolesList.length > 0) {
+        setRoles(rolesList);
+        saveStorage('roles', rolesList);
+      }
+      if (monedasList.length > 0) {
+        setMonedas(monedasList);
+        saveStorage('monedas', monedasList);
+      }
+      if (docsList.length > 0) {
+        setDocumentos(docsList);
+        saveStorage('documentos', docsList);
+      }
+      if (comprobantesList.length > 0) {
+        setComprobantes(comprobantesList);
+        saveStorage('comprobantes', comprobantesList);
+      }
+      if (logsList.length > 0) {
+        setActivityLogs(logsList);
+        saveStorage('activityLogs', logsList);
+      }
+      if (notifsList.length > 0) {
+        setNotificaciones(notifsList);
+        saveStorage('notificaciones', notifsList);
+      }
+
+      setFirebaseStatus('connected');
+      setFirebaseMessage(`Sincronización exitosa: ${clientesList.length} clientes y 21 tablas reflejadas`);
     } catch (err: any) {
       console.warn('Notice during syncNowWithFirebase:', err?.message || err);
       setFirebaseStatus('offline');
@@ -491,13 +598,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Active real-time listeners for live updates from Firestore
+    // Active real-time listeners for live updates across all Firestore tables
     const unsubs: (() => void)[] = [];
     try {
       unsubs.push(
         subscribeToCollection<Cliente>('clientes', (items) => {
           if (items && items.length > 0) {
             setClientes(items);
+            saveStorage('clientes', items);
           }
         })
       );
@@ -505,6 +613,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<Producto>('productos', (items) => {
           if (items && items.length > 0) {
             setProductos(items);
+            saveStorage('productos', items);
           }
         })
       );
@@ -512,6 +621,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<Categoria>('categorias', (items) => {
           if (items && items.length > 0) {
             setCategorias(items);
+            saveStorage('categorias', items);
           }
         })
       );
@@ -519,6 +629,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<Marca>('marcas', (items) => {
           if (items && items.length > 0) {
             setMarcas(items);
+            saveStorage('marcas', items);
           }
         })
       );
@@ -526,6 +637,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<Presentacion>('presentaciones', (items) => {
           if (items && items.length > 0) {
             setPresentaciones(items);
+            saveStorage('presentaciones', items);
           }
         })
       );
@@ -533,6 +645,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<Proveedor>('proveedores', (items) => {
           if (items && items.length > 0) {
             setProveedores(items);
+            saveStorage('proveedores', items);
           }
         })
       );
@@ -540,6 +653,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<Empleado>('empleados', (items) => {
           if (items && items.length > 0) {
             setEmpleados(items);
+            saveStorage('empleados', items);
           }
         })
       );
@@ -547,6 +661,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<Caja>('cajas', (items) => {
           if (items && items.length > 0) {
             setCajas(items);
+            saveStorage('cajas', items);
           }
         })
       );
@@ -554,6 +669,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<MovimientoCaja>('movimientos_caja', (items) => {
           if (items && items.length > 0) {
             setMovimientosCaja(items);
+            saveStorage('movimientosCaja', items);
           }
         })
       );
@@ -561,6 +677,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<Venta>('ventas', (items) => {
           if (items && items.length > 0) {
             setVentas(items);
+            saveStorage('ventas', items);
           }
         })
       );
@@ -568,6 +685,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<Compra>('compras', (items) => {
           if (items && items.length > 0) {
             setCompras(items);
+            saveStorage('compras', items);
           }
         })
       );
@@ -575,6 +693,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<InventarioAjuste>('inventario_ajustes', (items) => {
           if (items && items.length > 0) {
             setInventarioAjustes(items);
+            saveStorage('inventarioAjustes', items);
           }
         })
       );
@@ -582,6 +701,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<KardexItem>('kardex', (items) => {
           if (items && items.length > 0) {
             setKardex(items);
+            saveStorage('kardex', items);
           }
         })
       );
@@ -589,6 +709,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         subscribeToCollection<Empresa>('empresas', (items) => {
           if (items && items.length > 0 && items[0]) {
             setEmpresa(items[0]);
+            saveStorage('empresa', items[0]);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<User>('users', (items) => {
+          if (items && items.length > 0) {
+            setUsers(items);
+            saveStorage('users', items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<Role>('roles', (items) => {
+          if (items && items.length > 0) {
+            setRoles(items);
+            saveStorage('roles', items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<Moneda>('monedas', (items) => {
+          if (items && items.length > 0) {
+            setMonedas(items);
+            saveStorage('monedas', items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<DocumentoTipo>('documentos', (items) => {
+          if (items && items.length > 0) {
+            setDocumentos(items);
+            saveStorage('documentos', items);
+          }
+        })
+      );
+      unsubs.push(
+        subscribeToCollection<ComprobanteTipo>('comprobantes', (items) => {
+          if (items && items.length > 0) {
+            setComprobantes(items);
+            saveStorage('comprobantes', items);
           }
         })
       );

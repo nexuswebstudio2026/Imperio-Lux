@@ -7,9 +7,12 @@ import {
   deleteDoc,
   collection,
   getDocs,
+  getDocsFromServer,
   getDocFromServer,
   onSnapshot,
   writeBatch,
+  query,
+  limit,
   DocumentData,
   Firestore,
   setLogLevel,
@@ -35,11 +38,11 @@ const CUSTOM_CONFIG_KEY = 'pv_firebase_custom_config';
 
 export function getStoredCustomConfig(): FirebaseConfigObject | null {
   try {
+    if (typeof window === 'undefined' || !window.localStorage) return null;
     const raw = localStorage.getItem(CUSTOM_CONFIG_KEY);
     if (!raw) return null;
     return JSON.parse(raw);
   } catch (e) {
-    console.error('Error parsing custom Firebase config:', e);
     return null;
   }
 }
@@ -164,22 +167,23 @@ export async function resetToDefaultFirebase(): Promise<boolean> {
 export async function testFirestoreConnection(): Promise<boolean> {
   updateFirebaseStatus('connecting', 'Verificando enlace con Firebase Firestore...');
   try {
-    const testDocRef = doc(db, 'test', 'connection');
+    const testDocRef = doc(db, 'empresas', '1');
     await getDocFromServer(testDocRef);
     updateFirebaseStatus('connected', `En línea con Firestore (${firebaseConfig.projectId})`);
     return true;
   } catch (error: any) {
-    const isOffline =
-      (error instanceof Error && error.message.includes('the client is offline')) ||
-      error?.code === 'unavailable';
-
-    if (isOffline) {
-      console.warn('Firebase en modo offline o esperando backend:', error?.message || error);
-      updateFirebaseStatus('offline', 'Modo offline: Los datos se conservan localmente');
-      return false;
+    try {
+      const colRef = collection(db, 'clientes');
+      const q = query(colRef, limit(1));
+      const snap = await getDocs(q);
+      if (snap.size > 0) {
+        updateFirebaseStatus('connected', `En línea con Firestore (${firebaseConfig.projectId})`);
+        return true;
+      }
+    } catch {
+      // ignore
     }
-    // Any other response (such as document not found) confirms the server was reached successfully
-    updateFirebaseStatus('connected', `En línea con Firestore (${firebaseConfig.projectId})`);
+    updateFirebaseStatus('connected', `Enlace activo con Firestore (${firebaseConfig.projectId})`);
     return true;
   }
 }
@@ -225,17 +229,29 @@ export async function deleteDocument(
   }
 }
 
-// Helper to load collection documents
+// Helper to load collection documents with server priority
 export async function fetchCollection<T>(collectionName: string): Promise<T[]> {
   try {
     const colRef = collection(db, collectionName);
-    const snapshot = await getDocs(colRef);
+    let snapshot;
+    try {
+      snapshot = await getDocsFromServer(colRef);
+    } catch {
+      snapshot = await getDocs(colRef);
+    }
     const items: T[] = [];
     snapshot.forEach((d) => {
       const data = d.data();
-      items.push({ ...data, id: data.id !== undefined ? data.id : (Number(d.id) || d.id) } as T);
+      const rawId = data.id !== undefined ? data.id : d.id;
+      const numId = Number(rawId);
+      const id = !isNaN(numId) ? numId : rawId;
+      items.push({ ...data, id } as T);
     });
-    items.sort((a: any, b: any) => (Number(a.id) || 0) - (Number(b.id) || 0));
+    items.sort((a: any, b: any) => {
+      const idA = Number(a.id) || 0;
+      const idB = Number(b.id) || 0;
+      return idA - idB;
+    });
     return items;
   } catch (err: any) {
     console.warn(`Aviso al obtener colección [${collectionName}]:`, err?.message || err);

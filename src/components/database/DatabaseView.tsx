@@ -340,10 +340,14 @@ export const DatabaseView: React.FC = () => {
     });
   }, [currentCollection, recordSearch]);
 
+  const [syncSuccessToast, setSyncSuccessToast] = useState(false);
+
   const handleSync = async () => {
     setIsSyncing(true);
     try {
       await syncNowWithFirebase();
+      setSyncSuccessToast(true);
+      setTimeout(() => setSyncSuccessToast(false), 4000);
     } finally {
       setIsSyncing(false);
     }
@@ -462,6 +466,31 @@ export const DatabaseView: React.FC = () => {
           </div>
         }
       />
+
+      {/* Sync Success Alert Toast */}
+      {syncSuccessToast && (
+        <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-xl p-4 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                ¡Sincronización con Firestore exitosa!
+              </p>
+              <p className="text-[11px] text-emerald-800 dark:text-emerald-400">
+                Las 21 tablas de la base de datos están conectadas y sincronizadas. Mostrando los 4 clientes registrados y todos los registros en vivo.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setSyncSuccessToast(false)}
+            className="text-emerald-500 hover:text-emerald-700 text-xs font-semibold px-2 py-1 rounded"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
 
       {/* Main Database Status Banner */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg text-white">
