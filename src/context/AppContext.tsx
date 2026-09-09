@@ -106,6 +106,9 @@ interface AppContextType {
   resetToDefaultFirebase: () => Promise<boolean>;
   syncNowWithFirebase: () => Promise<void>;
   seedFirebaseDatabase: () => Promise<void>;
+  uploadCurrentDataToFirebase: (onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
+  downloadDataFromFirebase: () => Promise<{ success: boolean; count: number; message: string }>;
+  syncBidirectionalAll: (onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
   showFirebaseModal: boolean;
   setShowFirebaseModal: (show: boolean) => void;
 
@@ -208,11 +211,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [firebaseMessage, setFirebaseMessage] = useState<string>('Iniciando Firebase...');
   const [showFirebaseModal, setShowFirebaseModal] = useState<boolean>(false);
   const [activeConfig, setActiveConfig] = useState<FirebaseConfigObject>(() => getActiveFirebaseConfig());
+  const [configVersion, setConfigVersion] = useState<number>(0);
 
   const handleSwitchFirebaseProject = async (newConfig: FirebaseConfigObject) => {
     const ok = await switchFirebaseProject(newConfig);
     if (ok) {
       setActiveConfig(newConfig);
+      setConfigVersion((v) => v + 1);
       await syncNowWithFirebase();
     }
     return ok;
@@ -222,6 +227,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const ok = await resetToDefaultFirebase();
     if (ok) {
       setActiveConfig(getActiveFirebaseConfig());
+      setConfigVersion((v) => v + 1);
       await syncNowWithFirebase();
     }
     return ok;
@@ -377,58 +383,108 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return unsub;
   }, []);
 
-  // Initialize and seed Firebase on first load with all 21 database tables
-  const seedFirebaseDatabase = useCallback(async () => {
-    try {
+  // Helper to upload all current application state to Firestore
+  const uploadCurrentDataToFirebase = useCallback(
+    async (
+      onProgress?: (msg: string, percent: number) => void
+    ): Promise<{ success: boolean; count: number; message: string }> => {
       setFirebaseStatus('syncing');
-      setFirebaseMessage('Poblando todas las tablas en Firebase Firestore...');
-      await saveDocument('empresas', 1, initialEmpresa);
-      await batchSaveCollection('categorias', initialCategorias);
-      await batchSaveCollection('presentaciones', initialPresentaciones);
-      await batchSaveCollection('marcas', initialMarcas);
-      await batchSaveCollection('productos', initialProductos);
-      await batchSaveCollection('clientes', initialClientes);
-      await batchSaveCollection('proveedores', initialProveedores);
-      await batchSaveCollection('empleados', initialEmpleados);
-      await batchSaveCollection('cajas', initialCajas);
-      await batchSaveCollection('movimientos_caja', initialMovimientosCaja);
-      await batchSaveCollection('ventas', initialVentas);
-      await batchSaveCollection('compras', initialCompras);
-      await batchSaveCollection('inventario_ajustes', initialInventarioAjustes);
-      await batchSaveCollection('kardex', initialKardex);
-      await batchSaveCollection('users', initialUsers);
-      await batchSaveCollection('roles', initialRoles);
-      await batchSaveCollection('monedas', initialMonedas);
-      await batchSaveCollection('documentos', initialDocumentos);
-      await batchSaveCollection('comprobantes', initialComprobantes);
-      await batchSaveCollection('activity_logs', initialActivityLogs);
-      await batchSaveCollection('notificaciones', initialNotificaciones);
-      setFirebaseStatus('connected');
-      setFirebaseMessage('Todas las tablas pobladas exitosamente en Firebase');
-    } catch (e) {
-      console.error('Error seeding Firebase:', e);
-      setFirebaseStatus('error');
-      setFirebaseMessage('Error al sincronizar con Firebase');
-    }
-  }, []);
+      setFirebaseMessage('Verificando enlace con Firebase Firestore...');
+      onProgress?.('Verificando enlace con Firebase Firestore...', 5);
 
-  const syncNowWithFirebase = useCallback(async () => {
+      const isConnected = await testFirestoreConnection();
+      if (!isConnected) {
+        setFirebaseStatus('disconnected');
+        const err = 'No se pudo conectar a Firebase Firestore. Verifica el Project ID y Database ID.';
+        setFirebaseMessage(err);
+        return { success: false, count: 0, message: err };
+      }
+
+      const tasks = [
+        { name: 'empresas', label: 'Datos de Empresa', data: [empresa || initialEmpresa] },
+        { name: 'categorias', label: 'Categorías', data: categorias.length > 0 ? categorias : initialCategorias },
+        { name: 'marcas', label: 'Marcas', data: marcas.length > 0 ? marcas : initialMarcas },
+        { name: 'presentaciones', label: 'Presentaciones', data: presentaciones.length > 0 ? presentaciones : initialPresentaciones },
+        { name: 'productos', label: 'Productos y Artículos', data: productos.length > 0 ? productos : initialProductos },
+        { name: 'clientes', label: 'Clientes', data: clientes.length > 0 ? clientes : initialClientes },
+        { name: 'proveedores', label: 'Proveedores', data: proveedores.length > 0 ? proveedores : initialProveedores },
+        { name: 'empleados', label: 'Personal y Empleados', data: empleados.length > 0 ? empleados : initialEmpleados },
+        { name: 'cajas', label: 'Sesiones de Caja', data: cajas.length > 0 ? cajas : initialCajas },
+        { name: 'movimientos_caja', label: 'Movimientos de Caja', data: movimientosCaja.length > 0 ? movimientosCaja : initialMovimientosCaja },
+        { name: 'ventas', label: 'Ventas y Comprobantes', data: ventas.length > 0 ? ventas : initialVentas },
+        { name: 'compras', label: 'Compras a Proveedores', data: compras.length > 0 ? compras : initialCompras },
+        { name: 'inventario_ajustes', label: 'Ajustes de Inventario', data: inventarioAjustes.length > 0 ? inventarioAjustes : initialInventarioAjustes },
+        { name: 'kardex', label: 'Kardex Valorizado', data: kardex.length > 0 ? kardex : initialKardex },
+        { name: 'users', label: 'Usuarios del Sistema', data: users.length > 0 ? users : initialUsers },
+        { name: 'roles', label: 'Roles y Permisos', data: roles.length > 0 ? roles : initialRoles },
+        { name: 'monedas', label: 'Monedas y Divisas', data: monedas.length > 0 ? monedas : initialMonedas },
+        { name: 'documentos', label: 'Tipos de Documento', data: documentos.length > 0 ? documentos : initialDocumentos },
+        { name: 'comprobantes', label: 'Tipos de Comprobante', data: comprobantes.length > 0 ? comprobantes : initialComprobantes },
+        { name: 'activity_logs', label: 'Logs de Auditoría', data: activityLogs.length > 0 ? activityLogs : initialActivityLogs },
+        { name: 'notificaciones', label: 'Notificaciones y Alertas', data: notificaciones.length > 0 ? notificaciones : initialNotificaciones },
+      ];
+
+      let totalUploaded = 0;
+      for (let i = 0; i < tasks.length; i++) {
+        const t = tasks[i];
+        const pct = Math.round(((i + 1) / tasks.length) * 100);
+        onProgress?.(`Subiendo ${t.label} (${t.data.length} registros)...`, pct);
+        setFirebaseMessage(`Subiendo ${t.label} a Firebase (${i + 1}/${tasks.length})...`);
+        if (t.name === 'empresas') {
+          await saveDocument('empresas', 1, t.data[0]);
+          totalUploaded += 1;
+        } else {
+          await batchSaveCollection(t.name, t.data as any[]);
+          totalUploaded += t.data.length;
+        }
+      }
+
+      setFirebaseStatus('connected');
+      const msg = `Base de datos sincronizada: ${totalUploaded} registros subidos a Firebase Firestore exitosamente`;
+      setFirebaseMessage(msg);
+      return { success: true, count: totalUploaded, message: msg };
+    },
+    [
+      empresa,
+      categorias,
+      marcas,
+      presentaciones,
+      productos,
+      clientes,
+      proveedores,
+      empleados,
+      cajas,
+      movimientosCaja,
+      ventas,
+      compras,
+      inventarioAjustes,
+      kardex,
+      users,
+      roles,
+      monedas,
+      documentos,
+      comprobantes,
+      activityLogs,
+      notificaciones,
+    ]
+  );
+
+  // Helper to download all 21 collections from Firestore into the website
+  const downloadDataFromFirebase = useCallback(async (): Promise<{ success: boolean; count: number; message: string }> => {
     setFirebaseStatus('syncing');
-    setFirebaseMessage('Verificando estado de la base de datos en Firebase...');
-    
-    // Check if the database was deleted in Firebase
+    setFirebaseMessage('Descargando todas las tablas desde Firebase Firestore...');
+
     const isConnected = await testFirestoreConnection();
     if (!isConnected) {
       setFirebaseStatus('disconnected');
-      setFirebaseMessage(
-        'Base de datos no encontrada en Firebase (404 Not Found). El sitio web está desconectado y operando de forma 100% local.'
-      );
-      return;
+      return {
+        success: false,
+        count: 0,
+        message: 'No se pudo conectar a Firebase. La base de datos no está disponible.',
+      };
     }
 
-    setFirebaseMessage('Sincronizando todas las tablas con Firestore...');
     try {
-      // Fetch all 21 database tables in parallel from Firestore
       const [
         prods,
         cats,
@@ -489,89 +545,91 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         movimientosList.length +
         ajustesList.length +
         kardexList.length +
-        empList.length;
+        empList.length +
+        usersList.length +
+        rolesList.length +
+        monedasList.length +
+        docsList.length +
+        comprobantesList.length +
+        logsList.length +
+        notifsList.length;
 
-      // Reflect all Firestore data in React state and synchronize local storage
-      setProductos(prods);
-      saveStorage('productos', prods);
-
-      setCategorias(cats);
-      saveStorage('categorias', cats);
-
-      setMarcas(marcasList);
-      saveStorage('marcas', marcasList);
-
-      setPresentaciones(presList);
-      saveStorage('presentaciones', presList);
-
-      setClientes(clientesList);
-      saveStorage('clientes', clientesList);
-
-      setProveedores(provsList);
-      saveStorage('proveedores', provsList);
-
-      setEmpleados(empleadosList);
-      saveStorage('empleados', empleadosList);
-
-      setVentas(ventasList);
-      saveStorage('ventas', ventasList);
-
-      setCompras(comprasList);
-      saveStorage('compras', comprasList);
-
-      setCajas(cajasList);
-      saveStorage('cajas', cajasList);
-
-      setMovimientosCaja(movimientosList);
-      saveStorage('movimientosCaja', movimientosList);
-
-      setInventarioAjustes(ajustesList);
-      saveStorage('inventarioAjustes', ajustesList);
-
-      setKardex(kardexList);
-      saveStorage('kardex', kardexList);
-
-      if (empList.length > 0 && empList[0]) {
-        setEmpresa(empList[0]);
-        saveStorage('empresa', empList[0]);
-      }
-      if (usersList.length > 0) {
-        setUsers(usersList);
-        saveStorage('users', usersList);
-      }
-      if (rolesList.length > 0) {
-        setRoles(rolesList);
-        saveStorage('roles', rolesList);
-      }
-      if (monedasList.length > 0) {
-        setMonedas(monedasList);
-        saveStorage('monedas', monedasList);
-      }
-      if (docsList.length > 0) {
-        setDocumentos(docsList);
-        saveStorage('documentos', docsList);
-      }
-      if (comprobantesList.length > 0) {
-        setComprobantes(comprobantesList);
-        saveStorage('comprobantes', comprobantesList);
-      }
-      if (logsList.length > 0) {
-        setActivityLogs(logsList);
-        saveStorage('activityLogs', logsList);
-      }
-      if (notifsList.length > 0) {
-        setNotificaciones(notifsList);
-        saveStorage('notificaciones', notifsList);
-      }
+      if (prods.length > 0) { setProductos(prods); saveStorage('productos', prods); }
+      if (cats.length > 0) { setCategorias(cats); saveStorage('categorias', cats); }
+      if (marcasList.length > 0) { setMarcas(marcasList); saveStorage('marcas', marcasList); }
+      if (presList.length > 0) { setPresentaciones(presList); saveStorage('presentaciones', presList); }
+      if (clientesList.length > 0) { setClientes(clientesList); saveStorage('clientes', clientesList); }
+      if (provsList.length > 0) { setProveedores(provsList); saveStorage('proveedores', provsList); }
+      if (empleadosList.length > 0) { setEmpleados(empleadosList); saveStorage('empleados', empleadosList); }
+      if (ventasList.length > 0) { setVentas(ventasList); saveStorage('ventas', ventasList); }
+      if (comprasList.length > 0) { setCompras(comprasList); saveStorage('compras', comprasList); }
+      if (cajasList.length > 0) { setCajas(cajasList); saveStorage('cajas', cajasList); }
+      if (movimientosList.length > 0) { setMovimientosCaja(movimientosList); saveStorage('movimientosCaja', movimientosList); }
+      if (ajustesList.length > 0) { setInventarioAjustes(ajustesList); saveStorage('inventarioAjustes', ajustesList); }
+      if (kardexList.length > 0) { setKardex(kardexList); saveStorage('kardex', kardexList); }
+      if (empList.length > 0 && empList[0]) { setEmpresa(empList[0]); saveStorage('empresa', empList[0]); }
+      if (usersList.length > 0) { setUsers(usersList); saveStorage('users', usersList); }
+      if (rolesList.length > 0) { setRoles(rolesList); saveStorage('roles', rolesList); }
+      if (monedasList.length > 0) { setMonedas(monedasList); saveStorage('monedas', monedasList); }
+      if (docsList.length > 0) { setDocumentos(docsList); saveStorage('documentos', docsList); }
+      if (comprobantesList.length > 0) { setComprobantes(comprobantesList); saveStorage('comprobantes', comprobantesList); }
+      if (logsList.length > 0) { setActivityLogs(logsList); saveStorage('activityLogs', logsList); }
+      if (notifsList.length > 0) { setNotificaciones(notifsList); saveStorage('notificaciones', notifsList); }
 
       setFirebaseStatus('connected');
-      setFirebaseMessage(`Sincronización exitosa: ${clientesList.length} clientes en Firestore`);
-    } catch (err: any) {
-      console.warn('Notice during syncNowWithFirebase:', err?.message || err);
-      setFirebaseStatus('offline');
-      setFirebaseMessage('Operando en modo local (sin conexión con Firestore)');
+      const msg = `Se descargaron ${totalDocs} registros desde Firebase exitosamente.`;
+      setFirebaseMessage(msg);
+      return { success: true, count: totalDocs, message: msg };
+    } catch (e: any) {
+      setFirebaseStatus('error');
+      const msg = `Error al descargar datos: ${e?.message || 'Error desconocido'}`;
+      setFirebaseMessage(msg);
+      return { success: false, count: 0, message: msg };
     }
   }, []);
+
+  // Bi-directional full synchronization
+  const syncBidirectionalAll = useCallback(
+    async (
+      onProgress?: (msg: string, percent: number) => void
+    ): Promise<{ success: boolean; count: number; message: string }> => {
+      onProgress?.('Verificando conexión con Firebase Firestore...', 10);
+      const isConnected = await testFirestoreConnection();
+      if (!isConnected) {
+        return {
+          success: false,
+          count: 0,
+          message: 'No se pudo conectar a Firebase Firestore. Verifica el Project ID y Database ID.',
+        };
+      }
+
+      onProgress?.('Analizando tablas remotas en la nube...', 30);
+      const remoteProds = await fetchCollection<Producto>('productos');
+      const remoteCats = await fetchCollection<Categoria>('categorias');
+
+      if (remoteProds.length === 0 && remoteCats.length === 0) {
+        // Remote is empty: upload all local relational data to Firebase so both match
+        onProgress?.('Base de datos en la nube vacía. Subiendo catálogo completo...', 50);
+        return uploadCurrentDataToFirebase(onProgress);
+      } else {
+        // Remote has data: download all data from Firebase to update the website
+        onProgress?.('Descargando catálogo completo desde Firebase...', 60);
+        const res = await downloadDataFromFirebase();
+        onProgress?.('Sincronización bidireccional completada', 100);
+        return res;
+      }
+    },
+    [downloadDataFromFirebase, uploadCurrentDataToFirebase]
+  );
+
+  // Initialize and seed Firebase on first load with all 21 database tables
+  const seedFirebaseDatabase = useCallback(async () => {
+    await uploadCurrentDataToFirebase();
+  }, [uploadCurrentDataToFirebase]);
+
+  const syncNowWithFirebase = useCallback(async () => {
+    await syncBidirectionalAll();
+  }, [syncBidirectionalAll]);
 
   // Connect and sync on boot, and manage network transitions + real-time subscriptions
   useEffect(() => {
@@ -726,7 +784,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       window.removeEventListener('offline', handleOffline);
       unsubs.forEach((u) => u());
     };
-  }, [syncNowWithFirebase]);
+  }, [syncNowWithFirebase, configVersion]);
 
   const activeCaja = cajas.find((c) => c.estado === 'Abierta') || null;
 
@@ -1377,6 +1435,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resetToDefaultFirebase: handleResetFirebase,
         syncNowWithFirebase,
         seedFirebaseDatabase,
+        uploadCurrentDataToFirebase,
+        downloadDataFromFirebase,
+        syncBidirectionalAll,
         showFirebaseModal,
         setShowFirebaseModal,
 

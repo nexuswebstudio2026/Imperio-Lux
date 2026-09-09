@@ -25,8 +25,17 @@ import {
   Bell,
   Check,
   ExternalLink,
+  ArrowUpRight,
+  ArrowDownLeft,
+  Link2,
 } from 'lucide-react';
-import { testFirestoreConnection, FirebaseConfigObject } from '../../lib/firebase';
+import {
+  testFirestoreConnection,
+  testFirestoreConfig,
+  parseFirebaseConfigSnippet,
+  FirebaseConfigObject,
+  ConnectionDiagnostic,
+} from '../../lib/firebase';
 
 export const FirebaseModal: React.FC = () => {
   const {
@@ -40,7 +49,9 @@ export const FirebaseModal: React.FC = () => {
     switchFirebaseProject,
     resetToDefaultFirebase,
     syncNowWithFirebase,
-    seedFirebaseDatabase,
+    uploadCurrentDataToFirebase,
+    downloadDataFromFirebase,
+    syncBidirectionalAll,
     productos,
     ventas,
     compras,
@@ -64,9 +75,9 @@ export const FirebaseModal: React.FC = () => {
     empresa,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'tablas' | 'proyecto' | 'auditoria'>('tablas');
+  const [activeTab, setActiveTab] = useState<'tablas' | 'proyecto' | 'sincronizacion' | 'auditoria'>('proyecto');
   const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<ConnectionDiagnostic | null>(null);
 
   // Form for custom project configuration
   const [projectIdInput, setProjectIdInput] = useState(activeFirebaseConfig.projectId);
@@ -75,48 +86,79 @@ export const FirebaseModal: React.FC = () => {
   const [databaseIdInput, setDatabaseIdInput] = useState(activeFirebaseConfig.firestoreDatabaseId || '(default)');
   const [appIdInput, setAppIdInput] = useState(activeFirebaseConfig.appId);
   const [storageBucketInput, setStorageBucketInput] = useState(activeFirebaseConfig.storageBucket || '');
-  const [rawJsonInput, setRawJsonInput] = useState('');
-  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [rawSnippetInput, setRawSnippetInput] = useState('');
+  const [saveStatus, setSaveStatus] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
   const [isSavingProject, setIsSavingProject] = useState(false);
+
+  // Progress state for sync operations
+  const [syncProgress, setSyncProgress] = useState<{ running: boolean; message: string; percent: number }>({
+    running: false,
+    message: '',
+    percent: 0,
+  });
 
   if (!showFirebaseModal) return null;
 
-  const handleTestConnection = async () => {
+  // Test custom configuration entered in form
+  const handleTestCustomConfig = async () => {
     setIsTesting(true);
     setTestResult(null);
+    setSaveStatus(null);
     try {
-      const ok = await testFirestoreConnection();
-      if (ok) {
-        setTestResult(`¡Conexión exitosa! El nodo de Firestore en "${firebaseProjectId}" respondió en tiempo real.`);
-      } else {
-        setTestResult('Verificando respuesta de Firebase Firestore...');
-      }
+      const draftConfig: FirebaseConfigObject = {
+        projectId: projectIdInput.trim(),
+        apiKey: apiKeyInput.trim(),
+        authDomain: authDomainInput.trim() || `${projectIdInput.trim()}.firebaseapp.com`,
+        firestoreDatabaseId: databaseIdInput.trim() === '(default)' ? '' : databaseIdInput.trim(),
+        appId: appIdInput.trim() || '1:123456789:web:abcdef',
+        storageBucket: storageBucketInput.trim() || `${projectIdInput.trim()}.firebasestorage.app`,
+      };
+      const res = await testFirestoreConfig(draftConfig);
+      setTestResult(res);
     } catch (e: any) {
-      setTestResult(`Error al verificar: ${e?.message || 'Fallo de red'}`);
+      setTestResult({
+        success: false,
+        statusCode: 0,
+        statusText: 'ERROR',
+        message: `Error al probar: ${e?.message || 'Error de conexión'}`,
+        databaseId: databaseIdInput,
+        projectId: projectIdInput,
+      });
     } finally {
       setIsTesting(false);
     }
   };
 
-  const handleApplyJsonConfig = () => {
-    try {
-      const parsed = JSON.parse(rawJsonInput);
-      if (parsed.projectId) setProjectIdInput(parsed.projectId);
-      if (parsed.apiKey) setApiKeyInput(parsed.apiKey);
-      if (parsed.authDomain) setAuthDomainInput(parsed.authDomain);
-      if (parsed.firestoreDatabaseId) setDatabaseIdInput(parsed.firestoreDatabaseId);
-      if (parsed.appId) setAppIdInput(parsed.appId);
-      if (parsed.storageBucket) setStorageBucketInput(parsed.storageBucket);
-      setSaveStatus('Datos JSON aplicados a los campos. Haz clic en "Conectar Proyecto" para activar.');
-    } catch (err: any) {
-      setSaveStatus(`JSON inválido: ${err?.message}`);
+  // Autocomplete by parsing JSON or JS snippet
+  const handleApplySnippet = () => {
+    const { config, error } = parseFirebaseConfigSnippet(rawSnippetInput);
+    if (error) {
+      setSaveStatus({ type: 'error', message: error });
+      return;
     }
+
+    if (config.projectId) setProjectIdInput(config.projectId);
+    if (config.apiKey) setApiKeyInput(config.apiKey);
+    if (config.authDomain) setAuthDomainInput(config.authDomain);
+    if (config.firestoreDatabaseId) {
+      setDatabaseIdInput(config.firestoreDatabaseId || '(default)');
+    } else {
+      setDatabaseIdInput('(default)');
+    }
+    if (config.appId) setAppIdInput(config.appId);
+    if (config.storageBucket) setStorageBucketInput(config.storageBucket);
+
+    setSaveStatus({
+      type: 'info',
+      message: '✓ Campos autocompletados desde el fragmento de configuración. Ahora haz clic en "Conectar y Sincronizar".',
+    });
   };
 
-  const handleSaveCustomProject = async (e: React.FormEvent) => {
+  // Connect project and execute auto-sync
+  const handleSaveAndSyncProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!projectIdInput.trim() || !apiKeyInput.trim()) {
-      setSaveStatus('El Project ID y API Key son obligatorios.');
+      setSaveStatus({ type: 'error', message: 'Project ID y API Key son campos obligatorios.' });
       return;
     }
 
@@ -127,57 +169,97 @@ export const FirebaseModal: React.FC = () => {
         projectId: projectIdInput.trim(),
         apiKey: apiKeyInput.trim(),
         authDomain: authDomainInput.trim() || `${projectIdInput.trim()}.firebaseapp.com`,
-        firestoreDatabaseId: databaseIdInput.trim() === '(default)' ? undefined : databaseIdInput.trim(),
+        firestoreDatabaseId: databaseIdInput.trim() === '(default)' ? '' : databaseIdInput.trim(),
         appId: appIdInput.trim() || '1:123456789:web:abcdef',
         storageBucket: storageBucketInput.trim() || `${projectIdInput.trim()}.firebasestorage.app`,
       };
 
       const ok = await switchFirebaseProject(newConfig);
       if (ok) {
-        setSaveStatus(`¡Proyecto "${newConfig.projectId}" conectado exitosamente! Todas las tablas están enlazadas.`);
+        setSyncProgress({ running: true, message: 'Conexión establecida. Iniciando sincronización de datos...', percent: 20 });
+        const syncResult = await syncBidirectionalAll((msg, pct) => {
+          setSyncProgress({ running: true, message: msg, percent: pct });
+        });
+        setSyncProgress({ running: false, message: '', percent: 100 });
+
+        setSaveStatus({
+          type: 'success',
+          message: `¡Proyecto "${newConfig.projectId}" conectado exitosamente! ${syncResult.message}`,
+        });
       } else {
-        setSaveStatus('No se pudo conectar. Verifica que las credenciales sean correctas y que Firestore esté habilitado.');
+        setSaveStatus({
+          type: 'error',
+          message:
+            'No se pudo conectar a la base de datos de Firebase. Verifica si creaste la base de datos Firestore en Firebase Console y si el Database ID es "(default)" o el nombre exacto.',
+        });
       }
     } catch (err: any) {
-      setSaveStatus(`Error al conectar: ${err?.message}`);
+      setSaveStatus({ type: 'error', message: `Error inesperado: ${err?.message || err}` });
     } finally {
       setIsSavingProject(false);
+      setSyncProgress({ running: false, message: '', percent: 0 });
+    }
+  };
+
+  // Push local database to Firebase
+  const handlePushToFirebase = async () => {
+    setSyncProgress({ running: true, message: 'Iniciando subida a Firebase...', percent: 5 });
+    const res = await uploadCurrentDataToFirebase((msg, pct) => {
+      setSyncProgress({ running: true, message: msg, percent: pct });
+    });
+    setSyncProgress({ running: false, message: '', percent: 0 });
+    if (res.success) {
+      setSaveStatus({ type: 'success', message: res.message });
+    } else {
+      setSaveStatus({ type: 'error', message: res.message });
+    }
+  };
+
+  // Pull data from Firebase into web
+  const handlePullFromFirebase = async () => {
+    setSyncProgress({ running: true, message: 'Descargando desde Firebase...', percent: 20 });
+    const res = await downloadDataFromFirebase();
+    setSyncProgress({ running: false, message: '', percent: 0 });
+    if (res.success) {
+      setSaveStatus({ type: 'success', message: res.message });
+    } else {
+      setSaveStatus({ type: 'error', message: res.message });
     }
   };
 
   const handleResetToDefault = async () => {
-    if (confirm('¿Deseas restaurar la configuración predeterminada de Firebase?')) {
+    if (confirm('¿Deseas restaurar la configuración original de Firebase?')) {
       await resetToDefaultFirebase();
       setProjectIdInput(activeFirebaseConfig.projectId);
       setApiKeyInput(activeFirebaseConfig.apiKey);
       setAuthDomainInput(activeFirebaseConfig.authDomain);
       setDatabaseIdInput(activeFirebaseConfig.firestoreDatabaseId || '(default)');
-      setSaveStatus('Se restableció la configuración predeterminada.');
+      setSaveStatus({ type: 'info', message: 'Se restableció la configuración predeterminada.' });
     }
   };
 
   const allCollections = [
-    { name: 'productos', label: 'Productos y Catálogo', count: productos.length, icon: Boxes },
-    { name: 'categorias', label: 'Categorías de Lujo', count: categorias.length, icon: Tag },
-    { name: 'marcas', label: 'Marcas Exclusivas', count: marcas.length, icon: Layers },
-    { name: 'presentaciones', label: 'Presentaciones / Unidades', count: presentaciones.length, icon: Boxes },
-    { name: 'ventas', label: 'Ventas y Facturación', count: ventas.length, icon: ShoppingCart },
-    { name: 'compras', label: 'Compras y Abastecimiento', count: compras.length, icon: FileText },
-    { name: 'cajas', label: 'Sesiones de Caja', count: cajas.length, icon: Database },
-    { name: 'movimientos_caja', label: 'Movimientos de Caja', count: movimientosCaja.length, icon: DollarSign },
-    { name: 'clientes', label: 'Clientes Registrados', count: clientes.length, icon: Users },
-    { name: 'proveedores', label: 'Proveedores Comerciales', count: proveedores.length, icon: Building },
-    { name: 'empleados', label: 'Personal y Empleados', count: empleados.length, icon: Users },
-    { name: 'inventario_ajustes', label: 'Ajustes de Inventario', count: inventarioAjustes.length, icon: Layers },
-    { name: 'kardex', label: 'Kardex Valorizado', count: kardex.length, icon: Clock },
-    { name: 'empresas', label: 'Datos Empresa (Imperio Lux)', count: 1, icon: Building },
-    { name: 'users', label: 'Usuarios del Sistema', count: users.length, icon: Users },
-    { name: 'roles', label: 'Roles y Permisos', count: roles.length, icon: Key },
-    { name: 'monedas', label: 'Monedas y Divisas', count: monedas.length, icon: DollarSign },
-    { name: 'documentos', label: 'Tipos de Documento', count: documentos.length, icon: FileText },
-    { name: 'comprobantes', label: 'Tipos de Comprobante', count: comprobantes.length, icon: FileText },
-    { name: 'activity_logs', label: 'Logs de Auditoría', count: activityLogs.length, icon: Activity },
-    { name: 'notificaciones', label: 'Alertas y Notificaciones', count: notificaciones.length, icon: Bell },
+    { name: 'productos', label: 'Productos y Catálogo', count: productos.length, icon: Boxes, relation: 'Categorías, Marcas, Presentaciones' },
+    { name: 'categorias', label: 'Categorías', count: categorias.length, icon: Tag, relation: 'Productos' },
+    { name: 'marcas', label: 'Marcas', count: marcas.length, icon: Layers, relation: 'Productos' },
+    { name: 'presentaciones', label: 'Presentaciones / Unidades', count: presentaciones.length, icon: Boxes, relation: 'Productos' },
+    { name: 'clientes', label: 'Clientes Registrados', count: clientes.length, icon: Users, relation: 'Ventas, Comprobantes' },
+    { name: 'proveedores', label: 'Proveedores Comerciales', count: proveedores.length, icon: Building, relation: 'Compras' },
+    { name: 'empleados', label: 'Personal y Empleados', count: empleados.length, icon: Users, relation: 'Ventas, Cajas, Usuarios' },
+    { name: 'cajas', label: 'Sesiones de Caja', count: cajas.length, icon: Database, relation: 'Movimientos Caja, Ventas' },
+    { name: 'movimientos_caja', label: 'Movimientos de Caja', count: movimientosCaja.length, icon: DollarSign, relation: 'Cajas' },
+    { name: 'ventas', label: 'Ventas y Facturación', count: ventas.length, icon: ShoppingCart, relation: 'Clientes, Empleados, Cajas' },
+    { name: 'compras', label: 'Compras a Proveedores', count: compras.length, icon: FileText, relation: 'Proveedores, Productos' },
+    { name: 'inventario_ajustes', label: 'Ajustes de Inventario', count: inventarioAjustes.length, icon: Layers, relation: 'Productos, Kardex' },
+    { name: 'kardex', label: 'Kardex Valorizado', count: kardex.length, icon: Clock, relation: 'Productos, Ventas, Compras' },
+    { name: 'empresas', label: 'Datos Empresa (Imperio Lux)', count: 1, icon: Building, relation: 'Configuración General' },
+    { name: 'users', label: 'Usuarios del Sistema', count: users.length, icon: Users, relation: 'Roles, Empleados' },
+    { name: 'roles', label: 'Roles y Permisos', count: roles.length, icon: Key, relation: 'Usuarios' },
+    { name: 'monedas', label: 'Monedas y Divisas', count: monedas.length, icon: DollarSign, relation: 'Precios, Pagos' },
+    { name: 'documentos', label: 'Tipos de Documento', count: documentos.length, icon: FileText, relation: 'Clientes, Empleados' },
+    { name: 'comprobantes', label: 'Tipos de Comprobante', count: comprobantes.length, icon: FileText, relation: 'Ventas, Facturación' },
+    { name: 'activity_logs', label: 'Logs de Auditoría', count: activityLogs.length, icon: Activity, relation: 'Eventos del Sistema' },
+    { name: 'notificaciones', label: 'Alertas y Notificaciones', count: notificaciones.length, icon: Bell, relation: 'Stock Bajo, Caja' },
   ];
 
   return (
@@ -191,13 +273,13 @@ export const FirebaseModal: React.FC = () => {
             </div>
             <div>
               <h3 className="font-bold text-base tracking-wide flex items-center gap-2">
-                Firebase Firestore
+                Vincular Base de Datos Firebase
                 <span className="text-[10px] bg-amber-400/30 text-amber-100 font-semibold px-2 py-0.5 rounded-full border border-amber-300/30 uppercase">
                   Imperio Lux
                 </span>
               </h3>
               <p className="text-xs text-amber-100/90">
-                Gestión de proyecto y sincronización en la nube de todas las tablas
+                Conecta cualquier proyecto Firestore y sincroniza automáticamente todas las tablas
               </p>
             </div>
           </div>
@@ -210,54 +292,68 @@ export const FirebaseModal: React.FC = () => {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-2 shrink-0 gap-2">
-          <button
-            onClick={() => setActiveTab('tablas')}
-            className={`pb-2.5 px-3 font-semibold text-xs transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
-              activeTab === 'tablas'
-                ? 'border-amber-600 text-amber-700 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>21 Tablas Conectadas ({allCollections.reduce((acc, c) => acc + c.count, 0)})</span>
-          </button>
-
+        <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-2 shrink-0 gap-2 overflow-x-auto">
           <button
             onClick={() => setActiveTab('proyecto')}
-            className={`pb-2.5 px-3 font-semibold text-xs transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
+            className={`pb-2.5 px-3 font-semibold text-xs transition-colors flex items-center gap-1.5 border-b-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'proyecto'
                 ? 'border-amber-600 text-amber-700 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Settings className="w-3.5 h-3.5" />
-            <span>Conectar Proyecto Imperio Lux</span>
+            <span>Vincular Proyecto Firebase</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('sincronizacion')}
+            className={`pb-2.5 px-3 font-semibold text-xs transition-colors flex items-center gap-1.5 border-b-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'sincronizacion'
+                ? 'border-amber-600 text-amber-700 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Sincronización Bidireccional</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('tablas')}
+            className={`pb-2.5 px-3 font-semibold text-xs transition-colors flex items-center gap-1.5 border-b-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'tablas'
+                ? 'border-amber-600 text-amber-700 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>21 Tablas y Relaciones ({allCollections.reduce((acc, c) => acc + c.count, 0)})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('auditoria')}
-            className={`pb-2.5 px-3 font-semibold text-xs transition-colors flex items-center gap-1.5 border-b-2 cursor-pointer ${
+            className={`pb-2.5 px-3 font-semibold text-xs transition-colors flex items-center gap-1.5 border-b-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'auditoria'
                 ? 'border-amber-600 text-amber-700 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
             <Activity className="w-3.5 h-3.5" />
-            <span>Logs & Estado</span>
+            <span>Logs</span>
           </button>
         </div>
 
         {/* Body content */}
         <div className="p-6 space-y-5 text-slate-700 text-xs overflow-y-auto flex-1">
-          {/* Status Alert */}
-          <div className={`flex items-center justify-between p-3 rounded-lg border ${
-            firebaseStatus === 'connected'
-              ? 'bg-emerald-50/50 border-emerald-200'
-              : firebaseStatus === 'disconnected'
-              ? 'bg-rose-50 border-rose-200'
-              : 'bg-slate-50 border-slate-200'
-          }`}>
+          {/* Status Alert Banner */}
+          <div
+            className={`flex items-center justify-between p-3 rounded-lg border ${
+              firebaseStatus === 'connected'
+                ? 'bg-emerald-50/70 border-emerald-200'
+                : firebaseStatus === 'disconnected'
+                ? 'bg-rose-50 border-rose-200'
+                : 'bg-slate-50 border-slate-200'
+            }`}
+          >
             <div className="flex items-center gap-2.5">
               <span className="relative flex h-3 w-3">
                 {firebaseStatus === 'connected' && (
@@ -277,127 +373,91 @@ export const FirebaseModal: React.FC = () => {
                 <p className="font-semibold text-slate-900 text-xs">
                   Estado:{' '}
                   {firebaseStatus === 'connected'
-                    ? 'En línea y Conectado'
+                    ? 'Conectado y En Línea'
                     : firebaseStatus === 'disconnected'
-                    ? 'Desconectado (Base de datos eliminada en Firebase)'
-                    : firebaseStatus}
+                    ? 'Desconectado (Base de datos no encontrada / eliminada)'
+                    : firebaseStatus === 'syncing'
+                    ? 'Sincronizando con Firebase...'
+                    : 'Modo Local'}
                 </p>
                 <p className="text-[11px] text-slate-500">{firebaseMessage}</p>
               </div>
             </div>
             {firebaseStatus === 'connected' ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded border border-emerald-300/60">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 Nube Activa
               </span>
             ) : firebaseStatus === 'disconnected' ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-700 bg-rose-100/60 px-2 py-0.5 rounded border border-rose-300/60">
                 <AlertCircle className="w-3.5 h-3.5" />
                 Desconectado
               </span>
             ) : null}
           </div>
 
-          {firebaseStatus === 'disconnected' && (
-            <div className="p-3.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-800 text-xs space-y-1">
-              <p className="font-bold flex items-center gap-1.5">
-                <AlertCircle className="w-4 h-4 text-rose-600" />
-                Base de datos eliminada en Firebase Console
-              </p>
-              <p className="text-slate-600 text-[11px] leading-relaxed">
-                Has eliminado la base de datos de Firebase, por lo cual el sitio web está <strong>completamente desconectado</strong> de la nube. Todas las acciones del sistema funcionan ahora en <strong>modo local en el navegador</strong>.
-              </p>
+          {/* Sync Progress Bar if running */}
+          {syncProgress.running && (
+            <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 space-y-2">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="flex items-center gap-1.5">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                  {syncProgress.message}
+                </span>
+                <span>{syncProgress.percent}%</span>
+              </div>
+              <div className="w-full h-2 bg-amber-200/60 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-amber-600 transition-all duration-200 rounded-full"
+                  style={{ width: `${syncProgress.percent}%` }}
+                ></div>
+              </div>
             </div>
           )}
 
-          {/* TAB 1: 21 TABLES */}
-          {activeTab === 'tablas' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                    <Cloud className="w-3.5 h-3.5 text-amber-600" />
-                    Catálogo Completo de Tablas Sincronizadas
-                  </h4>
-                  <p className="text-[11px] text-slate-500">
-                    Cada tabla está enlazada bidireccionalmente a su colección en Firestore.
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] text-slate-400 block font-mono">Proyecto activo:</span>
-                  <span className="font-mono font-bold text-[11px] text-amber-700">{firebaseProjectId}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {allCollections.map((col) => {
-                  const IconComp = col.icon;
-                  return (
-                    <div
-                      key={col.name}
-                      className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/60 hover:bg-slate-100 transition-colors flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <div className="w-7 h-7 rounded bg-white border border-slate-200 flex items-center justify-center shrink-0 text-slate-600">
-                          <IconComp className="w-3.5 h-3.5" />
-                        </div>
-                        <div className="truncate">
-                          <span className="font-semibold text-slate-800 text-[11px] block truncate">
-                            {col.label}
-                          </span>
-                          <span className="font-mono text-[10px] text-slate-400 truncate block">
-                            /{col.name}
-                          </span>
-                        </div>
-                      </div>
-                      <span className="font-bold text-xs bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full shrink-0 border border-amber-200">
-                        {col.count}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {testResult && (
-                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 shrink-0 text-emerald-600" />
-                  <span>{testResult}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 2: PROJECT SWITCHER / CONFIGURATION */}
+          {/* TAB 1: VINCULAR PROYECTO */}
           {activeTab === 'proyecto' && (
             <div className="space-y-4">
-              <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 space-y-1.5">
-                <div className="font-bold text-xs flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-amber-600" />
-                  <span>Conectar tu nuevo Proyecto Firebase "Imperio Lux"</span>
+              <div className="p-3.5 rounded-lg bg-gradient-to-br from-amber-50 to-yellow-50/50 border border-amber-200/80 text-amber-950 space-y-2">
+                <div className="font-bold text-xs flex items-center gap-1.5 text-amber-800">
+                  <Link2 className="w-4 h-4 text-amber-600" />
+                  <span>¿Cómo vincular cualquier Base de Datos de Firebase?</span>
                 </div>
-                <p className="text-[11px] leading-relaxed text-amber-800">
-                  Si creaste un proyecto exclusivo en la consola de Firebase llamado <strong>Imperio Lux</strong>,
-                  puedes pegar aquí su configuración JSON o rellenar sus campos. Al presionar "Conectar Proyecto",
-                  la aplicación transferirá la conexión y sincronizará todas las 21 tablas inmediatamente.
-                </p>
+                <ol className="list-decimal list-inside text-[11px] space-y-1 text-slate-700 leading-relaxed pl-1">
+                  <li>
+                    Ingresa a tu consola de <strong>Firebase</strong> (<span className="text-amber-800 font-mono">console.firebase.google.com</span>).
+                  </li>
+                  <li>
+                    Abre tu proyecto, haz clic en el engranaje ⚙️ <strong>Configuración del proyecto</strong> &gt; sección <strong>Tus apps</strong> &gt; selecciona tu aplicación web.
+                  </li>
+                  <li>
+                    Copia el bloque <span className="font-mono text-amber-900 bg-amber-100 px-1 py-0.5 rounded">firebaseConfig</span> (objeto JavaScript o JSON) y pégalo abajo.
+                  </li>
+                  <li>
+                    Haz clic en <strong>"Conectar y Sincronizar"</strong>. El sistema creará todas las 21 tablas en Firebase con sus relaciones y mostrará los datos en el sitio web de inmediato.
+                  </li>
+                </ol>
               </div>
 
-              {/* Paste JSON Option */}
-              <div className="border border-slate-200 rounded-lg p-3 space-y-2 bg-slate-50/50">
-                <label className="block font-bold text-slate-800 text-xs">
-                  Pegar configuración rápida (firebaseConfig JSON):
-                </label>
+              {/* Paste Snippet Option */}
+              <div className="border border-slate-200 rounded-lg p-3 space-y-2 bg-slate-50/70">
+                <div className="flex items-center justify-between">
+                  <label className="block font-bold text-slate-800 text-xs">
+                    Pegar fragmento de Firebase (JavaScript o JSON):
+                  </label>
+                  <span className="text-[10px] text-slate-500">Detecta automáticamente las variables</span>
+                </div>
                 <div className="flex gap-2">
                   <textarea
                     rows={2}
-                    value={rawJsonInput}
-                    onChange={(e) => setRawJsonInput(e.target.value)}
-                    placeholder='{"projectId": "imperio-lux-123", "apiKey": "AIzaSy...", "authDomain": "..."}'
+                    value={rawSnippetInput}
+                    onChange={(e) => setRawSnippetInput(e.target.value)}
+                    placeholder='const firebaseConfig = { apiKey: "AIzaSy...", projectId: "mi-proyecto-123", ... };'
                     className="w-full font-mono text-[11px] border border-slate-300 rounded p-2 bg-white focus:ring-1 focus:ring-amber-500"
                   />
                   <button
                     type="button"
-                    onClick={handleApplyJsonConfig}
+                    onClick={handleApplySnippet}
                     className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded font-medium text-xs self-start shrink-0 cursor-pointer"
                   >
                     Autocompletar
@@ -405,23 +465,27 @@ export const FirebaseModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Project Fields Form */}
-              <form onSubmit={handleSaveCustomProject} className="space-y-3">
+              {/* Form fields */}
+              <form onSubmit={handleSaveAndSyncProject} className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Project ID (*):</label>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Project ID <span className="text-rose-500">*</span>:
+                    </label>
                     <input
                       type="text"
                       required
                       value={projectIdInput}
                       onChange={(e) => setProjectIdInput(e.target.value)}
-                      placeholder="imperio-lux-xxxxx"
+                      placeholder="mi-proyecto-firebase"
                       className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs focus:ring-1 focus:ring-amber-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">API Key (*):</label>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      API Key <span className="text-rose-500">*</span>:
+                    </label>
                     <input
                       type="text"
                       required
@@ -435,17 +499,6 @@ export const FirebaseModal: React.FC = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Auth Domain:</label>
-                    <input
-                      type="text"
-                      value={authDomainInput}
-                      onChange={(e) => setAuthDomainInput(e.target.value)}
-                      placeholder="imperio-lux.firebaseapp.com"
-                      className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs focus:ring-1 focus:ring-amber-500"
-                    />
-                  </div>
-
-                  <div>
                     <label className="block font-semibold text-slate-700 mb-1">Firestore Database ID:</label>
                     <input
                       type="text"
@@ -454,28 +507,87 @@ export const FirebaseModal: React.FC = () => {
                       placeholder="(default)"
                       className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs focus:ring-1 focus:ring-amber-500"
                     />
+                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                      Por defecto en Firestore es <strong className="text-slate-600">(default)</strong>.
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Auth Domain:</label>
+                    <input
+                      type="text"
+                      value={authDomainInput}
+                      onChange={(e) => setAuthDomainInput(e.target.value)}
+                      placeholder="mi-proyecto.firebaseapp.com"
+                      className="w-full border border-slate-300 rounded px-3 py-1.5 font-mono text-xs focus:ring-1 focus:ring-amber-500"
+                    />
                   </div>
                 </div>
 
-                {saveStatus && (
-                  <div className={`p-3 rounded-lg text-xs flex items-center gap-2 ${
-                    saveStatus.includes('exitosamente')
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                      : 'bg-blue-50 text-blue-800 border border-blue-200'
-                  }`}>
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
-                    <span>{saveStatus}</span>
+                {/* Diagnostics result if tested */}
+                {testResult && (
+                  <div
+                    className={`p-3 rounded-lg text-xs flex items-start gap-2 border ${
+                      testResult.success
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : testResult.statusCode === 404
+                        ? 'bg-amber-50 text-amber-800 border-amber-200'
+                        : 'bg-rose-50 text-rose-800 border-rose-200'
+                    }`}
+                  >
+                    {testResult.success ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+                    )}
+                    <div>
+                      <p className="font-bold">
+                        {testResult.success ? 'Conexión Verificada Exitosamente' : `Diagnóstico: HTTP ${testResult.statusCode}`}
+                      </p>
+                      <p className="text-[11px] leading-relaxed mt-0.5">{testResult.message}</p>
+                    </div>
                   </div>
                 )}
 
-                <div className="flex items-center justify-between pt-3 border-t border-slate-200">
-                  <button
-                    type="button"
-                    onClick={handleResetToDefault}
-                    className="text-slate-500 hover:text-slate-800 text-[11px] underline cursor-pointer"
+                {/* Status message */}
+                {saveStatus && (
+                  <div
+                    className={`p-3 rounded-lg text-xs flex items-center gap-2 border ${
+                      saveStatus.type === 'success'
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : saveStatus.type === 'info'
+                        ? 'bg-blue-50 text-blue-800 border-blue-200'
+                        : 'bg-rose-50 text-rose-800 border-rose-200'
+                    }`}
                   >
-                    Restaurar Proyecto Predeterminado
-                  </button>
+                    {saveStatus.type === 'success' ? (
+                      <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    )}
+                    <span>{saveStatus.message}</span>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between pt-3 border-t border-slate-200 gap-2">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleResetToDefault}
+                      className="text-slate-500 hover:text-slate-800 text-[11px] underline cursor-pointer"
+                    >
+                      Restaurar Inicial
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleTestCustomConfig}
+                      disabled={isTesting}
+                      className="px-3 py-1.5 rounded border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin' : ''}`} />
+                      <span>{isTesting ? 'Verificando...' : 'Probar esta BD'}</span>
+                    </button>
+                  </div>
 
                   <button
                     type="submit"
@@ -483,14 +595,145 @@ export const FirebaseModal: React.FC = () => {
                     className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow"
                   >
                     <Cloud className="w-4 h-4" />
-                    <span>{isSavingProject ? 'Conectando...' : 'Conectar Proyecto Imperio Lux'}</span>
+                    <span>{isSavingProject ? 'Conectando...' : 'Conectar y Sincronizar'}</span>
                   </button>
                 </div>
               </form>
             </div>
           )}
 
-          {/* TAB 3: AUDITORIA Y LOGS */}
+          {/* TAB 2: SINCRONIZACIÓN DIRECTA */}
+          {activeTab === 'sincronizacion' && (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-1.5">
+                <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                  <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
+                  Control de Sincronización Bidireccional
+                </h4>
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Puedes ejecutar una sincronización bidireccional automática, o elegir subir tus datos locales a Firebase o descargarlos de la nube a tu navegador.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Auto Sync */}
+                <div className="p-3.5 rounded-lg border border-amber-200 bg-amber-50/50 flex flex-col justify-between space-y-3">
+                  <div>
+                    <span className="font-bold text-slate-900 text-xs block mb-1">
+                      Sincronización Inteligente
+                    </span>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Si Firebase está vacío, sube todo el catálogo. Si tiene datos, los descarga en el sitio web.
+                    </p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setSyncProgress({ running: true, message: 'Sincronizando bidireccionalmente...', percent: 20 });
+                      const res = await syncBidirectionalAll((msg, pct) => {
+                        setSyncProgress({ running: true, message: msg, percent: pct });
+                      });
+                      setSyncProgress({ running: false, message: '', percent: 0 });
+                      setSaveStatus({ type: res.success ? 'success' : 'error', message: res.message });
+                    }}
+                    className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Sincronizar Todo</span>
+                  </button>
+                </div>
+
+                {/* Push to Firebase */}
+                <div className="p-3.5 rounded-lg border border-blue-200 bg-blue-50/40 flex flex-col justify-between space-y-3">
+                  <div>
+                    <span className="font-bold text-slate-900 text-xs block mb-1">
+                      Subir a Firebase (Push)
+                    </span>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Envía las 21 tablas locales completas con sus datos relacionados hacia Firestore.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handlePushToFirebase}
+                    className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                    <span>Subir Catálogo a Firebase</span>
+                  </button>
+                </div>
+
+                {/* Pull from Firebase */}
+                <div className="p-3.5 rounded-lg border border-emerald-200 bg-emerald-50/40 flex flex-col justify-between space-y-3">
+                  <div>
+                    <span className="font-bold text-slate-900 text-xs block mb-1">
+                      Descargar de Firebase (Pull)
+                    </span>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Descarga todas las colecciones desde Firebase Firestore hacia la memoria del sitio web.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handlePullFromFirebase}
+                    className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <ArrowDownLeft className="w-3.5 h-3.5" />
+                    <span>Descargar desde Firebase</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: 21 TABLAS Y RELACIONES */}
+          {activeTab === 'tablas' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                    <Cloud className="w-3.5 h-3.5 text-amber-600" />
+                    Catálogo de las 21 Tablas y Relaciones
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Todas las tablas están normalizadas y vinculadas por claves relacionales (ID).
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] text-slate-400 block font-mono">Proyecto activo:</span>
+                  <span className="font-mono font-bold text-[11px] text-amber-700">{firebaseProjectId}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {allCollections.map((col) => {
+                  const IconComp = col.icon;
+                  return (
+                    <div
+                      key={col.name}
+                      className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/60 hover:bg-slate-100 transition-colors flex items-center justify-between gap-2"
+                    >
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <div className="w-7 h-7 rounded bg-white border border-slate-200 flex items-center justify-center shrink-0 text-slate-600">
+                          <IconComp className="w-3.5 h-3.5" />
+                        </div>
+                        <div className="truncate">
+                          <span className="font-semibold text-slate-800 text-[11px] block truncate">
+                            {col.label}
+                          </span>
+                          <span className="font-mono text-[10px] text-slate-400 truncate block">
+                            /{col.name} &bull; <span className="text-amber-700">Relación: {col.relation}</span>
+                          </span>
+                        </div>
+                      </div>
+                      <span className="font-bold text-xs bg-amber-100 text-amber-900 px-2 py-0.5 rounded-full shrink-0 border border-amber-200">
+                        {col.count} docs
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: AUDITORIA Y LOGS */}
           {activeTab === 'auditoria' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
@@ -521,34 +764,33 @@ export const FirebaseModal: React.FC = () => {
 
         {/* Action Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
-          <div className="text-[11px] text-slate-500">
-            Reglas de Seguridad: <span className="font-mono text-emerald-700 font-semibold">firestore.rules (Activas)</span>
+          <div className="text-[11px] text-slate-500 flex items-center gap-2">
+            <span>Base de datos:</span>
+            <span className="font-mono text-amber-700 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+              {firebaseDatabaseId}
+            </span>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={handleTestConnection}
-              disabled={isTesting}
-              className="px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50 text-xs"
+              onClick={() => setShowFirebaseModal(false)}
+              className="px-3 py-1.5 rounded-md border border-slate-300 hover:bg-slate-100 text-slate-700 font-medium transition-colors cursor-pointer text-xs"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isTesting ? 'animate-spin' : ''}`} />
-              <span>{isTesting ? 'Verificando...' : 'Probar Conexión'}</span>
+              Cerrar
             </button>
 
             <button
-              onClick={syncNowWithFirebase}
-              className="px-3.5 py-1.5 rounded-md bg-slate-800 hover:bg-slate-900 text-white font-medium transition-colors flex items-center gap-1.5 cursor-pointer text-xs"
-            >
-              <Cloud className="w-3.5 h-3.5" />
-              <span>Sincronizar Todas</span>
-            </button>
-
-            <button
-              onClick={seedFirebaseDatabase}
+              onClick={async () => {
+                setSyncProgress({ running: true, message: 'Sincronizando todas las tablas...', percent: 15 });
+                await syncBidirectionalAll((msg, pct) => {
+                  setSyncProgress({ running: true, message: msg, percent: pct });
+                });
+                setSyncProgress({ running: false, message: '', percent: 0 });
+              }}
               className="px-3.5 py-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-medium transition-colors flex items-center gap-1.5 cursor-pointer text-xs shadow-sm"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Poblar 21 Tablas</span>
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Sincronizar Todas las Tablas</span>
             </button>
           </div>
         </div>

@@ -56,6 +56,9 @@ export const DatabaseView: React.FC = () => {
     firebaseDatabaseId,
     syncNowWithFirebase,
     seedFirebaseDatabase,
+    uploadCurrentDataToFirebase,
+    downloadDataFromFirebase,
+    syncBidirectionalAll,
     setShowFirebaseModal,
     productos,
     categorias,
@@ -86,7 +89,9 @@ export const DatabaseView: React.FC = () => {
   const [collectionSearch, setCollectionSearch] = useState<string>('');
   const [recordSearch, setRecordSearch] = useState<string>('');
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [isSeeding, setIsSeeding] = useState<boolean>(false);
+  const [isPushing, setIsPushing] = useState<boolean>(false);
+  const [isPulling, setIsPulling] = useState<boolean>(false);
+  const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
   const [copiedSuccess, setCopiedSuccess] = useState<boolean>(false);
   const [inspectDoc, setInspectDoc] = useState<any | null>(null);
   const [inspectDocCopied, setInspectDocCopied] = useState<boolean>(false);
@@ -319,22 +324,27 @@ export const DatabaseView: React.FC = () => {
     return collections.reduce((acc, curr) => acc + curr.data.length, 0);
   }, [collections]);
 
-  // Selected collection data
+  // Selected collection data (safely falls back to schema if collections is empty)
   const currentCollection = useMemo(() => {
+    if (!collections || collections.length === 0) {
+      return allCollectionSchemas.find((c) => c.id === selectedCollectionId) || allCollectionSchemas[0];
+    }
     return collections.find((c) => c.id === selectedCollectionId) || collections[0];
-  }, [collections, selectedCollectionId]);
+  }, [collections, selectedCollectionId, allCollectionSchemas]);
 
   // Filter collections in sidebar
   const filteredCollections = useMemo(() => {
-    if (!collectionSearch.trim()) return collections;
+    const list = collections.length > 0 ? collections : allCollectionSchemas;
+    if (!collectionSearch.trim()) return list;
     const q = collectionSearch.toLowerCase();
-    return collections.filter(
+    return list.filter(
       (c) => c.name.toLowerCase().includes(q) || c.label.toLowerCase().includes(q)
     );
-  }, [collections, collectionSearch]);
+  }, [collections, allCollectionSchemas, collectionSearch]);
 
   // Filter records within the active collection
   const filteredRecords = useMemo(() => {
+    if (!currentCollection || !currentCollection.data) return [];
     const data = currentCollection.data;
     if (!recordSearch.trim()) return data;
     const q = recordSearch.toLowerCase();
@@ -352,25 +362,52 @@ export const DatabaseView: React.FC = () => {
 
   const [syncSuccessToast, setSyncSuccessToast] = useState(false);
 
-  const handleSync = async () => {
+  const handleSyncBidirectional = async () => {
     setIsSyncing(true);
+    setSyncStatusMsg('Iniciando sincronización bidireccional...');
     try {
-      await syncNowWithFirebase();
+      const res = await syncBidirectionalAll((msg) => setSyncStatusMsg(msg));
+      setSyncStatusMsg(res.message);
       setSyncSuccessToast(true);
-      setTimeout(() => setSyncSuccessToast(false), 4000);
+      setTimeout(() => setSyncSuccessToast(false), 5000);
     } finally {
       setIsSyncing(false);
     }
   };
 
+  const handlePushData = async () => {
+    setIsPushing(true);
+    setSyncStatusMsg('Subiendo catálogo local a Firestore...');
+    try {
+      const res = await uploadCurrentDataToFirebase((msg) => setSyncStatusMsg(msg));
+      setSyncStatusMsg(res.message);
+      setSyncSuccessToast(true);
+      setTimeout(() => setSyncSuccessToast(false), 5000);
+    } finally {
+      setIsPushing(false);
+    }
+  };
+
+  const handlePullData = async () => {
+    setIsPulling(true);
+    setSyncStatusMsg('Descargando catálogo desde Firestore...');
+    try {
+      const res = await downloadDataFromFirebase();
+      setSyncStatusMsg(res.message);
+      setSyncSuccessToast(true);
+      setTimeout(() => setSyncSuccessToast(false), 5000);
+    } finally {
+      setIsPulling(false);
+    }
+  };
+
+  const handleSync = async () => {
+    handleSyncBidirectional();
+  };
+
   const handleSeed = async () => {
     if (confirm('¿Deseas resincronizar y sembrar los datos base en Firestore?')) {
-      setIsSeeding(true);
-      try {
-        await seedFirebaseDatabase();
-      } finally {
-        setIsSeeding(false);
-      }
+      handlePushData();
     }
   };
 
@@ -436,13 +473,42 @@ export const DatabaseView: React.FC = () => {
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              id="btn-sync-database"
-              onClick={handleSync}
-              disabled={isSyncing}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              id="btn-sync-bidirectional"
+              onClick={handleSyncBidirectional}
+              disabled={isSyncing || isPushing || isPulling}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar con Firestore'}</span>
+              <span>{isSyncing ? 'Sincronizando...' : 'Sincronización Bidireccional'}</span>
+            </button>
+
+            <button
+              id="btn-push-database"
+              onClick={handlePushData}
+              disabled={isSyncing || isPushing || isPulling}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Cloud className={`w-3.5 h-3.5 ${isPushing ? 'animate-bounce' : ''}`} />
+              <span>{isPushing ? 'Subiendo...' : 'Subir a Firebase'}</span>
+            </button>
+
+            <button
+              id="btn-pull-database"
+              onClick={handlePullData}
+              disabled={isSyncing || isPushing || isPulling}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Download className={`w-3.5 h-3.5 ${isPulling ? 'animate-bounce' : ''}`} />
+              <span>{isPulling ? 'Descargando...' : 'Descargar de Firebase'}</span>
+            </button>
+
+            <button
+              id="btn-open-firebase-config"
+              onClick={() => setShowFirebaseModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            >
+              <Server className="w-3.5 h-3.5 text-amber-400" />
+              <span>Vincular BD Firebase</span>
             </button>
 
             <button
@@ -450,17 +516,8 @@ export const DatabaseView: React.FC = () => {
               onClick={handleExportFullJSON}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             >
-              <Download className="w-3.5 h-3.5 text-amber-400" />
-              <span>Exportar Backup JSON</span>
-            </button>
-
-            <button
-              id="btn-open-firebase-config"
-              onClick={() => setShowFirebaseModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-            >
-              <Server className="w-3.5 h-3.5" />
-              <span>Configuración Cloud</span>
+              <FileText className="w-3.5 h-3.5 text-slate-400" />
+              <span>Exportar JSON</span>
             </button>
 
             <a
@@ -468,16 +525,16 @@ export const DatabaseView: React.FC = () => {
               href={`https://console.firebase.google.com/project/${firebaseProjectId}/firestore/databases/${firebaseDatabaseId}/data`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-black text-slate-300 border border-slate-800 rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              <span>Abrir en Firebase Console</span>
+              <span>Consola Firebase</span>
             </a>
           </div>
         }
       />
 
-      {/* Sync Success Alert Toast */}
+      {/* Sync Status Alert Toast */}
       {syncSuccessToast && (
         <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-xl p-4 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200 shadow-sm">
           <div className="flex items-center gap-3">
@@ -486,10 +543,10 @@ export const DatabaseView: React.FC = () => {
             </div>
             <div>
               <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                ¡Sincronización con Firestore exitosa!
+                ¡Operación completada con Firebase!
               </p>
               <p className="text-[11px] text-emerald-800 dark:text-emerald-400">
-                Las {collections.length} tablas activas de Firebase Firestore están conectadas y sincronizadas en vivo.
+                {syncStatusMsg || `Las ${collections.length} tablas están conectadas y sincronizadas.`}
               </p>
             </div>
           </div>
@@ -598,15 +655,25 @@ export const DatabaseView: React.FC = () => {
               </p>
               <div className="p-3 bg-white/70 dark:bg-slate-900/70 rounded-lg border border-rose-200 dark:border-rose-900/40 text-slate-600 dark:text-slate-400 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <span>
-                  El sistema está operando en <strong>modo 100% local</strong> con la memoria del navegador. Los datos que ves abajo corresponden a los registros locales de respaldo.
+                  El sistema está operando en <strong>modo 100% local</strong>. Para vincular un nuevo proyecto o base de datos y que todas tus tablas y datos aparezcan sincronizados tanto en Firebase como aquí, haz clic en:
                 </span>
-                <button
-                  type="button"
-                  onClick={() => syncNowWithFirebase()}
-                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-semibold cursor-pointer shrink-0 transition-colors"
-                >
-                  Verificar estado de nuevo
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowFirebaseModal(true)}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs"
+                  >
+                    <Server className="w-3.5 h-3.5" />
+                    <span>Vincular BD Firebase</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => syncNowWithFirebase()}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-semibold cursor-pointer transition-colors"
+                  >
+                    Reintentar
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -904,10 +971,10 @@ export const DatabaseView: React.FC = () => {
             </span>
             <button
               onClick={handleSeed}
-              disabled={isSeeding}
+              disabled={isPushing}
               className="text-amber-600 hover:text-amber-700 font-semibold cursor-pointer underline disabled:opacity-50"
             >
-              {isSeeding ? 'Restableciendo...' : 'Restablecer colección de muestra'}
+              {isPushing ? 'Subiendo datos a Firebase...' : 'Sincronizar y sembrar en Firebase'}
             </button>
           </div>
         </div>
