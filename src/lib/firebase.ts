@@ -96,7 +96,7 @@ export function initFirestoreInstance(targetApp: FirebaseApp, databaseId?: strin
 // Initialize or get Firestore
 export let db: Firestore = initFirestoreInstance(app, firebaseConfig.firestoreDatabaseId);
 
-export type FirebaseSyncStatus = 'connecting' | 'connected' | 'syncing' | 'offline' | 'error';
+export type FirebaseSyncStatus = 'connecting' | 'connected' | 'syncing' | 'offline' | 'error' | 'disconnected';
 
 let syncStatusListeners: ((status: FirebaseSyncStatus, message?: string) => void)[] = [];
 let currentStatus: FirebaseSyncStatus = 'connecting';
@@ -167,24 +167,22 @@ export async function resetToDefaultFirebase(): Promise<boolean> {
 export async function testFirestoreConnection(): Promise<boolean> {
   updateFirebaseStatus('connecting', 'Verificando enlace con Firebase Firestore...');
   try {
-    const testDocRef = doc(db, 'empresas', '1');
-    await getDocFromServer(testDocRef);
-    updateFirebaseStatus('connected', `En línea con Firestore (${firebaseConfig.projectId})`);
-    return true;
-  } catch (error: any) {
-    try {
-      const colRef = collection(db, 'clientes');
-      const q = query(colRef, limit(1));
-      const snap = await getDocs(q);
-      if (snap.size > 0) {
-        updateFirebaseStatus('connected', `En línea con Firestore (${firebaseConfig.projectId})`);
-        return true;
-      }
-    } catch {
-      // ignore
+    const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/${dbId}/documents?key=${firebaseConfig.apiKey}`;
+    const res = await fetch(url);
+    if (res.status === 404) {
+      updateFirebaseStatus('disconnected', `Base de datos '${dbId}' eliminada en Firebase (404 Not Found)`);
+      return false;
     }
-    updateFirebaseStatus('connected', `Enlace activo con Firestore (${firebaseConfig.projectId})`);
-    return true;
+    if (res.ok || res.status === 403) {
+      updateFirebaseStatus('connected', `En línea con Firestore (${firebaseConfig.projectId})`);
+      return true;
+    }
+    updateFirebaseStatus('offline', `Estado de Firestore: HTTP ${res.status}`);
+    return false;
+  } catch (err: any) {
+    updateFirebaseStatus('disconnected', `Desconectado de Firebase: ${err?.message || 'Sin conexión'}`);
+    return false;
   }
 }
 

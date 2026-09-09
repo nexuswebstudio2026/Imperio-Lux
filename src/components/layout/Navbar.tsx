@@ -99,24 +99,66 @@ export const Navbar: React.FC = () => {
         <button
           id="btn-firebase-status"
           onClick={() => setShowFirebaseModal(true)}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-amber-500/40 hover:border-amber-400 transition-colors cursor-pointer shadow-xs"
-          title="Ver estado de base de datos Firebase Firestore"
+          className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 border transition-colors cursor-pointer shadow-xs ${
+            firebaseStatus === 'connected'
+              ? 'border-emerald-500/40 hover:border-emerald-400'
+              : firebaseStatus === 'disconnected'
+              ? 'border-rose-500/50 hover:border-rose-400'
+              : 'border-amber-500/40 hover:border-amber-400'
+          }`}
+          title={
+            firebaseStatus === 'connected'
+              ? 'Conectado a Firebase Firestore'
+              : firebaseStatus === 'disconnected'
+              ? 'Base de datos eliminada en Firebase (Desconectado)'
+              : 'Estado de conexión con Firebase'
+          }
         >
           <span className="relative flex h-2 w-2">
-            <span
-              className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                firebaseStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400'
-              }`}
-            ></span>
+            {firebaseStatus === 'connected' && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-emerald-400"></span>
+            )}
             <span
               className={`relative inline-flex rounded-full h-2 w-2 ${
-                firebaseStatus === 'connected' ? 'bg-emerald-500' : 'bg-amber-500'
+                firebaseStatus === 'connected'
+                  ? 'bg-emerald-500'
+                  : firebaseStatus === 'disconnected'
+                  ? 'bg-rose-500'
+                  : 'bg-amber-500'
               }`}
             ></span>
           </span>
-          <Database className="w-3.5 h-3.5 text-amber-400" />
-          <span className="font-semibold text-[11px] text-amber-300">Firebase</span>
-          <span className="text-[10px] text-slate-400 hidden md:inline">| Firestore</span>
+          <Database
+            className={`w-3.5 h-3.5 ${
+              firebaseStatus === 'connected'
+                ? 'text-emerald-400'
+                : firebaseStatus === 'disconnected'
+                ? 'text-rose-400'
+                : 'text-amber-400'
+            }`}
+          />
+          <span
+            className={`font-semibold text-[11px] ${
+              firebaseStatus === 'connected'
+                ? 'text-emerald-300'
+                : firebaseStatus === 'disconnected'
+                ? 'text-rose-300'
+                : 'text-amber-300'
+            }`}
+          >
+            {firebaseStatus === 'connected'
+              ? 'Firebase'
+              : firebaseStatus === 'disconnected'
+              ? 'Firebase Desconectado'
+              : 'Firebase'}
+          </span>
+          <span className="text-[10px] text-slate-400 hidden md:inline">
+            {firebaseStatus === 'connected'
+              ? '| En línea'
+              : firebaseStatus === 'disconnected'
+              ? '| BD Eliminada'
+              : '| Sincronizando'}
+          </span>
         </button>
 
         <button

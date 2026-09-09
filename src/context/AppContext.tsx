@@ -414,11 +414,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const syncNowWithFirebase = useCallback(async () => {
     setFirebaseStatus('syncing');
+    setFirebaseMessage('Verificando estado de la base de datos en Firebase...');
+    
+    // Check if the database was deleted in Firebase
+    const isConnected = await testFirestoreConnection();
+    if (!isConnected) {
+      setFirebaseStatus('disconnected');
+      setFirebaseMessage(
+        'Base de datos no encontrada en Firebase (404 Not Found). El sitio web está desconectado y operando de forma 100% local.'
+      );
+      return;
+    }
+
     setFirebaseMessage('Sincronizando todas las tablas con Firestore...');
     try {
-      // Non-blocking background connectivity verification
-      testFirestoreConnection().catch(() => {});
-
       // Fetch all 21 database tables in parallel from Firestore
       const [
         prods,

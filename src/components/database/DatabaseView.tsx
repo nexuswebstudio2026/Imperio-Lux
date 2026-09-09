@@ -85,15 +85,14 @@ export const DatabaseView: React.FC = () => {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>('productos');
   const [collectionSearch, setCollectionSearch] = useState<string>('');
   const [recordSearch, setRecordSearch] = useState<string>('');
-  const [onlyExistingInFirebase, setOnlyExistingInFirebase] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isSeeding, setIsSeeding] = useState<boolean>(false);
   const [copiedSuccess, setCopiedSuccess] = useState<boolean>(false);
   const [inspectDoc, setInspectDoc] = useState<any | null>(null);
   const [inspectDocCopied, setInspectDocCopied] = useState<boolean>(false);
 
-  // All 21 collections mapped with live state
-  const collections: CollectionMeta[] = useMemo(() => [
+  // All known collection schemas in the system
+  const allCollectionSchemas: CollectionMeta[] = useMemo(() => [
     {
       id: 'productos',
       name: 'productos',
@@ -307,6 +306,15 @@ export const DatabaseView: React.FC = () => {
     notificaciones,
   ]);
 
+  // Strictly dynamic sync with Firebase Firestore:
+  // ONLY collections that currently exist in Firebase (data.length > 0) are listed,
+  // sorted alphabetically to match the exact list in Firebase Console.
+  const collections: CollectionMeta[] = useMemo(() => {
+    return allCollectionSchemas
+      .filter((col) => col.data && col.data.length > 0)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [allCollectionSchemas]);
+
   const totalDocuments = useMemo(() => {
     return collections.reduce((acc, curr) => acc + curr.data.length, 0);
   }, [collections]);
@@ -318,16 +326,12 @@ export const DatabaseView: React.FC = () => {
 
   // Filter collections in sidebar
   const filteredCollections = useMemo(() => {
-    let list = collections;
-    if (onlyExistingInFirebase) {
-      list = list.filter((c) => c.data.length > 0);
-    }
-    if (!collectionSearch.trim()) return list;
+    if (!collectionSearch.trim()) return collections;
     const q = collectionSearch.toLowerCase();
-    return list.filter(
+    return collections.filter(
       (c) => c.name.toLowerCase().includes(q) || c.label.toLowerCase().includes(q)
     );
-  }, [collections, collectionSearch, onlyExistingInFirebase]);
+  }, [collections, collectionSearch]);
 
   // Filter records within the active collection
   const filteredRecords = useMemo(() => {
@@ -485,7 +489,7 @@ export const DatabaseView: React.FC = () => {
                 ¡Sincronización con Firestore exitosa!
               </p>
               <p className="text-[11px] text-emerald-800 dark:text-emerald-400">
-                Las 21 tablas de la base de datos están conectadas y sincronizadas en vivo con Firestore.
+                Las {collections.length} tablas activas de Firebase Firestore están conectadas y sincronizadas en vivo.
               </p>
             </div>
           </div>
@@ -510,10 +514,22 @@ export const DatabaseView: React.FC = () => {
                 <h2 className="text-lg font-bold text-slate-100 tracking-tight">
                   Firebase Firestore Database
                 </h2>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  Conectada y En Línea
-                </span>
+                {firebaseStatus === 'connected' ? (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Conectada y En Línea
+                  </span>
+                ) : firebaseStatus === 'disconnected' ? (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                    Desconectada (BD Eliminada)
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                    Verificando Conexión
+                  </span>
+                )}
                 <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
                   Imperio Lux
                 </span>
@@ -534,25 +550,68 @@ export const DatabaseView: React.FC = () => {
           <div className="flex items-center gap-4 text-xs shrink-0">
             <div className="bg-slate-800/80 border border-slate-700/60 rounded-lg px-3 py-2 text-center">
               <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                Tablas / Colecciones
+                Tablas en Firebase
               </span>
-              <span className="text-lg font-black text-amber-400">{collections.length}</span>
+              <span className={`text-lg font-black ${firebaseStatus === 'disconnected' ? 'text-rose-400' : 'text-amber-400'}`}>
+                {firebaseStatus === 'disconnected' ? 0 : collections.length}
+              </span>
             </div>
             <div className="bg-slate-800/80 border border-slate-700/60 rounded-lg px-3 py-2 text-center">
               <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">
                 Total Registros
               </span>
-              <span className="text-lg font-black text-emerald-400">{totalDocuments}</span>
+              <span className={`text-lg font-black ${firebaseStatus === 'disconnected' ? 'text-slate-400' : 'text-emerald-400'}`}>
+                {firebaseStatus === 'disconnected' ? '0 en la nube' : totalDocuments}
+              </span>
             </div>
             <div className="bg-slate-800/80 border border-slate-700/60 rounded-lg px-3 py-2 text-center">
               <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">
                 Reglas de Seguridad
               </span>
-              <span className="text-sm font-black text-blue-400">Activas</span>
+              <span className={`text-sm font-black ${firebaseStatus === 'disconnected' ? 'text-slate-500' : 'text-blue-400'}`}>
+                {firebaseStatus === 'disconnected' ? 'Inactivas' : 'Activas'}
+              </span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Alerta explícita si la base de datos fue eliminada en Firebase */}
+      {firebaseStatus === 'disconnected' && (
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-5 text-slate-800 dark:text-slate-200 shadow-xs">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div className="space-y-2 text-xs flex-1">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="font-bold text-sm text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
+                  <span>Base de datos eliminada en Firebase: El sitio web está desconectado</span>
+                </h3>
+                <span className="text-[11px] font-semibold bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 px-2 py-0.5 rounded border border-rose-300 dark:border-rose-800">
+                  HTTP 404 NOT_FOUND
+                </span>
+              </div>
+              <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
+                Has eliminado la base de datos de Firebase (<code className="font-mono font-medium text-rose-800 dark:text-rose-300">{firebaseDatabaseId}</code> en el proyecto <code className="font-mono font-medium text-slate-800 dark:text-slate-200">{firebaseProjectId}</code>).
+                Tal como esperas, <strong>el sitio web no está conectado a la base de datos de Firebase</strong> y el recuento de tablas en la nube es <strong>0</strong>.
+              </p>
+              <div className="p-3 bg-white/70 dark:bg-slate-900/70 rounded-lg border border-rose-200 dark:border-rose-900/40 text-slate-600 dark:text-slate-400 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <span>
+                  El sistema está operando en <strong>modo 100% local</strong> con la memoria del navegador. Los datos que ves abajo corresponden a los registros locales de respaldo.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => syncNowWithFirebase()}
+                  className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-semibold cursor-pointer shrink-0 transition-colors"
+                >
+                  Verificar estado de nuevo
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Guía rápida para encontrar la base de datos en Firebase Console */}
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-slate-800 dark:text-slate-200">
@@ -602,11 +661,15 @@ export const DatabaseView: React.FC = () => {
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-amber-500" />
               <h3 className="font-bold text-xs uppercase tracking-wider text-slate-700">
-                Colecciones ({filteredCollections.length})
+                {firebaseStatus === 'disconnected'
+                  ? `Registros Locales (${filteredCollections.length})`
+                  : `Tablas en Firebase (${filteredCollections.length})`}
               </h3>
             </div>
             <span className="text-[11px] text-slate-500 font-medium">
-              {totalDocuments} docs
+              {firebaseStatus === 'disconnected'
+                ? 'Modo Local'
+                : `${totalDocuments} docs`}
             </span>
           </div>
 
@@ -620,21 +683,6 @@ export const DatabaseView: React.FC = () => {
                 placeholder="Filtrar tablas..."
                 className="w-full text-xs pl-8 pr-3 py-1.5 rounded-md border border-slate-200 bg-white focus:outline-none focus:border-amber-500"
               />
-            </div>
-            <div className="mt-2 flex items-center justify-between px-0.5 text-[11px]">
-              <span className="text-slate-500 font-medium">Solo tablas con datos en Firebase</span>
-              <button
-                type="button"
-                id="btn-toggle-only-firebase"
-                onClick={() => setOnlyExistingInFirebase(!onlyExistingInFirebase)}
-                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors cursor-pointer ${
-                  onlyExistingInFirebase
-                    ? 'bg-amber-500 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {onlyExistingInFirebase ? 'En Firebase (20)' : 'Todas (21)'}
-              </button>
             </div>
           </div>
 
@@ -747,58 +795,16 @@ export const DatabaseView: React.FC = () => {
 
           {/* Data Table */}
           <div className="overflow-x-auto max-h-[500px]">
-            {currentCollection.data.length === 0 ? (
-              <div className="p-8 text-center bg-slate-50/60 m-4 rounded-xl border border-slate-200">
-                <div className="w-12 h-12 rounded-full bg-amber-500/10 text-amber-600 flex items-center justify-center mx-auto mb-3 border border-amber-500/20">
-                  <Database className="w-6 h-6" />
-                </div>
-                <h4 className="text-sm font-bold text-slate-800">
-                  La colección '{currentCollection.name}' no tiene documentos en Firebase
-                </h4>
-                <p className="text-xs text-slate-600 max-w-lg mx-auto mt-2 leading-relaxed">
-                  En Firebase Firestore (base de datos NoSQL documental), <strong>las colecciones no existen físicamente en la consola cuando están vacías</strong>. Al haber eliminado los clientes, Firestore eliminó automáticamente la colección de la barra lateral de Firebase Console.
-                </p>
-                <div className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-xs font-semibold text-amber-800 shadow-2xs">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  <span>En cuanto se registre el primer cliente, reaparecerá al instante en Firebase Console</span>
-                </div>
-                {currentCollection.id === 'clientes' && (
-                  <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      id="btn-seed-sample-cliente"
-                      onClick={() => {
-                        addCliente({
-                          tipo_persona: 'Natural',
-                          razon_social: 'Cliente VIP Ejemplo',
-                          documento_id: 1,
-                          numero_documento: '45892147',
-                          email: 'vip@imperiolux.com',
-                          telefono: '+51 987 654 321',
-                          direccion: 'Av. Conquistadores 450, San Isidro',
-                        });
-                      }}
-                      className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
-                    >
-                      <span>+ Crear cliente de ejemplo en Firebase</span>
-                    </button>
-                    <a
-                      href={`https://console.firebase.google.com/project/${firebaseProjectId}/firestore/databases/${firebaseDatabaseId}/data`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Ver en Firebase Console</span>
-                    </a>
-                  </div>
-                )}
+            {!currentCollection ? (
+              <div className="p-8 text-center text-slate-400">
+                <Database className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm font-medium">No hay tablas con datos en Firestore.</p>
               </div>
             ) : filteredRecords.length === 0 ? (
               <div className="p-8 text-center text-slate-400">
                 <Database className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm font-medium">No se encontraron registros en esta tabla.</p>
-                <p className="text-xs mt-1">Intenta con otro término de búsqueda o añade registros.</p>
+                <p className="text-sm font-medium">No se encontraron registros coincidentes en esta tabla.</p>
+                <p className="text-xs mt-1">Intenta con otro término de búsqueda.</p>
               </div>
             ) : (
               <table className="w-full text-left text-xs border-collapse">

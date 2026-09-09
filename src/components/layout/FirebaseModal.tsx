@@ -251,40 +251,64 @@ export const FirebaseModal: React.FC = () => {
         {/* Body content */}
         <div className="p-6 space-y-5 text-slate-700 text-xs overflow-y-auto flex-1">
           {/* Status Alert */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border border-slate-200">
+          <div className={`flex items-center justify-between p-3 rounded-lg border ${
+            firebaseStatus === 'connected'
+              ? 'bg-emerald-50/50 border-emerald-200'
+              : firebaseStatus === 'disconnected'
+              ? 'bg-rose-50 border-rose-200'
+              : 'bg-slate-50 border-slate-200'
+          }`}>
             <div className="flex items-center gap-2.5">
               <span className="relative flex h-3 w-3">
-                <span
-                  className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                    firebaseStatus === 'connected'
-                      ? 'bg-emerald-400'
-                      : firebaseStatus === 'syncing'
-                      ? 'bg-blue-400'
-                      : 'bg-amber-400'
-                  }`}
-                ></span>
+                {firebaseStatus === 'connected' && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-emerald-400"></span>
+                )}
                 <span
                   className={`relative inline-flex rounded-full h-3 w-3 ${
                     firebaseStatus === 'connected'
                       ? 'bg-emerald-500'
-                      : firebaseStatus === 'syncing'
-                      ? 'bg-blue-500'
+                      : firebaseStatus === 'disconnected'
+                      ? 'bg-rose-500'
                       : 'bg-amber-500'
                   }`}
                 ></span>
               </span>
               <div>
-                <p className="font-semibold text-slate-900 text-xs capitalize">
-                  Estado: {firebaseStatus === 'connected' ? 'En línea y Conectado' : firebaseStatus}
+                <p className="font-semibold text-slate-900 text-xs">
+                  Estado:{' '}
+                  {firebaseStatus === 'connected'
+                    ? 'En línea y Conectado'
+                    : firebaseStatus === 'disconnected'
+                    ? 'Desconectado (Base de datos eliminada en Firebase)'
+                    : firebaseStatus}
                 </p>
                 <p className="text-[11px] text-slate-500">{firebaseMessage}</p>
               </div>
             </div>
-            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              Nube Activa
-            </span>
+            {firebaseStatus === 'connected' ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Nube Activa
+              </span>
+            ) : firebaseStatus === 'disconnected' ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Desconectado
+              </span>
+            ) : null}
           </div>
+
+          {firebaseStatus === 'disconnected' && (
+            <div className="p-3.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-800 text-xs space-y-1">
+              <p className="font-bold flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-rose-600" />
+                Base de datos eliminada en Firebase Console
+              </p>
+              <p className="text-slate-600 text-[11px] leading-relaxed">
+                Has eliminado la base de datos de Firebase, por lo cual el sitio web está <strong>completamente desconectado</strong> de la nube. Todas las acciones del sistema funcionan ahora en <strong>modo local en el navegador</strong>.
+              </p>
+            </div>
+          )}
 
           {/* TAB 1: 21 TABLES */}
           {activeTab === 'tablas' && (
