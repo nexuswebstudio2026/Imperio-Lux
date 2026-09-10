@@ -45,6 +45,8 @@ export const GoogleSheetsModal: React.FC = () => {
     uploadAllToGoogleSheets,
     downloadAllFromGoogleSheets,
     syncBidirectionalGoogleSheets,
+    downloadGoogleSheetsExcel,
+    exportAllToExcel,
     productos,
     categorias,
     marcas,
@@ -602,21 +604,38 @@ export const GoogleSheetsModal: React.FC = () => {
                         <Download className="w-5 h-5" />
                       </div>
                       <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                        Descargar desde Sheets
+                        Descargar en Formato Excel
                       </h4>
                       <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                        Lee todas las filas de cada pestaña en la hoja de cálculo de Google y actualiza los catálogos y transacciones del sistema.
+                        Descarga el archivo Excel (.xlsx) oficial generado desde Google Sheets o sincroniza las filas hacia la base de datos de la página web.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      disabled={syncProgress.running}
-                      onClick={handleTriggerDownload}
-                      className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-xs cursor-pointer disabled:opacity-50"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Descargar desde Sheets</span>
-                    </button>
+                    <div className="mt-4 space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          try {
+                            downloadGoogleSheetsExcel();
+                          } catch {
+                            exportAllToExcel();
+                          }
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 px-3 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-xs cursor-pointer"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5" />
+                        <span>Descargar Excel (.xlsx)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={syncProgress.running}
+                        onClick={handleTriggerDownload}
+                        className="w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer disabled:opacity-50 border border-blue-200 dark:border-blue-800"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Importar datos a la Web</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

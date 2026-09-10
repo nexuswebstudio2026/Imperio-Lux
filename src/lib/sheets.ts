@@ -123,12 +123,43 @@ export async function ensureSheetTabsExist(
   }
 }
 
+export const TABLE_DEFAULT_HEADERS: Record<string, string[]> = {
+  productos: ['id', 'codigo', 'nombre', 'descripcion', 'categoria_id', 'marca_id', 'presentacion_id', 'precio_compra', 'precio_venta', 'stock', 'stock_minimo', 'estado', 'created_at'],
+  categorias: ['id', 'nombre', 'descripcion', 'estado'],
+  marcas: ['id', 'nombre', 'descripcion', 'estado'],
+  presentaciones: ['id', 'nombre', 'simbolo', 'estado'],
+  clientes: ['id', 'tipo_documento', 'numero_documento', 'nombre_razon_social', 'telefono', 'email', 'direccion', 'estado', 'created_at'],
+  proveedores: ['id', 'tipo_documento', 'numero_documento', 'nombre_razon_social', 'contacto_nombre', 'telefono', 'email', 'direccion', 'estado'],
+  empleados: ['id', 'nombre_completo', 'tipo_documento', 'numero_documento', 'cargo', 'telefono', 'email', 'salario', 'fecha_ingreso', 'estado'],
+  ventas: ['id', 'serie', 'numero', 'cliente_id', 'cliente_nombre', 'tipo_comprobante', 'metodo_pago', 'subtotal', 'igv', 'total', 'estado', 'fecha_venta'],
+  compras: ['id', 'serie', 'numero', 'proveedor_id', 'proveedor_nombre', 'tipo_comprobante', 'metodo_pago', 'subtotal', 'igv', 'total', 'estado', 'fecha_compra'],
+  cajas: ['id', 'nombre', 'usuario_id', 'monto_apertura', 'monto_cierre', 'total_ventas', 'estado', 'fecha_apertura', 'fecha_cierre'],
+  movimientos_caja: ['id', 'caja_id', 'tipo', 'concepto', 'monto', 'usuario_id', 'fecha'],
+  inventario_ajustes: ['id', 'producto_id', 'producto_nombre', 'tipo_ajuste', 'cantidad', 'motivo', 'usuario_id', 'fecha'],
+  kardex: ['id', 'producto_id', 'producto_nombre', 'tipo_movimiento', 'motivo', 'cantidad', 'costo_unitario', 'total', 'saldo_stock', 'fecha'],
+  empresas: ['id', 'nombre', 'propietario', 'ruc', 'porcentaje_impuesto', 'abreviatura_impuesto', 'direccion', 'ubicacion', 'telefono', 'correo', 'moneda_id'],
+  users: ['id', 'name', 'email', 'role_id', 'role_name', 'status', 'created_at'],
+  roles: ['id', 'name', 'description', 'permissions'],
+  monedas: ['id', 'estandar_iso', 'nombre_completo', 'simbolo'],
+  documentos: ['id', 'nombre'],
+  comprobantes: ['id', 'nombre', 'serie', 'correlativo', 'es_default'],
+  activity_logs: ['id', 'usuario_id', 'usuario_nombre', 'modulo', 'accion', 'descripcion', 'fecha'],
+  notificaciones: ['id', 'titulo', 'mensaje', 'tipo', 'leida', 'fecha'],
+};
+
 /**
  * Convert an array of objects into a 2D array of [headers, ...rows]
  */
-export function objectsToSheetRows(records: any[]): { headers: string[]; rows: any[][] } {
+export function objectsToSheetRows(
+  records: any[],
+  tableName?: string
+): { headers: string[]; rows: any[][] } {
   if (!records || records.length === 0) {
-    return { headers: ['id', 'estado'], rows: [] };
+    const fallbackHeaders =
+      tableName && TABLE_DEFAULT_HEADERS[tableName]
+        ? TABLE_DEFAULT_HEADERS[tableName]
+        : ['id', 'estado'];
+    return { headers: fallbackHeaders, rows: [] };
   }
 
   // Collect all unique keys from all records to ensure no columns are missed
@@ -139,9 +170,15 @@ export function objectsToSheetRows(records: any[]): { headers: string[]; rows: a
     }
   });
 
-  const headers = Array.from(keySet);
-  // Put 'id' first if present
-  if (headers.includes('id')) {
+  let headers = Array.from(keySet);
+
+  // If we have known default headers for this table, prioritize their order
+  if (tableName && TABLE_DEFAULT_HEADERS[tableName]) {
+    const known = TABLE_DEFAULT_HEADERS[tableName];
+    const presentKnown = known.filter((k) => headers.includes(k));
+    const extra = headers.filter((h) => !known.includes(h));
+    headers = [...presentKnown, ...extra];
+  } else if (headers.includes('id')) {
     const idx = headers.indexOf('id');
     headers.splice(idx, 1);
     headers.unshift('id');
@@ -220,7 +257,7 @@ export async function writeTableToSheet(
   sheetName: string,
   records: any[]
 ): Promise<number> {
-  const { headers, rows } = objectsToSheetRows(records);
+  const { headers, rows } = objectsToSheetRows(records, sheetName);
   const values = [headers, ...rows];
 
   // 1. Clear existing sheet content

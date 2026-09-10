@@ -79,6 +79,11 @@ import {
   readTableFromSheet,
   appendRowToSheet,
 } from '../lib/sheets';
+import {
+  exportAllTablesToExcel,
+  exportSingleTableToExcel,
+  downloadGoogleSheetsLiveExcel,
+} from '../lib/excelExport';
 
 export type AppTab =
   | 'panel'
@@ -129,8 +134,12 @@ interface AppContextType {
   signInWithGoogleSheets: () => Promise<{ user: FirebaseUser; accessToken: string } | null>;
   signOutGoogleSheets: () => Promise<void>;
   uploadAllToGoogleSheets: (onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
+  uploadSingleTableToGoogleSheets: (tableName: string, data?: any[], onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
   downloadAllFromGoogleSheets: (onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
   syncBidirectionalGoogleSheets: (onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
+  exportAllToExcel: () => void;
+  exportTableToExcel: (tableName: string) => void;
+  downloadGoogleSheetsExcel: () => void;
   showGoogleSheetsModal: boolean;
   setShowGoogleSheetsModal: (show: boolean) => void;
 
@@ -752,27 +761,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const existingTabNames = meta.sheets.map((s) => s.title);
 
       const tablesToUpload: { name: string; data: any[] }[] = [
-        { name: 'productos', data: productos },
-        { name: 'categorias', data: categorias },
-        { name: 'marcas', data: marcas },
-        { name: 'presentaciones', data: presentaciones },
-        { name: 'clientes', data: clientes },
-        { name: 'proveedores', data: proveedores },
-        { name: 'empleados', data: empleados },
-        { name: 'ventas', data: ventas },
-        { name: 'compras', data: compras },
-        { name: 'cajas', data: cajas },
-        { name: 'movimientos_caja', data: movimientosCaja },
-        { name: 'inventario_ajustes', data: inventarioAjustes },
-        { name: 'kardex', data: kardex },
-        { name: 'empresas', data: [empresa] },
-        { name: 'users', data: users },
-        { name: 'roles', data: roles },
-        { name: 'monedas', data: monedas },
-        { name: 'documentos', data: documentos },
-        { name: 'comprobantes', data: comprobantes },
-        { name: 'activity_logs', data: activityLogs },
-        { name: 'notificaciones', data: notificaciones },
+        { name: 'productos', data: productos.length > 0 ? productos : initialProductos },
+        { name: 'categorias', data: categorias.length > 0 ? categorias : initialCategorias },
+        { name: 'marcas', data: marcas.length > 0 ? marcas : initialMarcas },
+        { name: 'presentaciones', data: presentaciones.length > 0 ? presentaciones : initialPresentaciones },
+        { name: 'clientes', data: clientes.length > 0 ? clientes : initialClientes },
+        { name: 'proveedores', data: proveedores.length > 0 ? proveedores : initialProveedores },
+        { name: 'empleados', data: empleados.length > 0 ? empleados : initialEmpleados },
+        { name: 'ventas', data: ventas.length > 0 ? ventas : initialVentas },
+        { name: 'compras', data: compras.length > 0 ? compras : initialCompras },
+        { name: 'cajas', data: cajas.length > 0 ? cajas : initialCajas },
+        { name: 'movimientos_caja', data: movimientosCaja.length > 0 ? movimientosCaja : initialMovimientosCaja },
+        { name: 'inventario_ajustes', data: inventarioAjustes.length > 0 ? inventarioAjustes : initialInventarioAjustes },
+        { name: 'kardex', data: kardex.length > 0 ? kardex : initialKardex },
+        { name: 'empresas', data: [empresa || initialEmpresa] },
+        { name: 'users', data: users.length > 0 ? users : initialUsers },
+        { name: 'roles', data: roles.length > 0 ? roles : initialRoles },
+        { name: 'monedas', data: monedas.length > 0 ? monedas : initialMonedas },
+        { name: 'documentos', data: documentos.length > 0 ? documentos : initialDocumentos },
+        { name: 'comprobantes', data: comprobantes.length > 0 ? comprobantes : initialComprobantes },
+        { name: 'activity_logs', data: activityLogs.length > 0 ? activityLogs : initialActivityLogs },
+        { name: 'notificaciones', data: notificaciones.length > 0 ? notificaciones : initialNotificaciones },
       ];
 
       onProgress?.('Creando pestañas en la hoja de cálculo...', 10);
@@ -985,6 +994,172 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
     [googleAccessToken, googleSheetsId, signInWithGoogleSheets, downloadAllFromGoogleSheets, uploadAllToGoogleSheets]
   );
+
+  const getTableDataByName = useCallback(
+    (tableName: string): any[] => {
+      switch (tableName) {
+        case 'productos':
+          return productos.length > 0 ? productos : initialProductos;
+        case 'categorias':
+          return categorias.length > 0 ? categorias : initialCategorias;
+        case 'marcas':
+          return marcas.length > 0 ? marcas : initialMarcas;
+        case 'presentaciones':
+          return presentaciones.length > 0 ? presentaciones : initialPresentaciones;
+        case 'clientes':
+          return clientes.length > 0 ? clientes : initialClientes;
+        case 'proveedores':
+          return proveedores.length > 0 ? proveedores : initialProveedores;
+        case 'empleados':
+          return empleados.length > 0 ? empleados : initialEmpleados;
+        case 'ventas':
+          return ventas.length > 0 ? ventas : initialVentas;
+        case 'compras':
+          return compras.length > 0 ? compras : initialCompras;
+        case 'cajas':
+          return cajas.length > 0 ? cajas : initialCajas;
+        case 'movimientos_caja':
+          return movimientosCaja.length > 0 ? movimientosCaja : initialMovimientosCaja;
+        case 'inventario_ajustes':
+          return inventarioAjustes.length > 0 ? inventarioAjustes : initialInventarioAjustes;
+        case 'kardex':
+          return kardex.length > 0 ? kardex : initialKardex;
+        case 'empresas':
+          return [empresa || initialEmpresa];
+        case 'users':
+          return users.length > 0 ? users : initialUsers;
+        case 'roles':
+          return roles.length > 0 ? roles : initialRoles;
+        case 'monedas':
+          return monedas.length > 0 ? monedas : initialMonedas;
+        case 'documentos':
+          return documentos.length > 0 ? documentos : initialDocumentos;
+        case 'comprobantes':
+          return comprobantes.length > 0 ? comprobantes : initialComprobantes;
+        case 'activity_logs':
+          return activityLogs.length > 0 ? activityLogs : initialActivityLogs;
+        case 'notificaciones':
+          return notificaciones.length > 0 ? notificaciones : initialNotificaciones;
+        default:
+          return [];
+      }
+    },
+    [
+      productos,
+      categorias,
+      marcas,
+      presentaciones,
+      clientes,
+      proveedores,
+      empleados,
+      ventas,
+      compras,
+      cajas,
+      movimientosCaja,
+      inventarioAjustes,
+      kardex,
+      empresa,
+      users,
+      roles,
+      monedas,
+      documentos,
+      comprobantes,
+      activityLogs,
+      notificaciones,
+    ]
+  );
+
+  const uploadSingleTableToGoogleSheets = useCallback(
+    async (
+      tableName: string,
+      data?: any[],
+      onProgress?: (msg: string, percent: number) => void
+    ): Promise<{ success: boolean; count: number; message: string }> => {
+      let token = googleAccessToken || (await getGoogleAccessToken());
+      if (!token) {
+        const res = await signInWithGoogleSheets();
+        token = res?.accessToken || null;
+      }
+      if (!token) {
+        throw new Error('Se requiere iniciar sesión con Google para acceder a Google Sheets');
+      }
+
+      onProgress?.(`Verificando pestaña "${tableName}" en Google Sheets...`, 20);
+      const meta = await fetchSpreadsheetMetadata(token, googleSheetsId);
+      const existingTabNames = meta.sheets.map((s) => s.title);
+      await ensureSheetTabsExist(token, googleSheetsId, [tableName], existingTabNames);
+
+      const tableData = data ?? getTableDataByName(tableName);
+      onProgress?.(`Escribiendo ${tableData.length} registros en "${tableName}"...`, 60);
+      await writeTableToSheet(token, googleSheetsId, tableName, tableData);
+
+      const msg = `Pestaña "${tableName}" generada y actualizada con éxito (${tableData.length} registros).`;
+      onProgress?.(msg, 100);
+      return { success: true, count: tableData.length, message: msg };
+    },
+    [googleAccessToken, googleSheetsId, signInWithGoogleSheets, getTableDataByName]
+  );
+
+  const exportAllToExcel = useCallback(() => {
+    const allTables = [
+      { name: 'productos', label: 'Productos y Artículos', data: productos.length > 0 ? productos : initialProductos },
+      { name: 'categorias', label: 'Categorías', data: categorias.length > 0 ? categorias : initialCategorias },
+      { name: 'marcas', label: 'Marcas Comerciales', data: marcas.length > 0 ? marcas : initialMarcas },
+      { name: 'presentaciones', label: 'Presentaciones / Unidades', data: presentaciones.length > 0 ? presentaciones : initialPresentaciones },
+      { name: 'clientes', label: 'Clientes Registrados', data: clientes.length > 0 ? clientes : initialClientes },
+      { name: 'proveedores', label: 'Proveedores Comerciales', data: proveedores.length > 0 ? proveedores : initialProveedores },
+      { name: 'empleados', label: 'Personal y Empleados', data: empleados.length > 0 ? empleados : initialEmpleados },
+      { name: 'ventas', label: 'Ventas y Facturación', data: ventas.length > 0 ? ventas : initialVentas },
+      { name: 'compras', label: 'Compras a Proveedores', data: compras.length > 0 ? compras : initialCompras },
+      { name: 'cajas', label: 'Sesiones de Caja', data: cajas.length > 0 ? cajas : initialCajas },
+      { name: 'movimientos_caja', label: 'Movimientos de Caja', data: movimientosCaja.length > 0 ? movimientosCaja : initialMovimientosCaja },
+      { name: 'inventario_ajustes', label: 'Ajustes de Inventario', data: inventarioAjustes.length > 0 ? inventarioAjustes : initialInventarioAjustes },
+      { name: 'kardex', label: 'Kardex Valorizado', data: kardex.length > 0 ? kardex : initialKardex },
+      { name: 'empresas', label: 'Datos de la Empresa', data: [empresa || initialEmpresa] },
+      { name: 'users', label: 'Usuarios del Sistema', data: users.length > 0 ? users : initialUsers },
+      { name: 'roles', label: 'Roles y Permisos', data: roles.length > 0 ? roles : initialRoles },
+      { name: 'monedas', label: 'Monedas y Divisas', data: monedas.length > 0 ? monedas : initialMonedas },
+      { name: 'documentos', label: 'Tipos de Documentos', data: documentos.length > 0 ? documentos : initialDocumentos },
+      { name: 'comprobantes', label: 'Series de Comprobantes', data: comprobantes.length > 0 ? comprobantes : initialComprobantes },
+      { name: 'activity_logs', label: 'Logs de Auditoría', data: activityLogs.length > 0 ? activityLogs : initialActivityLogs },
+      { name: 'notificaciones', label: 'Notificaciones del Sistema', data: notificaciones.length > 0 ? notificaciones : initialNotificaciones },
+    ];
+    exportAllTablesToExcel(allTables, `Imperio_Lux_BaseDatos_Completa_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }, [
+    productos,
+    categorias,
+    marcas,
+    presentaciones,
+    clientes,
+    proveedores,
+    empleados,
+    ventas,
+    compras,
+    cajas,
+    movimientosCaja,
+    inventarioAjustes,
+    kardex,
+    empresa,
+    users,
+    roles,
+    monedas,
+    documentos,
+    comprobantes,
+    activityLogs,
+    notificaciones,
+  ]);
+
+  const exportTableToExcel = useCallback(
+    (tableName: string) => {
+      const data = getTableDataByName(tableName);
+      exportSingleTableToExcel(tableName, data);
+    },
+    [getTableDataByName]
+  );
+
+  const downloadGoogleSheetsExcel = useCallback(() => {
+    downloadGoogleSheetsLiveExcel(googleSheetsId);
+  }, [googleSheetsId]);
 
   // Connect and sync on boot, and manage network transitions + real-time subscriptions
   useEffect(() => {
@@ -1794,8 +1969,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         signInWithGoogleSheets,
         signOutGoogleSheets,
         uploadAllToGoogleSheets,
+        uploadSingleTableToGoogleSheets,
         downloadAllFromGoogleSheets,
         syncBidirectionalGoogleSheets,
+        exportAllToExcel,
+        exportTableToExcel,
+        downloadGoogleSheetsExcel,
         showGoogleSheetsModal,
         setShowGoogleSheetsModal,
 

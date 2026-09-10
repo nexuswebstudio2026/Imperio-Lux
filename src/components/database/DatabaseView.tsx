@@ -42,13 +42,38 @@ import {
   Filter,
   FileSpreadsheet,
   Info,
+  LayoutGrid,
+  Table,
+  ChevronDown,
 } from 'lucide-react';
+
+export type TableCategory =
+  | 'todos'
+  | 'catalogo'
+  | 'ventas_clientes'
+  | 'compras_proveedores'
+  | 'caja_finanzas'
+  | 'inventario'
+  | 'empresa_personal'
+  | 'sistema';
+
+export const CATEGORY_LABELS: Record<TableCategory, string> = {
+  todos: 'Todas las Tablas (21)',
+  catalogo: 'Catálogo (4)',
+  ventas_clientes: 'Ventas & Clientes (4)',
+  compras_proveedores: 'Compras & Proveedores (2)',
+  caja_finanzas: 'Caja & Finanzas (3)',
+  inventario: 'Inventario & Kardex (2)',
+  empresa_personal: 'Empresa & Empleados (2)',
+  sistema: 'Sistema & Auditoría (4)',
+};
 
 interface CollectionMeta {
   id: string;
   name: string;
   label: string;
   description: string;
+  category: TableCategory;
   icon: React.ComponentType<{ className?: string }>;
   color: string;
   data: any[];
@@ -99,10 +124,21 @@ export const DatabaseView: React.FC = () => {
     signInWithGoogleSheets,
     signOutGoogleSheets,
     uploadAllToGoogleSheets,
+    uploadSingleTableToGoogleSheets,
     downloadAllFromGoogleSheets,
     syncBidirectionalGoogleSheets,
+    downloadGoogleSheetsExcel,
+    exportAllToExcel,
+    exportTableToExcel,
     setShowGoogleSheetsModal,
   } = useApp();
+
+  const [activeViewMode, setActiveViewMode] = useState<'all_tables' | 'explorer' | 'sheets_sync'>('all_tables');
+  const [selectedCategory, setSelectedCategory] = useState<TableCategory>('todos');
+  const [showAllTables, setShowAllTables] = useState<boolean>(true);
+  const [downloadMenuOpen, setDownloadMenuOpen] = useState<boolean>(false);
+  const [uploadProgressPct, setUploadProgressPct] = useState<number>(0);
+  const [tableSearch, setTableSearch] = useState<string>('');
 
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>('productos');
   const [collectionSearch, setCollectionSearch] = useState<string>('');
@@ -120,13 +156,14 @@ export const DatabaseView: React.FC = () => {
   const [inspectDocCopied, setInspectDocCopied] = useState<boolean>(false);
   const [showConfirmSheetsUpload, setShowConfirmSheetsUpload] = useState<boolean>(false);
 
-  // All known collection schemas in the system
+  // All known collection schemas in the system with their assigned functional categories
   const allCollectionSchemas: CollectionMeta[] = useMemo(() => [
     {
       id: 'productos',
       name: 'productos',
       label: 'Productos y Artículos',
       description: 'Catálogo general de joyas, relojes y accesorios con stocks, costos y precios.',
+      category: 'catalogo',
       icon: ShoppingBag,
       color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
       data: productos,
@@ -136,6 +173,7 @@ export const DatabaseView: React.FC = () => {
       name: 'categorias',
       label: 'Categorías',
       description: 'Clasificación de productos (Anillos, Collares, Relojes de Lujo, etc.).',
+      category: 'catalogo',
       icon: Tag,
       color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
       data: categorias,
@@ -145,6 +183,7 @@ export const DatabaseView: React.FC = () => {
       name: 'marcas',
       label: 'Marcas Comerciales',
       description: 'Firmas y diseñadores asociados al catálogo.',
+      category: 'catalogo',
       icon: Megaphone,
       color: 'text-rose-400 bg-rose-500/10 border-rose-500/20',
       data: marcas,
@@ -154,6 +193,7 @@ export const DatabaseView: React.FC = () => {
       name: 'presentaciones',
       label: 'Presentaciones / Unidades',
       description: 'Unidades de empaque y medida (Unidad, Par, Caja de Lujo, Estuche).',
+      category: 'catalogo',
       icon: Package,
       color: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
       data: presentaciones,
@@ -163,6 +203,7 @@ export const DatabaseView: React.FC = () => {
       name: 'ventas',
       label: 'Ventas y Comprobantes',
       description: 'Transacciones comerciales efectuadas en caja y POS.',
+      category: 'ventas_clientes',
       icon: ShoppingCart,
       color: 'text-green-400 bg-green-500/10 border-green-500/20',
       data: ventas,
@@ -172,6 +213,7 @@ export const DatabaseView: React.FC = () => {
       name: 'compras',
       label: 'Compras a Proveedores',
       description: 'Adquisiciones de mercadería y entradas de stock.',
+      category: 'compras_proveedores',
       icon: Store,
       color: 'text-violet-400 bg-violet-500/10 border-violet-500/20',
       data: compras,
@@ -181,6 +223,7 @@ export const DatabaseView: React.FC = () => {
       name: 'cajas',
       label: 'Sesiones de Caja',
       description: 'Aperturas, turnos y arqueos de caja diaria.',
+      category: 'caja_finanzas',
       icon: Wallet,
       color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
       data: cajas,
@@ -190,6 +233,7 @@ export const DatabaseView: React.FC = () => {
       name: 'movimientos_caja',
       label: 'Movimientos de Caja',
       description: 'Ingresos y egresos detallados de efectivo.',
+      category: 'caja_finanzas',
       icon: Activity,
       color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
       data: movimientosCaja,
@@ -199,6 +243,7 @@ export const DatabaseView: React.FC = () => {
       name: 'clientes',
       label: 'Clientes Registrados',
       description: 'Directorio de compradores con documento, teléfono y dirección.',
+      category: 'ventas_clientes',
       icon: Users,
       color: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
       data: clientes,
@@ -208,6 +253,7 @@ export const DatabaseView: React.FC = () => {
       name: 'proveedores',
       label: 'Proveedores Comerciales',
       description: 'Empresas distribuidoras de insumos y mercadería.',
+      category: 'compras_proveedores',
       icon: Truck,
       color: 'text-orange-400 bg-orange-500/10 border-orange-500/20',
       data: proveedores,
@@ -217,6 +263,7 @@ export const DatabaseView: React.FC = () => {
       name: 'empleados',
       label: 'Personal y Empleados',
       description: 'Ficha de colaboradores, cargos y salarios.',
+      category: 'empresa_personal',
       icon: UserCheck,
       color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
       data: empleados,
@@ -226,6 +273,7 @@ export const DatabaseView: React.FC = () => {
       name: 'inventario_ajustes',
       label: 'Ajustes de Inventario',
       description: 'Correcciones de stock por mermas, auditorías o sobrantes.',
+      category: 'inventario',
       icon: Layers,
       color: 'text-teal-400 bg-teal-500/10 border-teal-500/20',
       data: inventarioAjustes,
@@ -235,6 +283,7 @@ export const DatabaseView: React.FC = () => {
       name: 'kardex',
       label: 'Kardex Valorizado',
       description: 'Bitácora cronológica y valorizada de entradas y salidas.',
+      category: 'inventario',
       icon: FileText,
       color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
       data: kardex,
@@ -244,6 +293,7 @@ export const DatabaseView: React.FC = () => {
       name: 'empresas',
       label: 'Empresa (Imperio Lux)',
       description: 'Parámetros fiscales, RUC, dirección, logo y razón social.',
+      category: 'empresa_personal',
       icon: Building2,
       color: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
       data: [empresa],
@@ -253,6 +303,7 @@ export const DatabaseView: React.FC = () => {
       name: 'users',
       label: 'Usuarios del Sistema',
       description: 'Cuentas de acceso y credenciales de personal.',
+      category: 'sistema',
       icon: Users,
       color: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
       data: users,
@@ -262,6 +313,7 @@ export const DatabaseView: React.FC = () => {
       name: 'roles',
       label: 'Roles y Permisos',
       description: 'Niveles de acceso (Administrador, Cajero, Vendedor, Supervisor).',
+      category: 'sistema',
       icon: ShieldCheck,
       color: 'text-red-400 bg-red-500/10 border-red-500/20',
       data: roles,
@@ -271,6 +323,7 @@ export const DatabaseView: React.FC = () => {
       name: 'monedas',
       label: 'Monedas y Divisas',
       description: 'Configuración monetaria (Soles PEN, Dólares USD, Euros EUR).',
+      category: 'caja_finanzas',
       icon: Wallet,
       color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
       data: monedas,
@@ -280,6 +333,7 @@ export const DatabaseView: React.FC = () => {
       name: 'documentos',
       label: 'Tipos de Documento',
       description: 'Documentos de identidad oficiales (DNI, RUC, Pasaporte, Carnet).',
+      category: 'ventas_clientes',
       icon: FileText,
       color: 'text-slate-400 bg-slate-500/10 border-slate-500/20',
       data: documentos,
@@ -289,6 +343,7 @@ export const DatabaseView: React.FC = () => {
       name: 'comprobantes',
       label: 'Tipos de Comprobante',
       description: 'Comprobantes de pago (Boleta de Venta, Factura Electrónica, Ticket).',
+      category: 'ventas_clientes',
       icon: FileText,
       color: 'text-slate-400 bg-slate-500/10 border-slate-500/20',
       data: comprobantes,
@@ -298,6 +353,7 @@ export const DatabaseView: React.FC = () => {
       name: 'activity_logs',
       label: 'Logs de Auditoría',
       description: 'Historial inmutable de operaciones y acciones de usuarios.',
+      category: 'sistema',
       icon: Clock,
       color: 'text-fuchsia-400 bg-fuchsia-500/10 border-fuchsia-500/20',
       data: activityLogs,
@@ -307,6 +363,7 @@ export const DatabaseView: React.FC = () => {
       name: 'notificaciones',
       label: 'Alertas y Notificaciones',
       description: 'Avisos del sistema, alertas de bajo stock y cierres.',
+      category: 'sistema',
       icon: Bell,
       color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20',
       data: notificaciones,
@@ -335,18 +392,22 @@ export const DatabaseView: React.FC = () => {
     notificaciones,
   ]);
 
-  // Strictly dynamic sync with Firebase Firestore:
-  // ONLY collections that currently exist in Firebase (data.length > 0) are listed,
-  // sorted alphabetically to match the exact list in Firebase Console.
+  // Tablas de la base de datos de la página web:
+  // Permite mostrar las 21 tablas completas o filtrar por registros y categoría
   const collections: CollectionMeta[] = useMemo(() => {
-    return allCollectionSchemas
-      .filter((col) => col.data && col.data.length > 0)
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [allCollectionSchemas]);
+    let list = allCollectionSchemas;
+    if (!showAllTables) {
+      list = list.filter((col) => col.data && col.data.length > 0);
+    }
+    if (selectedCategory !== 'todos') {
+      list = list.filter((col) => col.category === selectedCategory);
+    }
+    return list;
+  }, [allCollectionSchemas, showAllTables, selectedCategory]);
 
   const totalDocuments = useMemo(() => {
-    return collections.reduce((acc, curr) => acc + curr.data.length, 0);
-  }, [collections]);
+    return allCollectionSchemas.reduce((acc, curr) => acc + (curr.data?.length || 0), 0);
+  }, [allCollectionSchemas]);
 
   // Selected collection data (safely falls back to schema if collections is empty)
   const currentCollection = useMemo(() => {
@@ -388,17 +449,33 @@ export const DatabaseView: React.FC = () => {
   const [sheetsToast, setSheetsToast] = useState(false);
 
   const handleSheetsSyncBidirectional = async () => {
+    if (!googleAccessToken && !googleUser) {
+      try {
+        setSheetsStatusMsg('Solicitando inicio de sesión con Google...');
+        const authRes = await signInWithGoogleSheets();
+        if (!authRes?.accessToken) {
+          setSheetsStatusMsg('Se requiere iniciar sesión con Google para sincronizar con la hoja de cálculo.');
+          setSheetsToast(true);
+          return;
+        }
+      } catch (e: any) {
+        setSheetsStatusMsg(`No se pudo conectar con Google: ${e?.message || 'Cancelado'}`);
+        setSheetsToast(true);
+        return;
+      }
+    }
+
     setIsSheetsSyncing(true);
-    setSheetsStatusMsg('Iniciando sincronización con Google Sheets...');
+    setSheetsStatusMsg('Iniciando sincronización bidireccional con Google Sheets...');
     try {
       const res = await syncBidirectionalGoogleSheets((msg) => setSheetsStatusMsg(msg));
-      setSheetsStatusMsg(res.message);
+      setSheetsStatusMsg(`Sincronización completa: ${res.message}`);
       setSheetsToast(true);
-      setTimeout(() => setSheetsToast(false), 5000);
+      setTimeout(() => setSheetsToast(false), 6000);
     } catch (err: any) {
-      setSheetsStatusMsg(`Error: ${err?.message || 'Fallo de sincronización'}`);
+      setSheetsStatusMsg(`Error de sincronización con Google Sheets: ${err?.message || 'Error desconocido'}`);
       setSheetsToast(true);
-      setTimeout(() => setSheetsToast(false), 5000);
+      setTimeout(() => setSheetsToast(false), 6000);
     } finally {
       setIsSheetsSyncing(false);
     }
@@ -406,19 +483,59 @@ export const DatabaseView: React.FC = () => {
 
   const handleSheetsPushData = async () => {
     setShowConfirmSheetsUpload(false);
+    if (!googleAccessToken && !googleUser) {
+      try {
+        setSheetsStatusMsg('Solicitando inicio de sesión con Google...');
+        const authRes = await signInWithGoogleSheets();
+        if (!authRes?.accessToken) {
+          setSheetsStatusMsg('Se requiere iniciar sesión con Google para escribir en la hoja de cálculo.');
+          setSheetsToast(true);
+          return;
+        }
+      } catch (e: any) {
+        setSheetsStatusMsg(`Error al autenticar con Google: ${e?.message || 'Cancelado'}`);
+        setSheetsToast(true);
+        return;
+      }
+    }
+
     setIsSheetsPushing(true);
-    setSheetsStatusMsg('Subiendo datos a Google Sheets...');
+    setUploadProgressPct(5);
+    setSheetsStatusMsg(`Generando las 21 tablas en Google Sheets (ID: ${googleSheetsId})...`);
     try {
-      const res = await uploadAllToGoogleSheets((msg) => setSheetsStatusMsg(msg));
-      setSheetsStatusMsg(res.message);
+      const res = await uploadAllToGoogleSheets((msg, pct) => {
+        setSheetsStatusMsg(msg);
+        if (pct !== undefined) setUploadProgressPct(pct);
+      });
+      setSheetsStatusMsg(`¡Éxito! ${res.message}. Se crearon/actualizaron las 21 pestañas en Google Sheets.`);
       setSheetsToast(true);
-      setTimeout(() => setSheetsToast(false), 5000);
+      setTimeout(() => setSheetsToast(false), 8000);
     } catch (err: any) {
-      setSheetsStatusMsg(`Error al subir: ${err?.message}`);
+      setSheetsStatusMsg(`Error al subir a Google Sheets: ${err?.message || 'Error desconocido'}`);
       setSheetsToast(true);
-      setTimeout(() => setSheetsToast(false), 5000);
+      setTimeout(() => setSheetsToast(false), 8000);
     } finally {
       setIsSheetsPushing(false);
+      setUploadProgressPct(0);
+    }
+  };
+
+  const handleDownloadSheetsExcel = () => {
+    setIsSheetsPulling(true);
+    setSheetsStatusMsg('Generando descarga del archivo Excel (.xlsx) desde Google Sheets...');
+    try {
+      downloadGoogleSheetsExcel();
+      setSheetsStatusMsg('¡Descarga iniciada! Archivo Excel (.xlsx) generado desde Google Sheets.');
+      setSheetsToast(true);
+      setTimeout(() => setSheetsToast(false), 6000);
+    } catch (err: any) {
+      console.warn('Fallback a exportación de Excel', err);
+      exportAllToExcel();
+      setSheetsStatusMsg('Descargando archivo Excel (.xlsx) con las 21 tablas de la base de datos.');
+      setSheetsToast(true);
+      setTimeout(() => setSheetsToast(false), 6000);
+    } finally {
+      setIsSheetsPulling(false);
     }
   };
 
@@ -429,13 +546,41 @@ export const DatabaseView: React.FC = () => {
       const res = await downloadAllFromGoogleSheets((msg) => setSheetsStatusMsg(msg));
       setSheetsStatusMsg(res.message);
       setSheetsToast(true);
-      setTimeout(() => setSheetsToast(false), 5000);
+      setTimeout(() => setSheetsToast(false), 6000);
     } catch (err: any) {
-      setSheetsStatusMsg(`Error al descargar: ${err?.message}`);
+      setSheetsStatusMsg(`Error al descargar: ${err?.message || 'Error desconocido'}`);
       setSheetsToast(true);
-      setTimeout(() => setSheetsToast(false), 5000);
+      setTimeout(() => setSheetsToast(false), 6000);
     } finally {
       setIsSheetsPulling(false);
+    }
+  };
+
+  const handleUploadSingleTable = async (tableName: string, data: any[]) => {
+    if (!googleAccessToken && !googleUser) {
+      try {
+        const authRes = await signInWithGoogleSheets();
+        if (!authRes?.accessToken) {
+          setSheetsStatusMsg('Se requiere iniciar sesión con Google.');
+          setSheetsToast(true);
+          return;
+        }
+      } catch (e: any) {
+        setSheetsStatusMsg('Operación cancelada.');
+        setSheetsToast(true);
+        return;
+      }
+    }
+
+    setSheetsStatusMsg(`Subiendo tabla "${tableName}" a Google Sheets...`);
+    setSheetsToast(true);
+    try {
+      const res = await uploadSingleTableToGoogleSheets(tableName, data);
+      setSheetsStatusMsg(res.message);
+      setTimeout(() => setSheetsToast(false), 5000);
+    } catch (err: any) {
+      setSheetsStatusMsg(`Error al subir tabla: ${err?.message || 'Error desconocido'}`);
+      setTimeout(() => setSheetsToast(false), 5000);
     }
   };
 
@@ -627,36 +772,99 @@ export const DatabaseView: React.FC = () => {
 
         {/* Action Buttons Toolbar for Google Sheets */}
         <div className="mt-5 pt-4 border-t border-emerald-800/50 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* 1. Sincronizar con Google Sheets */}
             <button
               id="btn-sheets-sync"
               onClick={handleSheetsSyncBidirectional}
               disabled={isSheetsSyncing || isSheetsPushing || isSheetsPulling}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold shadow-md shadow-emerald-900/30 transition-all cursor-pointer disabled:opacity-50"
+              title="Sincroniza bidireccionalmente los cambios locales con la hoja de Google Sheets"
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white rounded-lg font-bold shadow-md shadow-emerald-900/30 transition-all cursor-pointer disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isSheetsSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSheetsSyncing ? 'Sincronizando Sheets...' : 'Sincronizar con Google Sheets'}</span>
+              <span>{isSheetsSyncing ? 'Sincronizando con Sheets...' : 'Sincronizar con Google Sheets'}</span>
             </button>
 
+            {/* 2. Subir Todo a Google Sheets */}
             <button
               id="btn-sheets-push"
               onClick={() => setShowConfirmSheetsUpload(true)}
               disabled={isSheetsSyncing || isSheetsPushing || isSheetsPulling}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+              title="A partir del ID de Google Sheets, genera o actualiza todas las 21 tablas de la base de datos en cada hoja"
+              className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white rounded-lg font-bold shadow-md shadow-amber-900/30 transition-all cursor-pointer disabled:opacity-50"
             >
-              <Upload className={`w-3.5 h-3.5 ${isSheetsPushing ? 'animate-bounce' : ''}`} />
-              <span>{isSheetsPushing ? 'Subiendo...' : 'Subir Todo a Sheets'}</span>
+              <Upload className={`w-4 h-4 ${isSheetsPushing ? 'animate-bounce' : ''}`} />
+              <span>{isSheetsPushing ? 'Subiendo a Sheets...' : 'Subir Todo a Google Sheets'}</span>
             </button>
 
-            <button
-              id="btn-sheets-pull"
-              onClick={handleSheetsPullData}
-              disabled={isSheetsSyncing || isSheetsPushing || isSheetsPulling}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-            >
-              <Download className={`w-3.5 h-3.5 ${isSheetsPulling ? 'animate-bounce' : ''}`} />
-              <span>{isSheetsPulling ? 'Descargando...' : 'Descargar desde Sheets'}</span>
-            </button>
+            {/* 3. Descargar desde Google Sheets en Excel */}
+            <div className="relative inline-flex rounded-lg shadow-md shadow-blue-950/30">
+              <button
+                id="btn-sheets-download-excel"
+                onClick={handleDownloadSheetsExcel}
+                disabled={isSheetsSyncing || isSheetsPushing || isSheetsPulling}
+                title="Descarga la hoja de cálculo completa en formato Excel (.xlsx)"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-l-lg font-bold transition-all cursor-pointer disabled:opacity-50"
+              >
+                <FileSpreadsheet className={`w-4 h-4 ${isSheetsPulling ? 'animate-bounce' : ''}`} />
+                <span>{isSheetsPulling ? 'Descargando...' : 'Descargar Sheets en Excel'}</span>
+                <span className="text-[10px] bg-blue-800/80 px-1.5 py-0.5 rounded font-mono font-bold">.xlsx</span>
+              </button>
+              <button
+                id="btn-sheets-download-menu"
+                type="button"
+                onClick={() => setDownloadMenuOpen(!downloadMenuOpen)}
+                className="px-2 py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-r-lg border-l border-blue-500 cursor-pointer transition-colors"
+                title="Opciones adicionales de descarga"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+
+              {downloadMenuOpen && (
+                <div
+                  className="absolute left-0 top-full mt-1 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1 z-50 animate-in fade-in slide-in-from-top-1 text-xs"
+                  onClick={() => setDownloadMenuOpen(false)}
+                >
+                  <button
+                    onClick={handleDownloadSheetsExcel}
+                    className="w-full text-left p-2.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white flex items-center gap-2.5 transition-colors cursor-pointer"
+                  >
+                    <Download className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <p className="font-bold text-white">Descargar Excel (.xlsx) de Sheets</p>
+                      <p className="text-[10px] text-slate-400">Descarga directa desde Google Drive</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      exportAllToExcel();
+                      setSheetsStatusMsg('Descargando archivo Excel completo (21 tablas de la base de datos).');
+                      setSheetsToast(true);
+                      setTimeout(() => setSheetsToast(false), 5000);
+                    }}
+                    className="w-full text-left p-2.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white flex items-center gap-2.5 transition-colors cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-blue-400 shrink-0" />
+                    <div>
+                      <p className="font-bold text-white">Descargar Libro Excel (21 Hojas)</p>
+                      <p className="text-[10px] text-slate-400">Genera libro con todas las tablas del sistema</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={handleSheetsPullData}
+                    className="w-full text-left p-2.5 rounded-lg hover:bg-slate-800 text-slate-200 hover:text-white flex items-center gap-2.5 transition-colors cursor-pointer border-t border-slate-800"
+                  >
+                    <RefreshCw className="w-4 h-4 text-purple-400 shrink-0" />
+                    <div>
+                      <p className="font-bold text-white">Descargar e Importar a la Web</p>
+                      <p className="text-[10px] text-slate-400">Trae las filas desde Sheets a la base de datos</p>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -967,7 +1175,353 @@ export const DatabaseView: React.FC = () => {
         </div>
       </div>
 
-      {/* Split Explorer: Collections List (Left) + Table Data (Right) */}
+      {/* Navigation Mode Selector & Categories Bar */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3.5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+          {/* View Mode Tabs */}
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg">
+            <button
+              id="btn-view-all-tables"
+              onClick={() => setActiveViewMode('all_tables')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                activeViewMode === 'all_tables'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+              }`}
+            >
+              <Table className="w-3.5 h-3.5" />
+              <span>Todas las Tablas de la Web (21)</span>
+            </button>
+
+            <button
+              id="btn-view-explorer"
+              onClick={() => setActiveViewMode('explorer')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                activeViewMode === 'explorer'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Explorador de Registros</span>
+            </button>
+
+            <button
+              id="btn-view-sheets-manager"
+              onClick={() => setActiveViewMode('sheets_sync')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                activeViewMode === 'sheets_sync'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+              }`}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Hojas en Google Sheets (21)</span>
+            </button>
+          </div>
+
+          {/* Quick Info & Toggle */}
+          <div className="flex items-center gap-3 text-xs">
+            <label className="flex items-center gap-2 text-slate-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showAllTables}
+                onChange={(e) => setShowAllTables(e.target.checked)}
+                className="w-3.5 h-3.5 accent-amber-600 rounded"
+              />
+              <span className="font-medium">Mostrar las 21 tablas completas</span>
+            </label>
+
+            <button
+              onClick={handleDownloadSheetsExcel}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-semibold transition-colors cursor-pointer border border-blue-200"
+              title="Descargar libro Excel con todas las tablas"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Descargar Todo en Excel</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Category Pills Filter */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
+          <span className="text-slate-400 font-semibold uppercase text-[10px] tracking-wider shrink-0 mr-1 flex items-center gap-1">
+            <Filter className="w-3 h-3" />
+            Categoría:
+          </span>
+          {[
+            { id: 'todos' as TableCategory, label: `Todas (21)` },
+            { id: 'catalogo' as TableCategory, label: `Catálogo (4)` },
+            { id: 'ventas_clientes' as TableCategory, label: `Ventas & Clientes (4)` },
+            { id: 'compras_proveedores' as TableCategory, label: `Compras & Proveedores (2)` },
+            { id: 'caja_finanzas' as TableCategory, label: `Caja & Finanzas (3)` },
+            { id: 'inventario' as TableCategory, label: `Inventario & Kardex (2)` },
+            { id: 'empresa_personal' as TableCategory, label: `Empresa & Personal (2)` },
+            { id: 'sistema' as TableCategory, label: `Sistema & Auditoría (4)` },
+          ].map((cat) => {
+            const isActive = selectedCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                }`}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* VIEW 1: All 21 Tables Grid View */}
+      {activeViewMode === 'all_tables' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                <span>Tablas de la Base de Datos en la Página Web</span>
+                <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
+                  {collections.length} de 21 tablas
+                </span>
+              </h3>
+            </div>
+
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                value={tableSearch}
+                onChange={(e) => setTableSearch(e.target.value)}
+                placeholder="Buscar tabla o pestaña..."
+                className="w-full text-xs pl-8 pr-3 py-1.5 rounded-md border border-slate-200 bg-white focus:outline-none focus:border-amber-500"
+              />
+            </div>
+          </div>
+
+          {/* Grid of 21 Tables */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {collections
+              .filter((col) => {
+                if (!tableSearch.trim()) return true;
+                const q = tableSearch.toLowerCase();
+                return (
+                  col.name.toLowerCase().includes(q) ||
+                  col.label.toLowerCase().includes(q) ||
+                  col.description.toLowerCase().includes(q)
+                );
+              })
+              .map((col) => {
+                const Icon = col.icon;
+                const recordCount = col.data?.length || 0;
+
+                return (
+                  <div
+                    key={col.id}
+                    className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all p-4 flex flex-col justify-between group"
+                  >
+                    <div>
+                      {/* Card Header */}
+                      <div className="flex items-start justify-between gap-2.5 mb-2.5">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className={`p-2.5 rounded-lg border ${col.color} shrink-0`}>
+                            <Icon className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="font-bold text-sm text-slate-900 truncate">
+                              {col.label}
+                            </h4>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="text-[11px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60 font-semibold">
+                                /{col.name}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-medium truncate">
+                                Hoja en Sheets
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-xs font-bold shrink-0 ${
+                            recordCount > 0
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-slate-100 text-slate-500'
+                          }`}
+                        >
+                          {recordCount} {recordCount === 1 ? 'registro' : 'registros'}
+                        </span>
+                      </div>
+
+                      {/* Description */}
+                      <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed mb-3">
+                        {col.description}
+                      </p>
+                    </div>
+
+                    {/* Actions Toolbar */}
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 text-xs">
+                      <button
+                        onClick={() => {
+                          setSelectedCollectionId(col.id);
+                          setActiveViewMode('explorer');
+                        }}
+                        className="inline-flex items-center gap-1.5 text-amber-600 hover:text-amber-700 font-semibold cursor-pointer py-1 px-2 rounded hover:bg-amber-50 transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Ver Datos</span>
+                      </button>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleUploadSingleTable(col.name, col.data || [])}
+                          title={`Subir hoja '${col.name}' a Google Sheets`}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded text-[11px] font-semibold transition-colors cursor-pointer border border-emerald-200"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>Subir a Sheets</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            exportTableToExcel(col.id);
+                            setSheetsStatusMsg(`Exportando tabla '${col.label}' en formato Excel.`);
+                            setSheetsToast(true);
+                            setTimeout(() => setSheetsToast(false), 4000);
+                          }}
+                          title={`Descargar tabla '${col.label}' en formato Excel (.xlsx)`}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded text-[11px] font-semibold transition-colors cursor-pointer border border-blue-200"
+                        >
+                          <FileSpreadsheet className="w-3 h-3" />
+                          <span>Excel</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 2: Sheets Status Table (21 Sheets) */}
+      {activeViewMode === 'sheets_sync' && (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-5">
+          <div className="flex items-center justify-between gap-3 flex-wrap border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                <span>Estructura de las 21 Hojas en Google Sheets</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Spreadsheet ID: <code className="font-mono text-emerald-700 font-bold">{googleSheetsId}</code>. Cada tabla de la página web se mapea a una hoja de cálculo individual.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={handleSheetsSyncBidirectional}
+                disabled={isSheetsSyncing}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSheetsSyncing ? 'animate-spin' : ''}`} />
+                <span>Sincronizar Todas</span>
+              </button>
+
+              <button
+                onClick={() => setShowConfirmSheetsUpload(true)}
+                disabled={isSheetsPushing}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Upload className={`w-3.5 h-3.5 ${isSheetsPushing ? 'animate-bounce' : ''}`} />
+                <span>Subir Todo a Sheets</span>
+              </button>
+
+              <button
+                onClick={handleDownloadSheetsExcel}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Descargar en Excel</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-slate-50 text-slate-600 uppercase font-bold text-[10px] tracking-wider border-y border-slate-200">
+                <tr>
+                  <th className="py-2.5 px-4">#</th>
+                  <th className="py-2.5 px-4">Nombre de la Pestaña en Sheets</th>
+                  <th className="py-2.5 px-4">Tabla en la Web</th>
+                  <th className="py-2.5 px-4">Categoría</th>
+                  <th className="py-2.5 px-4 text-center">Registros Web</th>
+                  <th className="py-2.5 px-4">Estado</th>
+                  <th className="py-2.5 px-4 text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {allCollectionSchemas.map((col, idx) => {
+                  const Icon = col.icon;
+                  const count = col.data?.length || 0;
+                  return (
+                    <tr key={col.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="py-2.5 px-4 font-mono text-slate-400 font-medium">
+                        {String(idx + 1).padStart(2, '0')}
+                      </td>
+                      <td className="py-2.5 px-4 font-mono font-bold text-emerald-700">
+                        {col.name}
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`p-1 rounded ${col.color}`}>
+                            <Icon className="w-3 h-3" />
+                          </div>
+                          <span className="font-semibold text-slate-800">{col.label}</span>
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-4 text-slate-500 capitalize">
+                        {col.category?.replace('_', ' ')}
+                      </td>
+                      <td className="py-2.5 px-4 text-center font-bold text-slate-800">
+                        {count}
+                      </td>
+                      <td className="py-2.5 px-4">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          Hoja Habilitada
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleUploadSingleTable(col.name, col.data || [])}
+                            className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded text-[11px] font-semibold transition-colors cursor-pointer border border-emerald-200"
+                          >
+                            Subir Hoja
+                          </button>
+                          <button
+                            onClick={() => exportTableToExcel(col.id)}
+                            className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[11px] font-semibold transition-colors cursor-pointer border border-blue-200"
+                          >
+                            Excel
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 3: Split Explorer (Left List + Right Table Data) */}
+      {activeViewMode === 'explorer' && (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Collections Directory (Col 1 to 4) */}
         <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
@@ -975,15 +1529,11 @@ export const DatabaseView: React.FC = () => {
             <div className="flex items-center gap-2">
               <Layers className="w-4 h-4 text-amber-500" />
               <h3 className="font-bold text-xs uppercase tracking-wider text-slate-700">
-                {firebaseStatus === 'disconnected'
-                  ? `Registros Locales (${filteredCollections.length})`
-                  : `Tablas en Firebase (${filteredCollections.length})`}
+                {`Tablas en la Web (${filteredCollections.length} de ${allCollectionSchemas.length})`}
               </h3>
             </div>
             <span className="text-[11px] text-slate-500 font-medium">
-              {firebaseStatus === 'disconnected'
-                ? 'Modo Local'
-                : `${totalDocuments} docs`}
+              {`${totalDocuments} docs`}
             </span>
           </div>
 
@@ -1226,6 +1776,7 @@ export const DatabaseView: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
 
       {/* JSON Document Inspector Modal */}
       {inspectDoc && (
@@ -1292,13 +1843,14 @@ export const DatabaseView: React.FC = () => {
       {/* Confirm Destructive Upload to Google Sheets Modal */}
       <ConfirmDestructiveModal
         isOpen={showConfirmSheetsUpload}
-        title="¿Sobrescribir datos en Google Sheets?"
-        description="Esta acción actualizará las 21 pestañas del Spreadsheet de Google Sheets con los datos actuales del sistema."
+        title="¿Subir y generar las 21 tablas en Google Sheets?"
+        description={`A partir del ID de Google Sheets (${googleSheetsId}), se crearán o actualizarán automáticamente todas las tablas de la base de datos de la página web en cada una de sus 21 hojas de cálculo correspondientes.`}
         itemCount={totalDocuments}
         itemDescription="registros del sistema"
-        affectedItems={allCollectionSchemas.map((c) => c.name)}
-        confirmLabel="Confirmar y Subir a Google Sheets"
+        affectedItems={allCollectionSchemas.map((c) => `Hoja '${c.name}': ${c.label} (${c.data?.length || 0} registros)`)}
+        confirmLabel="Subir y Generar las 21 Hojas en Sheets"
         cancelLabel="Cancelar"
+        isProcessing={isSheetsPushing}
         onConfirm={handleSheetsPushData}
         onCancel={() => setShowConfirmSheetsUpload(false)}
       />
