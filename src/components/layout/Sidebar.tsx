@@ -22,10 +22,21 @@ import {
   List,
   Database,
   Cloud,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
-  const { activeTab, setActiveTab, sidebarOpen, currentUser, firebaseStatus, setShowFirebaseModal } = useApp();
+  const {
+    activeTab,
+    setActiveTab,
+    sidebarOpen,
+    currentUser,
+    firebaseStatus,
+    setShowFirebaseModal,
+    setShowGoogleSheetsModal,
+    activeDatabaseEngine,
+    googleSheetsStatus,
+  } = useApp();
 
   // Collapsible submenus for Compras and Ventas
   const [comprasOpen, setComprasOpen] = useState(
@@ -71,22 +82,22 @@ export const Sidebar: React.FC = () => {
           </div>
 
           <div className="space-y-0.5">
-            {/* Base de Datos Cloud */}
+            {/* Base de Datos (Google Sheets / Cloud) */}
             <button
               id="nav-database"
               onClick={() => setActiveTab('database')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors cursor-pointer text-left ${
                 isTabActive('database')
-                  ? 'bg-amber-600 text-white font-medium shadow-xs'
-                  : 'text-slate-200 hover:bg-slate-900 hover:text-white bg-slate-900/60 border border-amber-500/20'
+                  ? 'bg-emerald-600 text-white font-medium shadow-xs'
+                  : 'text-slate-200 hover:bg-slate-900 hover:text-white bg-slate-900/60 border border-emerald-500/20'
               }`}
             >
               <div className="flex items-center gap-3">
-                <Database className="w-4 h-4 text-amber-400" />
-                <span className="font-semibold text-amber-100">Base de Datos</span>
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                <span className="font-semibold text-emerald-100">Base de Datos</span>
               </div>
-              <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/30">
-                21 tablas
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-500/30">
+                Sheets
               </span>
             </button>
 

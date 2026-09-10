@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Breadcrumb } from '../layout/Breadcrumb';
+import { GoogleSignInButton } from '../common/GoogleSignInButton';
+import { ConfirmDestructiveModal } from '../common/ConfirmDestructiveModal';
+import { getSpreadsheetUrl } from '../../lib/sheets';
 import {
   Database,
   Cloud,
@@ -8,6 +11,7 @@ import {
   RefreshCw,
   Search,
   Download,
+  Upload,
   CheckCircle2,
   AlertCircle,
   ExternalLink,
@@ -36,6 +40,8 @@ import {
   Eye,
   ChevronRight,
   Filter,
+  FileSpreadsheet,
+  Info,
 } from 'lucide-react';
 
 interface CollectionMeta {
@@ -83,6 +89,19 @@ export const DatabaseView: React.FC = () => {
     notificaciones,
     currentMoneda,
     addCliente,
+    activeDatabaseEngine,
+    setActiveDatabaseEngine,
+    googleUser,
+    googleAccessToken,
+    googleSheetsId,
+    googleSheetsStatus,
+    googleSheetsMessage,
+    signInWithGoogleSheets,
+    signOutGoogleSheets,
+    uploadAllToGoogleSheets,
+    downloadAllFromGoogleSheets,
+    syncBidirectionalGoogleSheets,
+    setShowGoogleSheetsModal,
   } = useApp();
 
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>('productos');
@@ -91,10 +110,15 @@ export const DatabaseView: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [isPushing, setIsPushing] = useState<boolean>(false);
   const [isPulling, setIsPulling] = useState<boolean>(false);
+  const [isSheetsSyncing, setIsSheetsSyncing] = useState<boolean>(false);
+  const [isSheetsPushing, setIsSheetsPushing] = useState<boolean>(false);
+  const [isSheetsPulling, setIsSheetsPulling] = useState<boolean>(false);
   const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
+  const [sheetsStatusMsg, setSheetsStatusMsg] = useState<string | null>(null);
   const [copiedSuccess, setCopiedSuccess] = useState<boolean>(false);
   const [inspectDoc, setInspectDoc] = useState<any | null>(null);
   const [inspectDocCopied, setInspectDocCopied] = useState<boolean>(false);
+  const [showConfirmSheetsUpload, setShowConfirmSheetsUpload] = useState<boolean>(false);
 
   // All known collection schemas in the system
   const allCollectionSchemas: CollectionMeta[] = useMemo(() => [
@@ -361,6 +385,59 @@ export const DatabaseView: React.FC = () => {
   }, [currentCollection, recordSearch]);
 
   const [syncSuccessToast, setSyncSuccessToast] = useState(false);
+  const [sheetsToast, setSheetsToast] = useState(false);
+
+  const handleSheetsSyncBidirectional = async () => {
+    setIsSheetsSyncing(true);
+    setSheetsStatusMsg('Iniciando sincronización con Google Sheets...');
+    try {
+      const res = await syncBidirectionalGoogleSheets((msg) => setSheetsStatusMsg(msg));
+      setSheetsStatusMsg(res.message);
+      setSheetsToast(true);
+      setTimeout(() => setSheetsToast(false), 5000);
+    } catch (err: any) {
+      setSheetsStatusMsg(`Error: ${err?.message || 'Fallo de sincronización'}`);
+      setSheetsToast(true);
+      setTimeout(() => setSheetsToast(false), 5000);
+    } finally {
+      setIsSheetsSyncing(false);
+    }
+  };
+
+  const handleSheetsPushData = async () => {
+    setShowConfirmSheetsUpload(false);
+    setIsSheetsPushing(true);
+    setSheetsStatusMsg('Subiendo datos a Google Sheets...');
+    try {
+      const res = await uploadAllToGoogleSheets((msg) => setSheetsStatusMsg(msg));
+      setSheetsStatusMsg(res.message);
+      setSheetsToast(true);
+      setTimeout(() => setSheetsToast(false), 5000);
+    } catch (err: any) {
+      setSheetsStatusMsg(`Error al subir: ${err?.message}`);
+      setSheetsToast(true);
+      setTimeout(() => setSheetsToast(false), 5000);
+    } finally {
+      setIsSheetsPushing(false);
+    }
+  };
+
+  const handleSheetsPullData = async () => {
+    setIsSheetsPulling(true);
+    setSheetsStatusMsg('Descargando datos desde Google Sheets...');
+    try {
+      const res = await downloadAllFromGoogleSheets((msg) => setSheetsStatusMsg(msg));
+      setSheetsStatusMsg(res.message);
+      setSheetsToast(true);
+      setTimeout(() => setSheetsToast(false), 5000);
+    } catch (err: any) {
+      setSheetsStatusMsg(`Error al descargar: ${err?.message}`);
+      setSheetsToast(true);
+      setTimeout(() => setSheetsToast(false), 5000);
+    } finally {
+      setIsSheetsPulling(false);
+    }
+  };
 
   const handleSyncBidirectional = async () => {
     setIsSyncing(true);
@@ -467,8 +544,178 @@ export const DatabaseView: React.FC = () => {
 
   return (
     <div className="space-y-5">
+      {/* Primary Google Sheets Control Center Card */}
+      <div className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 border border-emerald-800/60 rounded-2xl p-6 shadow-xl text-white">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+          <div className="flex items-start sm:items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-lg shadow-emerald-600/30">
+              <FileSpreadsheet className="w-8 h-8" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h2 className="text-xl font-black text-white tracking-tight">
+                  Base de Datos en Google Sheets
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  {activeDatabaseEngine === 'sheets' ? 'Motor Principal Activo' : 'Disponible'}
+                </span>
+                {googleAccessToken ? (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-blue-400" />
+                    Cuenta Google Conectada
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 text-amber-400" />
+                    Requiere Iniciar Sesión Google
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-300 mt-1.5 flex items-center gap-2 flex-wrap">
+                <span>Spreadsheet ID:</span>
+                <code className="text-emerald-300 font-mono font-bold bg-black/40 px-2 py-0.5 rounded text-xs border border-emerald-800">
+                  {googleSheetsId}
+                </code>
+                <a
+                  href={getSpreadsheetUrl(googleSheetsId)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-200 font-semibold underline decoration-emerald-500/50"
+                >
+                  <span>Abrir en Google Sheets</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {!googleUser ? (
+              <GoogleSignInButton onClick={signInWithGoogleSheets} />
+            ) : (
+              <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-xl px-3 py-1.5 text-xs">
+                {googleUser.photoURL && (
+                  <img
+                    src={googleUser.photoURL}
+                    alt={googleUser.displayName || 'Google user'}
+                    className="w-6 h-6 rounded-full"
+                  />
+                )}
+                <span className="text-slate-200 font-medium truncate max-w-[140px]">
+                  {googleUser.displayName || googleUser.email}
+                </span>
+                <button
+                  type="button"
+                  onClick={signOutGoogleSheets}
+                  className="text-[11px] text-rose-400 hover:underline ml-1 cursor-pointer"
+                >
+                  Salir
+                </button>
+              </div>
+            )}
+
+            <button
+              onClick={() => setShowGoogleSheetsModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+              <span>Gestor y Pestañas</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Action Buttons Toolbar for Google Sheets */}
+        <div className="mt-5 pt-4 border-t border-emerald-800/50 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              id="btn-sheets-sync"
+              onClick={handleSheetsSyncBidirectional}
+              disabled={isSheetsSyncing || isSheetsPushing || isSheetsPulling}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold shadow-md shadow-emerald-900/30 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isSheetsSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSheetsSyncing ? 'Sincronizando Sheets...' : 'Sincronizar con Google Sheets'}</span>
+            </button>
+
+            <button
+              id="btn-sheets-push"
+              onClick={() => setShowConfirmSheetsUpload(true)}
+              disabled={isSheetsSyncing || isSheetsPushing || isSheetsPulling}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+            >
+              <Upload className={`w-3.5 h-3.5 ${isSheetsPushing ? 'animate-bounce' : ''}`} />
+              <span>{isSheetsPushing ? 'Subiendo...' : 'Subir Todo a Sheets'}</span>
+            </button>
+
+            <button
+              id="btn-sheets-pull"
+              onClick={handleSheetsPullData}
+              disabled={isSheetsSyncing || isSheetsPushing || isSheetsPulling}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+            >
+              <Download className={`w-3.5 h-3.5 ${isSheetsPulling ? 'animate-bounce' : ''}`} />
+              <span>{isSheetsPulling ? 'Descargando...' : 'Descargar desde Sheets'}</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400 text-xs">Motor seleccionado:</span>
+            <div className="flex items-center bg-black/40 p-1 rounded-lg border border-emerald-900">
+              <button
+                type="button"
+                onClick={() => setActiveDatabaseEngine('sheets')}
+                className={`px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                  activeDatabaseEngine === 'sheets'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Google Sheets
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveDatabaseEngine('firestore')}
+                className={`px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
+                  activeDatabaseEngine === 'firestore'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Firebase
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sheets Toast Notification */}
+      {sheetsToast && (
+        <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-xl p-4 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                Operación de Google Sheets
+              </p>
+              <p className="text-[11px] text-emerald-800 dark:text-emerald-400">
+                {sheetsStatusMsg || 'Operación completada con éxito.'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setSheetsToast(false)}
+            className="text-emerald-500 hover:text-emerald-700 text-xs font-semibold px-2 py-1 rounded cursor-pointer"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
+
       <Breadcrumb
-        title="Base de Datos Firestore"
+        title="Explorador de Colecciones y Tablas"
         items={[{ label: 'Base de Datos' }]}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
@@ -1041,6 +1288,20 @@ export const DatabaseView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Confirm Destructive Upload to Google Sheets Modal */}
+      <ConfirmDestructiveModal
+        isOpen={showConfirmSheetsUpload}
+        title="¿Sobrescribir datos en Google Sheets?"
+        description="Esta acción actualizará las 21 pestañas del Spreadsheet de Google Sheets con los datos actuales del sistema."
+        itemCount={totalDocuments}
+        itemDescription="registros del sistema"
+        affectedItems={allCollectionSchemas.map((c) => c.name)}
+        confirmLabel="Confirmar y Subir a Google Sheets"
+        cancelLabel="Cancelar"
+        onConfirm={handleSheetsPushData}
+        onCancel={() => setShowConfirmSheetsUpload(false)}
+      />
     </div>
   );
 };

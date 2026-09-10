@@ -1,6 +1,6 @@
 {
   "name": "Imperio Lux",
-  "description": "Sistema de Punto de Venta y Tienda Virtual Imperio Lux con base de datos en tiempo real en Firebase Firestore, inventario, ventas, compras, caja y facturación.",
+  "description": "Sistema de Punto de Venta y Tienda Virtual Imperio Lux con base de datos en Google Sheets y Firebase Firestore, inventario, ventas, compras, caja y facturación.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

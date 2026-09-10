@@ -60,6 +60,25 @@ import {
   resetToDefaultFirebase,
   FirebaseConfigObject,
 } from '../lib/firebase';
+import {
+  googleSignIn as libGoogleSignIn,
+  logout as libGoogleLogout,
+  initAuth as initGoogleAuth,
+  getAccessToken as getGoogleAccessToken,
+  getCurrentUser as getGoogleCurrentUser,
+} from '../lib/googleAuth';
+import type { User as FirebaseUser } from 'firebase/auth';
+import {
+  DEFAULT_SPREADSHEET_ID,
+  getStoredSpreadsheetId,
+  setStoredSpreadsheetId,
+  getSpreadsheetUrl,
+  fetchSpreadsheetMetadata,
+  ensureSheetTabsExist,
+  writeTableToSheet,
+  readTableFromSheet,
+  appendRowToSheet,
+} from '../lib/sheets';
 
 export type AppTab =
   | 'panel'
@@ -95,6 +114,25 @@ interface AppContextType {
   theme: 'light' | 'dark';
   setTheme: (theme: 'light' | 'dark') => void;
   toggleTheme: () => void;
+
+  // Engine Selector ('sheets' | 'firestore' | 'local')
+  activeDatabaseEngine: 'sheets' | 'firestore' | 'local';
+  setActiveDatabaseEngine: (engine: 'sheets' | 'firestore' | 'local') => void;
+
+  // Google Sheets
+  googleUser: FirebaseUser | null;
+  googleAccessToken: string | null;
+  googleSheetsId: string;
+  setGoogleSheetsId: (id: string) => void;
+  googleSheetsStatus: 'idle' | 'connecting' | 'connected' | 'syncing' | 'error';
+  googleSheetsMessage: string;
+  signInWithGoogleSheets: () => Promise<{ user: FirebaseUser; accessToken: string } | null>;
+  signOutGoogleSheets: () => Promise<void>;
+  uploadAllToGoogleSheets: (onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
+  downloadAllFromGoogleSheets: (onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
+  syncBidirectionalGoogleSheets: (onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
+  showGoogleSheetsModal: boolean;
+  setShowGoogleSheetsModal: (show: boolean) => void;
 
   // Firebase
   firebaseStatus: FirebaseSyncStatus;
@@ -212,6 +250,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [showFirebaseModal, setShowFirebaseModal] = useState<boolean>(false);
   const [activeConfig, setActiveConfig] = useState<FirebaseConfigObject>(() => getActiveFirebaseConfig());
   const [configVersion, setConfigVersion] = useState<number>(0);
+
+  // Google Sheets database state
+  const [googleUser, setGoogleUser] = useState<FirebaseUser | null>(() => getGoogleCurrentUser());
+  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
+  const [googleSheetsId, setGoogleSheetsIdState] = useState<string>(() => getStoredSpreadsheetId());
+  const [googleSheetsStatus, setGoogleSheetsStatus] = useState<'idle' | 'connecting' | 'connected' | 'syncing' | 'error'>('idle');
+  const [googleSheetsMessage, setGoogleSheetsMessage] = useState<string>('Base de datos configurada en Google Sheets');
+  const [activeDatabaseEngine, setActiveDatabaseEngine] = useState<'sheets' | 'firestore' | 'local'>('sheets');
+  const [showGoogleSheetsModal, setShowGoogleSheetsModal] = useState<boolean>(false);
+
+  const setGoogleSheetsId = useCallback((id: string) => {
+    const trimmed = id.trim();
+    setGoogleSheetsIdState(trimmed);
+    setStoredSpreadsheetId(trimmed);
+  }, []);
+
+  // Listen to Google Auth state
+  useEffect(() => {
+    const unsub = initGoogleAuth(
+      (user, token) => {
+        setGoogleUser(user);
+        setGoogleAccessToken(token);
+        setGoogleSheetsStatus('connected');
+        setGoogleSheetsMessage(`Conectado a Google como ${user.email || user.displayName || 'Usuario'}`);
+      },
+      () => {
+        setGoogleUser(null);
+        setGoogleAccessToken(null);
+        setGoogleSheetsStatus('idle');
+        setGoogleSheetsMessage('Inicia sesión con Google para sincronizar con Google Sheets');
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  const signInWithGoogleSheets = useCallback(async () => {
+    setGoogleSheetsStatus('connecting');
+    setGoogleSheetsMessage('Iniciando sesión con Google...');
+    try {
+      const res = await libGoogleSignIn();
+      if (res) {
+        setGoogleUser(res.user);
+        setGoogleAccessToken(res.accessToken);
+        setGoogleSheetsStatus('connected');
+        setGoogleSheetsMessage(`Conectado como ${res.user.email}`);
+        return res;
+      }
+      return null;
+    } catch (err: any) {
+      setGoogleSheetsStatus('error');
+      setGoogleSheetsMessage(`Error de autenticación: ${err?.message || 'Cancelado'}`);
+      throw err;
+    }
+  }, []);
+
+  const signOutGoogleSheets = useCallback(async () => {
+    await libGoogleLogout();
+    setGoogleUser(null);
+    setGoogleAccessToken(null);
+    setGoogleSheetsStatus('idle');
+    setGoogleSheetsMessage('Sesión cerrada de Google');
+  }, []);
 
   const handleSwitchFirebaseProject = async (newConfig: FirebaseConfigObject) => {
     const ok = await switchFirebaseProject(newConfig);
@@ -630,6 +730,261 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const syncNowWithFirebase = useCallback(async () => {
     await syncBidirectionalAll();
   }, [syncBidirectionalAll]);
+
+  // --- GOOGLE SHEETS SYNCHRONIZATION METHODS ---
+  const uploadAllToGoogleSheets = useCallback(
+    async (
+      onProgress?: (msg: string, percent: number) => void
+    ): Promise<{ success: boolean; count: number; message: string }> => {
+      let token = googleAccessToken || (await getGoogleAccessToken());
+      if (!token) {
+        const res = await signInWithGoogleSheets();
+        token = res?.accessToken || null;
+      }
+      if (!token) {
+        throw new Error('Se requiere iniciar sesión con Google para acceder a Google Sheets');
+      }
+
+      setGoogleSheetsStatus('syncing');
+      onProgress?.('Verificando acceso a Google Sheets...', 5);
+
+      const meta = await fetchSpreadsheetMetadata(token, googleSheetsId);
+      const existingTabNames = meta.sheets.map((s) => s.title);
+
+      const tablesToUpload: { name: string; data: any[] }[] = [
+        { name: 'productos', data: productos },
+        { name: 'categorias', data: categorias },
+        { name: 'marcas', data: marcas },
+        { name: 'presentaciones', data: presentaciones },
+        { name: 'clientes', data: clientes },
+        { name: 'proveedores', data: proveedores },
+        { name: 'empleados', data: empleados },
+        { name: 'ventas', data: ventas },
+        { name: 'compras', data: compras },
+        { name: 'cajas', data: cajas },
+        { name: 'movimientos_caja', data: movimientosCaja },
+        { name: 'inventario_ajustes', data: inventarioAjustes },
+        { name: 'kardex', data: kardex },
+        { name: 'empresas', data: [empresa] },
+        { name: 'users', data: users },
+        { name: 'roles', data: roles },
+        { name: 'monedas', data: monedas },
+        { name: 'documentos', data: documentos },
+        { name: 'comprobantes', data: comprobantes },
+        { name: 'activity_logs', data: activityLogs },
+        { name: 'notificaciones', data: notificaciones },
+      ];
+
+      onProgress?.('Creando pestañas en la hoja de cálculo...', 10);
+      await ensureSheetTabsExist(
+        token,
+        googleSheetsId,
+        tablesToUpload.map((t) => t.name),
+        existingTabNames
+      );
+
+      let totalRecordsUploaded = 0;
+      for (let i = 0; i < tablesToUpload.length; i++) {
+        const table = tablesToUpload[i];
+        const percent = Math.round(15 + ((i + 1) / tablesToUpload.length) * 80);
+        onProgress?.(`Subiendo tabla "${table.name}" (${table.data.length} registros)...`, percent);
+        await writeTableToSheet(token, googleSheetsId, table.name, table.data);
+        totalRecordsUploaded += table.data.length;
+      }
+
+      setGoogleSheetsStatus('connected');
+      const msg = `¡Éxito! Se actualizaron las 21 tablas (${totalRecordsUploaded} registros) en Google Sheets.`;
+      setGoogleSheetsMessage(msg);
+      onProgress?.(msg, 100);
+      return { success: true, count: totalRecordsUploaded, message: msg };
+    },
+    [
+      googleAccessToken,
+      googleSheetsId,
+      signInWithGoogleSheets,
+      productos,
+      categorias,
+      marcas,
+      presentaciones,
+      clientes,
+      proveedores,
+      empleados,
+      ventas,
+      compras,
+      cajas,
+      movimientosCaja,
+      inventarioAjustes,
+      kardex,
+      empresa,
+      users,
+      roles,
+      monedas,
+      documentos,
+      comprobantes,
+      activityLogs,
+      notificaciones,
+    ]
+  );
+
+  const downloadAllFromGoogleSheets = useCallback(
+    async (
+      onProgress?: (msg: string, percent: number) => void
+    ): Promise<{ success: boolean; count: number; message: string }> => {
+      let token = googleAccessToken || (await getGoogleAccessToken());
+      if (!token) {
+        const res = await signInWithGoogleSheets();
+        token = res?.accessToken || null;
+      }
+      if (!token) {
+        throw new Error('Se requiere iniciar sesión con Google para descargar datos de Google Sheets');
+      }
+
+      setGoogleSheetsStatus('syncing');
+      onProgress?.('Consultando estructura de Google Sheets...', 10);
+      const meta = await fetchSpreadsheetMetadata(token, googleSheetsId);
+      const existingTabs = new Set(meta.sheets.map((s) => s.title));
+
+      let totalRecords = 0;
+
+      if (existingTabs.has('productos')) {
+        onProgress?.('Descargando productos...', 15);
+        const list = await readTableFromSheet<Producto>(token, googleSheetsId, 'productos');
+        if (list.length > 0) {
+          setProductos(list);
+          saveStorage('productos', list);
+          totalRecords += list.length;
+        }
+      }
+      if (existingTabs.has('categorias')) {
+        onProgress?.('Descargando categorías...', 25);
+        const list = await readTableFromSheet<Categoria>(token, googleSheetsId, 'categorias');
+        if (list.length > 0) {
+          setCategorias(list);
+          saveStorage('categorias', list);
+          totalRecords += list.length;
+        }
+      }
+      if (existingTabs.has('marcas')) {
+        const list = await readTableFromSheet<Marca>(token, googleSheetsId, 'marcas');
+        if (list.length > 0) { setMarcas(list); saveStorage('marcas', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('presentaciones')) {
+        const list = await readTableFromSheet<Presentacion>(token, googleSheetsId, 'presentaciones');
+        if (list.length > 0) { setPresentaciones(list); saveStorage('presentaciones', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('clientes')) {
+        onProgress?.('Descargando clientes...', 40);
+        const list = await readTableFromSheet<Cliente>(token, googleSheetsId, 'clientes');
+        if (list.length > 0) { setClientes(list); saveStorage('clientes', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('proveedores')) {
+        const list = await readTableFromSheet<Proveedor>(token, googleSheetsId, 'proveedores');
+        if (list.length > 0) { setProveedores(list); saveStorage('proveedores', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('empleados')) {
+        const list = await readTableFromSheet<Empleado>(token, googleSheetsId, 'empleados');
+        if (list.length > 0) { setEmpleados(list); saveStorage('empleados', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('ventas')) {
+        onProgress?.('Descargando ventas...', 60);
+        const list = await readTableFromSheet<Venta>(token, googleSheetsId, 'ventas');
+        if (list.length > 0) { setVentas(list); saveStorage('ventas', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('compras')) {
+        const list = await readTableFromSheet<Compra>(token, googleSheetsId, 'compras');
+        if (list.length > 0) { setCompras(list); saveStorage('compras', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('cajas')) {
+        const list = await readTableFromSheet<Caja>(token, googleSheetsId, 'cajas');
+        if (list.length > 0) { setCajas(list); saveStorage('cajas', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('movimientos_caja')) {
+        const list = await readTableFromSheet<MovimientoCaja>(token, googleSheetsId, 'movimientos_caja');
+        if (list.length > 0) { setMovimientosCaja(list); saveStorage('movimientosCaja', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('inventario_ajustes')) {
+        const list = await readTableFromSheet<InventarioAjuste>(token, googleSheetsId, 'inventario_ajustes');
+        if (list.length > 0) { setInventarioAjustes(list); saveStorage('inventarioAjustes', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('kardex')) {
+        const list = await readTableFromSheet<KardexItem>(token, googleSheetsId, 'kardex');
+        if (list.length > 0) { setKardex(list); saveStorage('kardex', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('empresas')) {
+        const list = await readTableFromSheet<Empresa>(token, googleSheetsId, 'empresas');
+        if (list.length > 0 && list[0]) { setEmpresa(list[0]); saveStorage('empresa', list[0]); totalRecords += 1; }
+      }
+      if (existingTabs.has('users')) {
+        const list = await readTableFromSheet<User>(token, googleSheetsId, 'users');
+        if (list.length > 0) { setUsers(list); saveStorage('users', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('roles')) {
+        const list = await readTableFromSheet<Role>(token, googleSheetsId, 'roles');
+        if (list.length > 0) { setRoles(list); saveStorage('roles', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('monedas')) {
+        const list = await readTableFromSheet<Moneda>(token, googleSheetsId, 'monedas');
+        if (list.length > 0) { setMonedas(list); saveStorage('monedas', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('documentos')) {
+        const list = await readTableFromSheet<DocumentoTipo>(token, googleSheetsId, 'documentos');
+        if (list.length > 0) { setDocumentos(list); saveStorage('documentos', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('comprobantes')) {
+        const list = await readTableFromSheet<ComprobanteTipo>(token, googleSheetsId, 'comprobantes');
+        if (list.length > 0) { setComprobantes(list); saveStorage('comprobantes', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('activity_logs')) {
+        const list = await readTableFromSheet<ActivityLog>(token, googleSheetsId, 'activity_logs');
+        if (list.length > 0) { setActivityLogs(list); saveStorage('activityLogs', list); totalRecords += list.length; }
+      }
+      if (existingTabs.has('notificaciones')) {
+        const list = await readTableFromSheet<Notificacion>(token, googleSheetsId, 'notificaciones');
+        if (list.length > 0) { setNotificaciones(list); saveStorage('notificaciones', list); totalRecords += list.length; }
+      }
+
+      setGoogleSheetsStatus('connected');
+      const msg = `Se descargaron ${totalRecords} registros desde Google Sheets exitosamente.`;
+      setGoogleSheetsMessage(msg);
+      onProgress?.(msg, 100);
+      return { success: true, count: totalRecords, message: msg };
+    },
+    [googleAccessToken, googleSheetsId, signInWithGoogleSheets]
+  );
+
+  const syncBidirectionalGoogleSheets = useCallback(
+    async (
+      onProgress?: (msg: string, percent: number) => void
+    ): Promise<{ success: boolean; count: number; message: string }> => {
+      let token = googleAccessToken || (await getGoogleAccessToken());
+      if (!token) {
+        const res = await signInWithGoogleSheets();
+        token = res?.accessToken || null;
+      }
+      if (!token) {
+        throw new Error('Se requiere iniciar sesión con Google para sincronizar');
+      }
+
+      onProgress?.('Analizando contenido de la hoja de cálculo...', 15);
+      const meta = await fetchSpreadsheetMetadata(token, googleSheetsId);
+      const hasProductTab = meta.sheets.some((s) => s.title === 'productos');
+
+      let remoteRowsCount = 0;
+      if (hasProductTab) {
+        const prodRows = await readTableFromSheet(token, googleSheetsId, 'productos');
+        remoteRowsCount = prodRows.length;
+      }
+
+      if (remoteRowsCount > 0) {
+        onProgress?.(`Se encontraron ${remoteRowsCount} productos en Google Sheets. Descargando catálogo...`, 30);
+        return downloadAllFromGoogleSheets(onProgress);
+      } else {
+        onProgress?.('La hoja de cálculo está lista. Sembrando todas las 21 tablas iniciales...', 30);
+        return uploadAllToGoogleSheets(onProgress);
+      }
+    },
+    [googleAccessToken, googleSheetsId, signInWithGoogleSheets, downloadAllFromGoogleSheets, uploadAllToGoogleSheets]
+  );
 
   // Connect and sync on boot, and manage network transitions + real-time subscriptions
   useEffect(() => {
@@ -1425,6 +1780,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         theme,
         setTheme,
         toggleTheme,
+
+        activeDatabaseEngine,
+        setActiveDatabaseEngine,
+
+        // Google Sheets
+        googleUser,
+        googleAccessToken,
+        googleSheetsId,
+        setGoogleSheetsId,
+        googleSheetsStatus,
+        googleSheetsMessage,
+        signInWithGoogleSheets,
+        signOutGoogleSheets,
+        uploadAllToGoogleSheets,
+        downloadAllFromGoogleSheets,
+        syncBidirectionalGoogleSheets,
+        showGoogleSheetsModal,
+        setShowGoogleSheetsModal,
 
         firebaseStatus,
         firebaseMessage,

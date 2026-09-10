@@ -3,6 +3,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
 import { FirebaseModal } from './components/layout/FirebaseModal';
+import { GoogleSheetsModal } from './components/layout/GoogleSheetsModal';
 
 // Views
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -79,6 +80,7 @@ const MainContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col font-sans text-slate-800 dark:text-slate-100 transition-colors duration-200">
       <Navbar />
+      <GoogleSheetsModal />
       <FirebaseModal />
       <div className="flex-1 flex overflow-hidden">
         <Sidebar />
