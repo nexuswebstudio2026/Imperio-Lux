@@ -31,11 +31,9 @@ export const Sidebar: React.FC = () => {
     setActiveTab,
     sidebarOpen,
     currentUser,
-    firebaseStatus,
-    setShowFirebaseModal,
     setShowGoogleSheetsModal,
-    activeDatabaseEngine,
     googleSheetsStatus,
+    googleSheetsId,
   } = useApp();
 
   // Collapsible submenus for Compras and Ventas
@@ -368,27 +366,28 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Firebase Cloud Status Card */}
+      {/* Google Sheets Cloud Status Card */}
       <div className="px-3 py-2">
         <div
-          onClick={() => setShowFirebaseModal(true)}
-          className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-amber-500/50 hover:bg-slate-850 cursor-pointer transition-all group"
+          id="sidebar-sheets-card"
+          onClick={() => setShowGoogleSheetsModal(true)}
+          className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-emerald-500/50 hover:bg-slate-850 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-1.5 text-amber-400">
-              <Database className="w-3.5 h-3.5" />
-              <span className="font-semibold text-[11px] text-slate-200 group-hover:text-amber-300 transition-colors">
-                Firebase Firestore
+            <div className="flex items-center gap-1.5 text-emerald-400">
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span className="font-semibold text-[11px] text-slate-200 group-hover:text-emerald-300 transition-colors">
+                Google Sheets
               </span>
             </div>
             <span
               className={`w-2 h-2 rounded-full ${
-                firebaseStatus === 'connected' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                googleSheetsStatus === 'connected' ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-500'
               }`}
             ></span>
           </div>
           <p className="text-[10px] text-slate-400 leading-tight">
-            Base de datos activa para <strong className="text-slate-300">Imperio Lux</strong>
+            Base de datos en la nube (21 tablas)
           </p>
         </div>
       </div>

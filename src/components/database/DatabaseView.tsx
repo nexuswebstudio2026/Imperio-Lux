@@ -45,6 +45,7 @@ import {
   LayoutGrid,
   Table,
   ChevronDown,
+  Settings2,
 } from 'lucide-react';
 
 export type TableCategory =
@@ -81,16 +82,6 @@ interface CollectionMeta {
 
 export const DatabaseView: React.FC = () => {
   const {
-    firebaseStatus,
-    firebaseMessage,
-    firebaseProjectId,
-    firebaseDatabaseId,
-    syncNowWithFirebase,
-    seedFirebaseDatabase,
-    uploadCurrentDataToFirebase,
-    downloadDataFromFirebase,
-    syncBidirectionalAll,
-    setShowFirebaseModal,
     productos,
     categorias,
     presentaciones,
@@ -114,8 +105,6 @@ export const DatabaseView: React.FC = () => {
     notificaciones,
     currentMoneda,
     addCliente,
-    activeDatabaseEngine,
-    setActiveDatabaseEngine,
     googleUser,
     googleAccessToken,
     googleSheetsId,
@@ -131,6 +120,7 @@ export const DatabaseView: React.FC = () => {
     exportAllToExcel,
     exportTableToExcel,
     setShowGoogleSheetsModal,
+    activeDatabaseEngine,
   } = useApp();
 
   const [activeViewMode, setActiveViewMode] = useState<'all_tables' | 'explorer' | 'sheets_sync'>('all_tables');
@@ -143,13 +133,9 @@ export const DatabaseView: React.FC = () => {
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>('productos');
   const [collectionSearch, setCollectionSearch] = useState<string>('');
   const [recordSearch, setRecordSearch] = useState<string>('');
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [isPushing, setIsPushing] = useState<boolean>(false);
-  const [isPulling, setIsPulling] = useState<boolean>(false);
   const [isSheetsSyncing, setIsSheetsSyncing] = useState<boolean>(false);
   const [isSheetsPushing, setIsSheetsPushing] = useState<boolean>(false);
   const [isSheetsPulling, setIsSheetsPulling] = useState<boolean>(false);
-  const [syncStatusMsg, setSyncStatusMsg] = useState<string | null>(null);
   const [sheetsStatusMsg, setSheetsStatusMsg] = useState<string | null>(null);
   const [copiedSuccess, setCopiedSuccess] = useState<boolean>(false);
   const [inspectDoc, setInspectDoc] = useState<any | null>(null);
@@ -584,61 +570,12 @@ export const DatabaseView: React.FC = () => {
     }
   };
 
-  const handleSyncBidirectional = async () => {
-    setIsSyncing(true);
-    setSyncStatusMsg('Iniciando sincronización bidireccional...');
-    try {
-      const res = await syncBidirectionalAll((msg) => setSyncStatusMsg(msg));
-      setSyncStatusMsg(res.message);
-      setSyncSuccessToast(true);
-      setTimeout(() => setSyncSuccessToast(false), 5000);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handlePushData = async () => {
-    setIsPushing(true);
-    setSyncStatusMsg('Subiendo catálogo local a Firestore...');
-    try {
-      const res = await uploadCurrentDataToFirebase((msg) => setSyncStatusMsg(msg));
-      setSyncStatusMsg(res.message);
-      setSyncSuccessToast(true);
-      setTimeout(() => setSyncSuccessToast(false), 5000);
-    } finally {
-      setIsPushing(false);
-    }
-  };
-
-  const handlePullData = async () => {
-    setIsPulling(true);
-    setSyncStatusMsg('Descargando catálogo desde Firestore...');
-    try {
-      const res = await downloadDataFromFirebase();
-      setSyncStatusMsg(res.message);
-      setSyncSuccessToast(true);
-      setTimeout(() => setSyncSuccessToast(false), 5000);
-    } finally {
-      setIsPulling(false);
-    }
-  };
-
-  const handleSync = async () => {
-    handleSyncBidirectional();
-  };
-
-  const handleSeed = async () => {
-    if (confirm('¿Deseas resincronizar y sembrar los datos base en Firestore?')) {
-      handlePushData();
-    }
-  };
-
   const handleExportFullJSON = () => {
     const fullBackup: Record<string, any> = {
       _metadata: {
         exportedAt: new Date().toISOString(),
-        projectId: firebaseProjectId,
-        databaseId: firebaseDatabaseId,
+        database: 'Google Sheets',
+        spreadsheetId: googleSheetsId,
         totalCollections: collections.length,
         totalDocuments,
       },
@@ -868,30 +805,9 @@ export const DatabaseView: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-slate-400 text-xs">Motor seleccionado:</span>
-            <div className="flex items-center bg-black/40 p-1 rounded-lg border border-emerald-900">
-              <button
-                type="button"
-                onClick={() => setActiveDatabaseEngine('sheets')}
-                className={`px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                  activeDatabaseEngine === 'sheets'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Google Sheets
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveDatabaseEngine('firestore')}
-                className={`px-3 py-1 rounded text-xs font-bold transition-all cursor-pointer ${
-                  activeDatabaseEngine === 'firestore'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Firebase
-              </button>
+            <span className="text-slate-400 text-xs">Base de Datos:</span>
+            <div className="flex items-center bg-black/40 px-3 py-1 rounded-lg border border-emerald-900 text-xs font-bold text-emerald-300">
+              Google Sheets (Cloud)
             </div>
           </div>
         </div>
@@ -922,258 +838,73 @@ export const DatabaseView: React.FC = () => {
         </div>
       )}
 
+      {/* Quick Action Toolbar & Breadcrumb */}
       <Breadcrumb
-        title="Explorador de Colecciones y Tablas"
+        title="Explorador de Tablas y Hojas de Cálculo"
         items={[{ label: 'Base de Datos' }]}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <button
-              id="btn-sync-bidirectional"
-              onClick={handleSyncBidirectional}
-              disabled={isSyncing || isPushing || isPulling}
+              id="btn-sheets-sync-breadcrumb"
+              onClick={handleSheetsSyncBidirectional}
+              disabled={isSheetsSyncing || isSheetsPushing || isSheetsPulling}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isSheetsSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSheetsSyncing ? 'Sincronizando...' : 'Sincronizar Sheets'}</span>
+            </button>
+
+            <button
+              id="btn-sheets-push-breadcrumb"
+              onClick={() => setShowConfirmSheetsUpload(true)}
+              disabled={isSheetsSyncing || isSheetsPushing || isSheetsPulling}
               className="flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span>{isSyncing ? 'Sincronizando...' : 'Sincronización Bidireccional'}</span>
+              <Upload className={`w-3.5 h-3.5 ${isSheetsPushing ? 'animate-bounce' : ''}`} />
+              <span>{isSheetsPushing ? 'Subiendo...' : 'Subir Todo a Sheets'}</span>
             </button>
 
             <button
-              id="btn-push-database"
-              onClick={handlePushData}
-              disabled={isSyncing || isPushing || isPulling}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              id="btn-sheets-download-breadcrumb"
+              onClick={handleDownloadSheetsExcel}
+              disabled={isSheetsSyncing || isSheetsPushing || isSheetsPulling}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
             >
-              <Cloud className={`w-3.5 h-3.5 ${isPushing ? 'animate-bounce' : ''}`} />
-              <span>{isPushing ? 'Subiendo...' : 'Subir a Firebase'}</span>
+              <FileSpreadsheet className={`w-3.5 h-3.5 ${isSheetsPulling ? 'animate-bounce' : ''}`} />
+              <span>{isSheetsPulling ? 'Descargando...' : 'Descargar Excel'}</span>
             </button>
 
             <button
-              id="btn-pull-database"
-              onClick={handlePullData}
-              disabled={isSyncing || isPushing || isPulling}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              id="btn-open-sheets-manager"
+              onClick={() => setShowGoogleSheetsModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             >
-              <Download className={`w-3.5 h-3.5 ${isPulling ? 'animate-bounce' : ''}`} />
-              <span>{isPulling ? 'Descargando...' : 'Descargar de Firebase'}</span>
-            </button>
-
-            <button
-              id="btn-open-firebase-config"
-              onClick={() => setShowFirebaseModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-            >
-              <Server className="w-3.5 h-3.5 text-amber-400" />
-              <span>Vincular BD Firebase</span>
+              <Settings2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Gestor de Hojas</span>
             </button>
 
             <button
               id="btn-export-database"
               onClick={handleExportFullJSON}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             >
               <FileText className="w-3.5 h-3.5 text-slate-400" />
               <span>Exportar JSON</span>
             </button>
 
             <a
-              id="btn-open-firebase-console-direct"
-              href={`https://console.firebase.google.com/project/${firebaseProjectId}/firestore/databases/${firebaseDatabaseId}/data`}
+              id="btn-open-google-sheets-direct"
+              href={getSpreadsheetUrl(googleSheetsId)}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-black text-slate-300 border border-slate-800 rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-black text-emerald-300 border border-emerald-800/80 rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              <span>Consola Firebase</span>
+              <span>Abrir Hoja de Cálculo</span>
             </a>
           </div>
         }
       />
-
-      {/* Sync Status Alert Toast */}
-      {syncSuccessToast && (
-        <div className="bg-emerald-500/15 border border-emerald-500/40 rounded-xl p-4 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-200 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                ¡Operación completada con Firebase!
-              </p>
-              <p className="text-[11px] text-emerald-800 dark:text-emerald-400">
-                {syncStatusMsg || `Las ${collections.length} tablas están conectadas y sincronizadas.`}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setSyncSuccessToast(false)}
-            className="text-emerald-500 hover:text-emerald-700 text-xs font-semibold px-2 py-1 rounded"
-          >
-            Cerrar
-          </button>
-        </div>
-      )}
-
-      {/* Main Database Status Banner */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg text-white">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-inner">
-              <Database className="w-6 h-6 text-amber-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-lg font-bold text-slate-100 tracking-tight">
-                  Firebase Firestore Database
-                </h2>
-                {firebaseStatus === 'connected' ? (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    Conectada y En Línea
-                  </span>
-                ) : firebaseStatus === 'disconnected' ? (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                    Desconectada (BD Eliminada)
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                    Verificando Conexión
-                  </span>
-                )}
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  Imperio Lux
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">
-                Proyecto Cloud:{' '}
-                <code className="text-amber-300 font-mono font-medium">
-                  {firebaseProjectId}
-                </code>{' '}
-                | Base de datos:{' '}
-                <code className="text-emerald-300 font-mono font-medium">
-                  {firebaseDatabaseId}
-                </code>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 text-xs shrink-0">
-            <div className="bg-slate-800/80 border border-slate-700/60 rounded-lg px-3 py-2 text-center">
-              <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                Tablas en Firebase
-              </span>
-              <span className={`text-lg font-black ${firebaseStatus === 'disconnected' ? 'text-rose-400' : 'text-amber-400'}`}>
-                {firebaseStatus === 'disconnected' ? 0 : collections.length}
-              </span>
-            </div>
-            <div className="bg-slate-800/80 border border-slate-700/60 rounded-lg px-3 py-2 text-center">
-              <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                Total Registros
-              </span>
-              <span className={`text-lg font-black ${firebaseStatus === 'disconnected' ? 'text-slate-400' : 'text-emerald-400'}`}>
-                {firebaseStatus === 'disconnected' ? '0 en la nube' : totalDocuments}
-              </span>
-            </div>
-            <div className="bg-slate-800/80 border border-slate-700/60 rounded-lg px-3 py-2 text-center">
-              <span className="block text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                Reglas de Seguridad
-              </span>
-              <span className={`text-sm font-black ${firebaseStatus === 'disconnected' ? 'text-slate-500' : 'text-blue-400'}`}>
-                {firebaseStatus === 'disconnected' ? 'Inactivas' : 'Activas'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Alerta explícita si la base de datos fue eliminada en Firebase */}
-      {firebaseStatus === 'disconnected' && (
-        <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-5 text-slate-800 dark:text-slate-200 shadow-xs">
-          <div className="flex items-start gap-3.5">
-            <div className="p-2.5 rounded-xl bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5">
-              <AlertCircle className="w-6 h-6" />
-            </div>
-            <div className="space-y-2 text-xs flex-1">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <h3 className="font-bold text-sm text-rose-700 dark:text-rose-400 flex items-center gap-1.5">
-                  <span>Base de datos eliminada en Firebase: El sitio web está desconectado</span>
-                </h3>
-                <span className="text-[11px] font-semibold bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 px-2 py-0.5 rounded border border-rose-300 dark:border-rose-800">
-                  HTTP 404 NOT_FOUND
-                </span>
-              </div>
-              <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-                Has eliminado la base de datos de Firebase (<code className="font-mono font-medium text-rose-800 dark:text-rose-300">{firebaseDatabaseId}</code> en el proyecto <code className="font-mono font-medium text-slate-800 dark:text-slate-200">{firebaseProjectId}</code>).
-                Tal como esperas, <strong>el sitio web no está conectado a la base de datos de Firebase</strong> y el recuento de tablas en la nube es <strong>0</strong>.
-              </p>
-              <div className="p-3 bg-white/70 dark:bg-slate-900/70 rounded-lg border border-rose-200 dark:border-rose-900/40 text-slate-600 dark:text-slate-400 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <span>
-                  El sistema está operando en <strong>modo 100% local</strong>. Para vincular un nuevo proyecto o base de datos y que todas tus tablas y datos aparezcan sincronizados tanto en Firebase como aquí, haz clic en:
-                </span>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setShowFirebaseModal(true)}
-                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs"
-                  >
-                    <Server className="w-3.5 h-3.5" />
-                    <span>Vincular BD Firebase</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => syncNowWithFirebase()}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-semibold cursor-pointer transition-colors"
-                  >
-                    Reintentar
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Guía rápida para encontrar la base de datos en Firebase Console */}
-      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-slate-800 dark:text-slate-200">
-        <div className="flex items-start gap-3">
-          <div className="p-2 rounded-lg bg-amber-500/20 text-amber-500 shrink-0 mt-0.5">
-            <Search className="w-5 h-5" />
-          </div>
-          <div className="space-y-2 text-xs flex-1">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                <span>¿Cómo encontrar esta base de datos en la Consola de Firebase?</span>
-              </h3>
-              <a
-                href={`https://console.firebase.google.com/project/${firebaseProjectId}/firestore/databases/${firebaseDatabaseId}/data`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white font-semibold text-[11px] transition-colors shadow-xs"
-              >
-                <ExternalLink className="w-3 h-3" />
-                <span>Ir directo a la Base de Datos</span>
-              </a>
-            </div>
-
-            <ol className="list-decimal list-inside space-y-1.5 text-slate-700 dark:text-slate-300">
-              <li>
-                Entra a <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 underline font-semibold">console.firebase.google.com</a> y selecciona tu proyecto <strong className="text-slate-900 dark:text-white font-mono bg-slate-200/60 dark:bg-slate-800 px-1.5 py-0.5 rounded">{firebaseProjectId}</strong> (Milenia App Restaurantes).
-              </li>
-              <li>
-                En el menú lateral izquierdo, haz clic en <strong className="text-slate-900 dark:text-white">Compilación (Build)</strong> &rarr; <strong className="text-slate-900 dark:text-white">Firestore Database</strong>.
-              </li>
-              <li>
-                <strong className="text-amber-700 dark:text-amber-400 font-bold">Paso clave:</strong> En la parte superior de la página, junto a "Firestore Database", verás un <strong className="text-slate-900 dark:text-white">menú desplegable</strong> con las bases de datos. Por defecto a veces muestra <em>(default)</em>.
-              </li>
-              <li>
-                Haz clic en ese desplegable y selecciona: <strong className="text-emerald-700 dark:text-emerald-400 font-mono bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-500/30">{firebaseDatabaseId}</strong>. ¡Allí verás inmediatamente las 21 tablas con todos sus documentos!
-              </li>
-            </ol>
-          </div>
-        </div>
-      </div>
 
       {/* Navigation Mode Selector & Categories Bar */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3.5">
@@ -1603,7 +1334,7 @@ export const DatabaseView: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-bold">
-                  collection('{currentCollection.name}')
+                  tabla('{currentCollection.name}')
                 </span>
                 <span className="text-xs font-semibold text-slate-500">
                   {filteredRecords.length} de {currentCollection.data.length} registros
@@ -1662,7 +1393,7 @@ export const DatabaseView: React.FC = () => {
             {!currentCollection ? (
               <div className="p-8 text-center text-slate-400">
                 <Database className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm font-medium">No hay tablas con datos en Firestore.</p>
+                <p className="text-sm font-medium">No hay tablas con datos disponibles.</p>
               </div>
             ) : filteredRecords.length === 0 ? (
               <div className="p-8 text-center text-slate-400">
@@ -1763,15 +1494,15 @@ export const DatabaseView: React.FC = () => {
           {/* Footer note */}
           <div className="p-3 border-t border-slate-200 bg-slate-50 text-[11px] text-slate-500 flex items-center justify-between">
             <span>
-              Sincronización en tiempo real activa en Firestore:{' '}
-              <strong className="text-slate-700">{currentCollection.data.length}</strong> documentos almacenados
+              Base de datos en Google Sheets:{' '}
+              <strong className="text-slate-700">{currentCollection.data.length}</strong> registros en esta tabla
             </span>
             <button
-              onClick={handleSeed}
-              disabled={isPushing}
-              className="text-amber-600 hover:text-amber-700 font-semibold cursor-pointer underline disabled:opacity-50"
+              onClick={() => handleUploadSingleTable(currentCollection.name, currentCollection.data)}
+              disabled={isSheetsPushing}
+              className="text-emerald-700 hover:text-emerald-800 font-semibold cursor-pointer underline disabled:opacity-50"
             >
-              {isPushing ? 'Subiendo datos a Firebase...' : 'Sincronizar y sembrar en Firebase'}
+              {isSheetsPushing ? 'Subiendo tabla...' : `Subir "${currentCollection.label}" a Google Sheets`}
             </button>
           </div>
         </div>

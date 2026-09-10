@@ -284,39 +284,9 @@ export const GoogleSheetsModal: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-1.5 bg-slate-200 dark:bg-slate-800 p-1 rounded-lg">
-              <button
-                type="button"
-                onClick={() => setActiveDatabaseEngine('sheets')}
-                className={`px-3 py-1 rounded text-xs font-semibold transition-all cursor-pointer ${
-                  activeDatabaseEngine === 'sheets'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Google Sheets
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveDatabaseEngine('firestore')}
-                className={`px-3 py-1 rounded text-xs font-semibold transition-all cursor-pointer ${
-                  activeDatabaseEngine === 'firestore'
-                    ? 'bg-blue-600 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Firebase Firestore
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveDatabaseEngine('local')}
-                className={`px-3 py-1 rounded text-xs font-semibold transition-all cursor-pointer ${
-                  activeDatabaseEngine === 'local'
-                    ? 'bg-slate-700 text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
-              >
-                Local Offline
-              </button>
+              <span className="px-3 py-1 rounded text-xs font-semibold bg-emerald-600 text-white shadow-xs">
+                Google Sheets (Motor Principal)
+              </span>
             </div>
           </div>
 

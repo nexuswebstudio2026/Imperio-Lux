@@ -522,9 +522,9 @@ export const initialActivityLogs: ActivityLog[] = [
   {
     id: 1,
     accion: 'Inicialización',
-    modulo: 'Firebase Firestore',
-    descripcion: 'Base de datos Firestore sincronizada con éxito para Imperio Lux',
-    user_name: 'Sistema Firebase',
+    modulo: 'Google Sheets',
+    descripcion: 'Base de datos Google Sheets vinculada con éxito para Imperio Lux',
+    user_name: 'Sistema Sheets',
     fecha: new Date().toISOString().replace('T', ' ').substring(0, 19),
   },
   {
@@ -540,8 +540,8 @@ export const initialActivityLogs: ActivityLog[] = [
 export const initialNotificaciones: Notificacion[] = [
   {
     id: 1,
-    titulo: '🔥 Firebase Firestore Conectado',
-    mensaje: 'La base de datos de Imperio Lux se encuentra activa y sincronizada en tiempo real con Firebase Firestore.',
+    titulo: '📊 Google Sheets Conectado',
+    mensaje: 'La base de datos de Imperio Lux se encuentra vinculada con Google Sheets para sincronización e importación/exportación de tablas.',
     fecha: 'Hace un momento',
     leida: false,
     tipo: 'success',

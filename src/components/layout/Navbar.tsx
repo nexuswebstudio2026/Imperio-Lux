@@ -33,12 +33,9 @@ export const Navbar: React.FC = () => {
     notificaciones,
     markNotificationsAsRead,
     resetAllDataToDefaults,
-    firebaseStatus,
-    setShowFirebaseModal,
     googleSheetsId,
     googleSheetsStatus,
     setShowGoogleSheetsModal,
-    activeDatabaseEngine,
   } = useApp();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -124,17 +121,6 @@ export const Navbar: React.FC = () => {
           <span className="text-[10px] text-emerald-400/80 hidden lg:inline font-mono">
             ({googleSheetsId.slice(0, 6)}...)
           </span>
-        </button>
-
-        {/* Secondary Firebase button */}
-        <button
-          id="btn-firebase-status"
-          onClick={() => setShowFirebaseModal(true)}
-          className={`hidden md:flex items-center gap-1.5 px-2 py-1 text-xs rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer shadow-xs`}
-          title="Gestor Firebase Firestore"
-        >
-          <Database className="w-3 h-3 text-slate-400" />
-          <span className="text-[11px] text-slate-300">Firebase</span>
         </button>
 
         <button

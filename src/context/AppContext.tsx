@@ -46,28 +46,13 @@ import {
   initialNotificaciones,
 } from '../data/initialData';
 import {
-  testFirestoreConnection,
-  saveDocument,
-  deleteDocument,
-  fetchCollection,
-  batchSaveCollection,
-  subscribeFirebaseStatus,
-  subscribeToCollection,
-  FirebaseSyncStatus,
-  firebaseConfig,
-  getActiveFirebaseConfig,
-  switchFirebaseProject,
-  resetToDefaultFirebase,
-  FirebaseConfigObject,
-} from '../lib/firebase';
-import {
   googleSignIn as libGoogleSignIn,
   logout as libGoogleLogout,
   initAuth as initGoogleAuth,
   getAccessToken as getGoogleAccessToken,
   getCurrentUser as getGoogleCurrentUser,
+  type GoogleUser,
 } from '../lib/googleAuth';
-import type { User as FirebaseUser } from 'firebase/auth';
 import {
   DEFAULT_SPREADSHEET_ID,
   getStoredSpreadsheetId,
@@ -120,18 +105,18 @@ interface AppContextType {
   setTheme: (theme: 'light' | 'dark') => void;
   toggleTheme: () => void;
 
-  // Engine Selector ('sheets' | 'firestore' | 'local')
-  activeDatabaseEngine: 'sheets' | 'firestore' | 'local';
-  setActiveDatabaseEngine: (engine: 'sheets' | 'firestore' | 'local') => void;
+  // Engine Selector ('sheets' | 'local')
+  activeDatabaseEngine: 'sheets' | 'local';
+  setActiveDatabaseEngine: (engine: 'sheets' | 'local') => void;
 
   // Google Sheets
-  googleUser: FirebaseUser | null;
+  googleUser: GoogleUser | null;
   googleAccessToken: string | null;
   googleSheetsId: string;
   setGoogleSheetsId: (id: string) => void;
   googleSheetsStatus: 'idle' | 'connecting' | 'connected' | 'syncing' | 'error';
   googleSheetsMessage: string;
-  signInWithGoogleSheets: () => Promise<{ user: FirebaseUser; accessToken: string } | null>;
+  signInWithGoogleSheets: () => Promise<{ user: GoogleUser; accessToken: string } | null>;
   signOutGoogleSheets: () => Promise<void>;
   uploadAllToGoogleSheets: (onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
   uploadSingleTableToGoogleSheets: (tableName: string, data?: any[], onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
@@ -142,22 +127,6 @@ interface AppContextType {
   downloadGoogleSheetsExcel: () => void;
   showGoogleSheetsModal: boolean;
   setShowGoogleSheetsModal: (show: boolean) => void;
-
-  // Firebase
-  firebaseStatus: FirebaseSyncStatus;
-  firebaseMessage: string;
-  firebaseProjectId: string;
-  firebaseDatabaseId: string;
-  activeFirebaseConfig: FirebaseConfigObject;
-  switchFirebaseProject: (newConfig: FirebaseConfigObject) => Promise<boolean>;
-  resetToDefaultFirebase: () => Promise<boolean>;
-  syncNowWithFirebase: () => Promise<void>;
-  seedFirebaseDatabase: () => Promise<void>;
-  uploadCurrentDataToFirebase: (onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
-  downloadDataFromFirebase: () => Promise<{ success: boolean; count: number; message: string }>;
-  syncBidirectionalAll: (onProgress?: (msg: string, percent: number) => void) => Promise<{ success: boolean; count: number; message: string }>;
-  showFirebaseModal: boolean;
-  setShowFirebaseModal: (show: boolean) => void;
 
   empresa: Empresa;
   updateEmpresa: (empresa: Partial<Empresa>) => void;
@@ -254,19 +223,13 @@ function saveStorage<T>(key: string, val: T): void {
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [firebaseStatus, setFirebaseStatus] = useState<FirebaseSyncStatus>('connecting');
-  const [firebaseMessage, setFirebaseMessage] = useState<string>('Iniciando Firebase...');
-  const [showFirebaseModal, setShowFirebaseModal] = useState<boolean>(false);
-  const [activeConfig, setActiveConfig] = useState<FirebaseConfigObject>(() => getActiveFirebaseConfig());
-  const [configVersion, setConfigVersion] = useState<number>(0);
-
   // Google Sheets database state
-  const [googleUser, setGoogleUser] = useState<FirebaseUser | null>(() => getGoogleCurrentUser());
+  const [googleUser, setGoogleUser] = useState<GoogleUser | null>(() => getGoogleCurrentUser());
   const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(null);
   const [googleSheetsId, setGoogleSheetsIdState] = useState<string>(() => getStoredSpreadsheetId());
   const [googleSheetsStatus, setGoogleSheetsStatus] = useState<'idle' | 'connecting' | 'connected' | 'syncing' | 'error'>('idle');
   const [googleSheetsMessage, setGoogleSheetsMessage] = useState<string>('Base de datos configurada en Google Sheets');
-  const [activeDatabaseEngine, setActiveDatabaseEngine] = useState<'sheets' | 'firestore' | 'local'>('sheets');
+  const [activeDatabaseEngine, setActiveDatabaseEngine] = useState<'sheets' | 'local'>('sheets');
   const [showGoogleSheetsModal, setShowGoogleSheetsModal] = useState<boolean>(false);
 
   const setGoogleSheetsId = useCallback((id: string) => {
@@ -321,26 +284,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGoogleSheetsStatus('idle');
     setGoogleSheetsMessage('Sesión cerrada de Google');
   }, []);
-
-  const handleSwitchFirebaseProject = async (newConfig: FirebaseConfigObject) => {
-    const ok = await switchFirebaseProject(newConfig);
-    if (ok) {
-      setActiveConfig(newConfig);
-      setConfigVersion((v) => v + 1);
-      await syncNowWithFirebase();
-    }
-    return ok;
-  };
-
-  const handleResetFirebase = async () => {
-    const ok = await resetToDefaultFirebase();
-    if (ok) {
-      setActiveConfig(getActiveFirebaseConfig());
-      setConfigVersion((v) => v + 1);
-      await syncNowWithFirebase();
-    }
-    return ok;
-  };
 
   const [currentUser, setCurrentUser] = useState<User | null>(() =>
     loadStorage<User | null>('currentUser', initialUsers[0])
@@ -482,263 +425,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => saveStorage('comprobantes', comprobantes), [comprobantes]);
   useEffect(() => saveStorage('activityLogs', activityLogs), [activityLogs]);
   useEffect(() => saveStorage('notificaciones', notificaciones), [notificaciones]);
-
-  // Listen to Firebase status
-  useEffect(() => {
-    const unsub = subscribeFirebaseStatus((status, msg) => {
-      setFirebaseStatus(status);
-      if (msg) setFirebaseMessage(msg);
-    });
-    return unsub;
-  }, []);
-
-  // Helper to upload all current application state to Firestore
-  const uploadCurrentDataToFirebase = useCallback(
-    async (
-      onProgress?: (msg: string, percent: number) => void
-    ): Promise<{ success: boolean; count: number; message: string }> => {
-      setFirebaseStatus('syncing');
-      setFirebaseMessage('Verificando enlace con Firebase Firestore...');
-      onProgress?.('Verificando enlace con Firebase Firestore...', 5);
-
-      const isConnected = await testFirestoreConnection();
-      if (!isConnected) {
-        setFirebaseStatus('disconnected');
-        const err = 'No se pudo conectar a Firebase Firestore. Verifica el Project ID y Database ID.';
-        setFirebaseMessage(err);
-        return { success: false, count: 0, message: err };
-      }
-
-      const tasks = [
-        { name: 'empresas', label: 'Datos de Empresa', data: [empresa || initialEmpresa] },
-        { name: 'categorias', label: 'Categorías', data: categorias.length > 0 ? categorias : initialCategorias },
-        { name: 'marcas', label: 'Marcas', data: marcas.length > 0 ? marcas : initialMarcas },
-        { name: 'presentaciones', label: 'Presentaciones', data: presentaciones.length > 0 ? presentaciones : initialPresentaciones },
-        { name: 'productos', label: 'Productos y Artículos', data: productos.length > 0 ? productos : initialProductos },
-        { name: 'clientes', label: 'Clientes', data: clientes.length > 0 ? clientes : initialClientes },
-        { name: 'proveedores', label: 'Proveedores', data: proveedores.length > 0 ? proveedores : initialProveedores },
-        { name: 'empleados', label: 'Personal y Empleados', data: empleados.length > 0 ? empleados : initialEmpleados },
-        { name: 'cajas', label: 'Sesiones de Caja', data: cajas.length > 0 ? cajas : initialCajas },
-        { name: 'movimientos_caja', label: 'Movimientos de Caja', data: movimientosCaja.length > 0 ? movimientosCaja : initialMovimientosCaja },
-        { name: 'ventas', label: 'Ventas y Comprobantes', data: ventas.length > 0 ? ventas : initialVentas },
-        { name: 'compras', label: 'Compras a Proveedores', data: compras.length > 0 ? compras : initialCompras },
-        { name: 'inventario_ajustes', label: 'Ajustes de Inventario', data: inventarioAjustes.length > 0 ? inventarioAjustes : initialInventarioAjustes },
-        { name: 'kardex', label: 'Kardex Valorizado', data: kardex.length > 0 ? kardex : initialKardex },
-        { name: 'users', label: 'Usuarios del Sistema', data: users.length > 0 ? users : initialUsers },
-        { name: 'roles', label: 'Roles y Permisos', data: roles.length > 0 ? roles : initialRoles },
-        { name: 'monedas', label: 'Monedas y Divisas', data: monedas.length > 0 ? monedas : initialMonedas },
-        { name: 'documentos', label: 'Tipos de Documento', data: documentos.length > 0 ? documentos : initialDocumentos },
-        { name: 'comprobantes', label: 'Tipos de Comprobante', data: comprobantes.length > 0 ? comprobantes : initialComprobantes },
-        { name: 'activity_logs', label: 'Logs de Auditoría', data: activityLogs.length > 0 ? activityLogs : initialActivityLogs },
-        { name: 'notificaciones', label: 'Notificaciones y Alertas', data: notificaciones.length > 0 ? notificaciones : initialNotificaciones },
-      ];
-
-      let totalUploaded = 0;
-      for (let i = 0; i < tasks.length; i++) {
-        const t = tasks[i];
-        const pct = Math.round(((i + 1) / tasks.length) * 100);
-        onProgress?.(`Subiendo ${t.label} (${t.data.length} registros)...`, pct);
-        setFirebaseMessage(`Subiendo ${t.label} a Firebase (${i + 1}/${tasks.length})...`);
-        if (t.name === 'empresas') {
-          await saveDocument('empresas', 1, t.data[0]);
-          totalUploaded += 1;
-        } else {
-          await batchSaveCollection(t.name, t.data as any[]);
-          totalUploaded += t.data.length;
-        }
-      }
-
-      setFirebaseStatus('connected');
-      const msg = `Base de datos sincronizada: ${totalUploaded} registros subidos a Firebase Firestore exitosamente`;
-      setFirebaseMessage(msg);
-      return { success: true, count: totalUploaded, message: msg };
-    },
-    [
-      empresa,
-      categorias,
-      marcas,
-      presentaciones,
-      productos,
-      clientes,
-      proveedores,
-      empleados,
-      cajas,
-      movimientosCaja,
-      ventas,
-      compras,
-      inventarioAjustes,
-      kardex,
-      users,
-      roles,
-      monedas,
-      documentos,
-      comprobantes,
-      activityLogs,
-      notificaciones,
-    ]
-  );
-
-  // Helper to download all 21 collections from Firestore into the website
-  const downloadDataFromFirebase = useCallback(async (): Promise<{ success: boolean; count: number; message: string }> => {
-    setFirebaseStatus('syncing');
-    setFirebaseMessage('Descargando todas las tablas desde Firebase Firestore...');
-
-    const isConnected = await testFirestoreConnection();
-    if (!isConnected) {
-      setFirebaseStatus('disconnected');
-      return {
-        success: false,
-        count: 0,
-        message: 'No se pudo conectar a Firebase. La base de datos no está disponible.',
-      };
-    }
-
-    try {
-      const [
-        prods,
-        cats,
-        marcasList,
-        presList,
-        clientesList,
-        provsList,
-        empleadosList,
-        ventasList,
-        comprasList,
-        cajasList,
-        movimientosList,
-        ajustesList,
-        kardexList,
-        empList,
-        usersList,
-        rolesList,
-        monedasList,
-        docsList,
-        comprobantesList,
-        logsList,
-        notifsList,
-      ] = await Promise.all([
-        fetchCollection<Producto>('productos'),
-        fetchCollection<Categoria>('categorias'),
-        fetchCollection<Marca>('marcas'),
-        fetchCollection<Presentacion>('presentaciones'),
-        fetchCollection<Cliente>('clientes'),
-        fetchCollection<Proveedor>('proveedores'),
-        fetchCollection<Empleado>('empleados'),
-        fetchCollection<Venta>('ventas'),
-        fetchCollection<Compra>('compras'),
-        fetchCollection<Caja>('cajas'),
-        fetchCollection<MovimientoCaja>('movimientos_caja'),
-        fetchCollection<InventarioAjuste>('inventario_ajustes'),
-        fetchCollection<KardexItem>('kardex'),
-        fetchCollection<Empresa>('empresas'),
-        fetchCollection<User>('users'),
-        fetchCollection<Role>('roles'),
-        fetchCollection<Moneda>('monedas'),
-        fetchCollection<DocumentoTipo>('documentos'),
-        fetchCollection<ComprobanteTipo>('comprobantes'),
-        fetchCollection<ActivityLog>('activity_logs'),
-        fetchCollection<Notificacion>('notificaciones'),
-      ]);
-
-      const totalDocs =
-        prods.length +
-        cats.length +
-        marcasList.length +
-        presList.length +
-        clientesList.length +
-        provsList.length +
-        empleadosList.length +
-        ventasList.length +
-        comprasList.length +
-        cajasList.length +
-        movimientosList.length +
-        ajustesList.length +
-        kardexList.length +
-        empList.length +
-        usersList.length +
-        rolesList.length +
-        monedasList.length +
-        docsList.length +
-        comprobantesList.length +
-        logsList.length +
-        notifsList.length;
-
-      if (prods.length > 0) { setProductos(prods); saveStorage('productos', prods); }
-      if (cats.length > 0) { setCategorias(cats); saveStorage('categorias', cats); }
-      if (marcasList.length > 0) { setMarcas(marcasList); saveStorage('marcas', marcasList); }
-      if (presList.length > 0) { setPresentaciones(presList); saveStorage('presentaciones', presList); }
-      if (clientesList.length > 0) { setClientes(clientesList); saveStorage('clientes', clientesList); }
-      if (provsList.length > 0) { setProveedores(provsList); saveStorage('proveedores', provsList); }
-      if (empleadosList.length > 0) { setEmpleados(empleadosList); saveStorage('empleados', empleadosList); }
-      if (ventasList.length > 0) { setVentas(ventasList); saveStorage('ventas', ventasList); }
-      if (comprasList.length > 0) { setCompras(comprasList); saveStorage('compras', comprasList); }
-      if (cajasList.length > 0) { setCajas(cajasList); saveStorage('cajas', cajasList); }
-      if (movimientosList.length > 0) { setMovimientosCaja(movimientosList); saveStorage('movimientosCaja', movimientosList); }
-      if (ajustesList.length > 0) { setInventarioAjustes(ajustesList); saveStorage('inventarioAjustes', ajustesList); }
-      if (kardexList.length > 0) { setKardex(kardexList); saveStorage('kardex', kardexList); }
-      if (empList.length > 0 && empList[0]) { setEmpresa(empList[0]); saveStorage('empresa', empList[0]); }
-      if (usersList.length > 0) { setUsers(usersList); saveStorage('users', usersList); }
-      if (rolesList.length > 0) { setRoles(rolesList); saveStorage('roles', rolesList); }
-      if (monedasList.length > 0) { setMonedas(monedasList); saveStorage('monedas', monedasList); }
-      if (docsList.length > 0) { setDocumentos(docsList); saveStorage('documentos', docsList); }
-      if (comprobantesList.length > 0) { setComprobantes(comprobantesList); saveStorage('comprobantes', comprobantesList); }
-      if (logsList.length > 0) { setActivityLogs(logsList); saveStorage('activityLogs', logsList); }
-      if (notifsList.length > 0) { setNotificaciones(notifsList); saveStorage('notificaciones', notifsList); }
-
-      setFirebaseStatus('connected');
-      const msg = `Se descargaron ${totalDocs} registros desde Firebase exitosamente.`;
-      setFirebaseMessage(msg);
-      return { success: true, count: totalDocs, message: msg };
-    } catch (e: any) {
-      setFirebaseStatus('error');
-      const msg = `Error al descargar datos: ${e?.message || 'Error desconocido'}`;
-      setFirebaseMessage(msg);
-      return { success: false, count: 0, message: msg };
-    }
-  }, []);
-
-  // Bi-directional full synchronization
-  const syncBidirectionalAll = useCallback(
-    async (
-      onProgress?: (msg: string, percent: number) => void
-    ): Promise<{ success: boolean; count: number; message: string }> => {
-      onProgress?.('Verificando conexión con Firebase Firestore...', 10);
-      const isConnected = await testFirestoreConnection();
-      if (!isConnected) {
-        return {
-          success: false,
-          count: 0,
-          message: 'No se pudo conectar a Firebase Firestore. Verifica el Project ID y Database ID.',
-        };
-      }
-
-      onProgress?.('Analizando tablas remotas en la nube...', 30);
-      const remoteProds = await fetchCollection<Producto>('productos');
-      const remoteCats = await fetchCollection<Categoria>('categorias');
-
-      if (remoteProds.length === 0 && remoteCats.length === 0) {
-        // Remote is empty: upload all local relational data to Firebase so both match
-        onProgress?.('Base de datos en la nube vacía. Subiendo catálogo completo...', 50);
-        return uploadCurrentDataToFirebase(onProgress);
-      } else {
-        // Remote has data: download all data from Firebase to update the website
-        onProgress?.('Descargando catálogo completo desde Firebase...', 60);
-        const res = await downloadDataFromFirebase();
-        onProgress?.('Sincronización bidireccional completada', 100);
-        return res;
-      }
-    },
-    [downloadDataFromFirebase, uploadCurrentDataToFirebase]
-  );
-
-  // Initialize and seed Firebase on first load with all 21 database tables
-  const seedFirebaseDatabase = useCallback(async () => {
-    await uploadCurrentDataToFirebase();
-  }, [uploadCurrentDataToFirebase]);
-
-  const syncNowWithFirebase = useCallback(async () => {
-    await syncBidirectionalAll();
-  }, [syncBidirectionalAll]);
 
   // --- GOOGLE SHEETS SYNCHRONIZATION METHODS ---
   const uploadAllToGoogleSheets = useCallback(
@@ -1161,161 +847,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     downloadGoogleSheetsLiveExcel(googleSheetsId);
   }, [googleSheetsId]);
 
-  // Connect and sync on boot, and manage network transitions + real-time subscriptions
-  useEffect(() => {
-    syncNowWithFirebase();
-
-    const handleOnline = () => {
-      syncNowWithFirebase();
-    };
-    const handleOffline = () => {
-      setFirebaseStatus('offline');
-      setFirebaseMessage('Dispositivo fuera de línea: operando localmente');
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    // Active real-time listeners for live updates across all Firestore tables
-    const unsubs: (() => void)[] = [];
-    try {
-      unsubs.push(
-        subscribeToCollection<Cliente>('clientes', (items) => {
-          setClientes(items || []);
-          saveStorage('clientes', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<Producto>('productos', (items) => {
-          setProductos(items || []);
-          saveStorage('productos', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<Categoria>('categorias', (items) => {
-          setCategorias(items || []);
-          saveStorage('categorias', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<Marca>('marcas', (items) => {
-          setMarcas(items || []);
-          saveStorage('marcas', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<Presentacion>('presentaciones', (items) => {
-          setPresentaciones(items || []);
-          saveStorage('presentaciones', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<Proveedor>('proveedores', (items) => {
-          setProveedores(items || []);
-          saveStorage('proveedores', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<Empleado>('empleados', (items) => {
-          setEmpleados(items || []);
-          saveStorage('empleados', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<Caja>('cajas', (items) => {
-          setCajas(items || []);
-          saveStorage('cajas', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<MovimientoCaja>('movimientos_caja', (items) => {
-          setMovimientosCaja(items || []);
-          saveStorage('movimientosCaja', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<Venta>('ventas', (items) => {
-          setVentas(items || []);
-          saveStorage('ventas', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<Compra>('compras', (items) => {
-          setCompras(items || []);
-          saveStorage('compras', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<InventarioAjuste>('inventario_ajustes', (items) => {
-          setInventarioAjustes(items || []);
-          saveStorage('inventarioAjustes', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<KardexItem>('kardex', (items) => {
-          setKardex(items || []);
-          saveStorage('kardex', items || []);
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<Empresa>('empresas', (items) => {
-          if (items && items.length > 0 && items[0]) {
-            setEmpresa(items[0]);
-            saveStorage('empresa', items[0]);
-          }
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<User>('users', (items) => {
-          if (items && items.length > 0) {
-            setUsers(items);
-            saveStorage('users', items);
-          }
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<Role>('roles', (items) => {
-          if (items && items.length > 0) {
-            setRoles(items);
-            saveStorage('roles', items);
-          }
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<Moneda>('monedas', (items) => {
-          if (items && items.length > 0) {
-            setMonedas(items);
-            saveStorage('monedas', items);
-          }
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<DocumentoTipo>('documentos', (items) => {
-          if (items && items.length > 0) {
-            setDocumentos(items);
-            saveStorage('documentos', items);
-          }
-        })
-      );
-      unsubs.push(
-        subscribeToCollection<ComprobanteTipo>('comprobantes', (items) => {
-          if (items && items.length > 0) {
-            setComprobantes(items);
-            saveStorage('comprobantes', items);
-          }
-        })
-      );
-    } catch (subErr) {
-      console.warn('Notice setting up Firestore real-time listeners:', subErr);
-    }
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      unsubs.forEach((u) => u());
-    };
-  }, [syncNowWithFirebase, configVersion]);
-
   const activeCaja = cajas.find((c) => c.estado === 'Abierta') || null;
 
   const logActivity = (accion: string, modulo: string, descripcion: string) => {
@@ -1328,13 +859,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       fecha: new Date().toISOString().replace('T', ' ').substring(0, 19),
     };
     setActivityLogs((prev) => [newLog, ...prev]);
-    saveDocument('activity_logs', newLog.id, newLog).catch(() => {});
   };
 
   const updateEmpresa = (partial: Partial<Empresa>) => {
     const updated = { ...empresa, ...partial };
     setEmpresa(updated);
-    saveDocument('empresas', 1, updated).catch(() => {});
     logActivity('Actualización', 'Empresa', 'Datos generales de Imperio Lux actualizados');
   };
 
@@ -1343,7 +872,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = categorias.length > 0 ? Math.max(...categorias.map((c) => c.id)) + 1 : 1;
     const item: Categoria = { ...cat, id: newId };
     setCategorias((prev) => [...prev, item]);
-    saveDocument('categorias', newId, item).catch(() => {});
     logActivity('Creación', 'Categorías', `Categoría "${cat.nombre}" creada`);
   };
 
@@ -1352,7 +880,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((c) => {
         if (c.id === id) {
           const updated = { ...c, ...cat };
-          saveDocument('categorias', id, updated).catch(() => {});
           return updated;
         }
         return c;
@@ -1363,7 +890,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteCategoria = (id: number) => {
     setCategorias((prev) => prev.filter((c) => c.id !== id));
-    deleteDocument('categorias', id).catch(() => {});
     logActivity('Eliminación', 'Categorías', `Categoría #${id} eliminada`);
   };
 
@@ -1372,7 +898,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = presentaciones.length > 0 ? Math.max(...presentaciones.map((p) => p.id)) + 1 : 1;
     const item: Presentacion = { ...pres, id: newId };
     setPresentaciones((prev) => [...prev, item]);
-    saveDocument('presentaciones', newId, item).catch(() => {});
     logActivity('Creación', 'Presentaciones', `Presentación "${pres.nombre}" creada`);
   };
 
@@ -1381,7 +906,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((p) => {
         if (p.id === id) {
           const updated = { ...p, ...pres };
-          saveDocument('presentaciones', id, updated).catch(() => {});
           return updated;
         }
         return p;
@@ -1392,7 +916,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deletePresentacion = (id: number) => {
     setPresentaciones((prev) => prev.filter((p) => p.id !== id));
-    deleteDocument('presentaciones', id).catch(() => {});
     logActivity('Eliminación', 'Presentaciones', `Presentación #${id} eliminada`);
   };
 
@@ -1401,7 +924,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = marcas.length > 0 ? Math.max(...marcas.map((item) => item.id)) + 1 : 1;
     const item: Marca = { ...m, id: newId };
     setMarcas((prev) => [...prev, item]);
-    saveDocument('marcas', newId, item).catch(() => {});
     logActivity('Creación', 'Marcas', `Marca "${m.nombre}" creada`);
   };
 
@@ -1410,7 +932,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((item) => {
         if (item.id === id) {
           const updated = { ...item, ...m };
-          saveDocument('marcas', id, updated).catch(() => {});
           return updated;
         }
         return item;
@@ -1421,7 +942,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteMarca = (id: number) => {
     setMarcas((prev) => prev.filter((item) => item.id !== id));
-    deleteDocument('marcas', id).catch(() => {});
     logActivity('Eliminación', 'Marcas', `Marca #${id} eliminada`);
   };
 
@@ -1430,7 +950,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = productos.length > 0 ? Math.max(...productos.map((p) => p.id)) + 1 : 1;
     const item: Producto = { ...prod, id: newId };
     setProductos((prev) => [...prev, item]);
-    saveDocument('productos', newId, item).catch(() => {});
 
     // Kardex initial stock
     if (prod.cantidad > 0) {
@@ -1451,7 +970,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saldo_total: prod.cantidad * prod.precio_compra,
       };
       setKardex((prev) => [kardexEntry, ...prev]);
-      saveDocument('kardex', kardexEntry.id, kardexEntry).catch(() => {});
     }
     logActivity('Creación', 'Productos', `Producto "${prod.nombre}" registrado`);
   };
@@ -1461,7 +979,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((p) => {
         if (p.id === id) {
           const updated = { ...p, ...prod };
-          saveDocument('productos', id, updated).catch(() => {});
           return updated;
         }
         return p;
@@ -1472,7 +989,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteProducto = (id: number) => {
     setProductos((prev) => prev.filter((p) => p.id !== id));
-    deleteDocument('productos', id).catch(() => {});
     logActivity('Eliminación', 'Productos', `Producto #${id} eliminado`);
   };
 
@@ -1481,7 +997,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = clientes.length > 0 ? Math.max(...clientes.map((item) => item.id)) + 1 : 1;
     const item: Cliente = { ...c, id: newId };
     setClientes((prev) => [...prev, item]);
-    saveDocument('clientes', newId, item).catch(() => {});
     logActivity('Creación', 'Clientes', `Cliente "${c.razon_social}" registrado`);
     return item;
   };
@@ -1491,7 +1006,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((item) => {
         if (item.id === id) {
           const updated = { ...item, ...c };
-          saveDocument('clientes', id, updated).catch(() => {});
           return updated;
         }
         return item;
@@ -1502,7 +1016,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteCliente = (id: number) => {
     setClientes((prev) => prev.filter((item) => item.id !== id));
-    deleteDocument('clientes', id).catch(() => {});
     logActivity('Eliminación', 'Clientes', `Cliente #${id} eliminado`);
   };
 
@@ -1511,7 +1024,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = proveedores.length > 0 ? Math.max(...proveedores.map((item) => item.id)) + 1 : 1;
     const item: Proveedor = { ...p, id: newId };
     setProveedores((prev) => [...prev, item]);
-    saveDocument('proveedores', newId, item).catch(() => {});
     logActivity('Creación', 'Proveedores', `Proveedor "${p.razon_social}" registrado`);
   };
 
@@ -1520,7 +1032,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((item) => {
         if (item.id === id) {
           const updated = { ...item, ...p };
-          saveDocument('proveedores', id, updated).catch(() => {});
           return updated;
         }
         return item;
@@ -1531,7 +1042,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteProveedor = (id: number) => {
     setProveedores((prev) => prev.filter((item) => item.id !== id));
-    deleteDocument('proveedores', id).catch(() => {});
     logActivity('Eliminación', 'Proveedores', `Proveedor #${id} eliminado`);
   };
 
@@ -1557,7 +1067,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (itemInVenta) {
           const nuevaCantidad = Math.max(0, prod.cantidad - itemInVenta.cantidad);
           const updated = { ...prod, cantidad: nuevaCantidad };
-          saveDocument('productos', prod.id, updated).catch(() => {});
           return updated;
         }
         return prod;
@@ -1589,7 +1098,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setKardex((prev) => [...kardexEntries, ...prev]);
-    kardexEntries.forEach((ke) => saveDocument('kardex', ke.id, ke).catch(() => {}));
 
     // Update active caja if cash or recorded
     if (activeCaja) {
@@ -1601,7 +1109,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ingresos_ventas: c.ingresos_ventas + newVenta.total,
               saldo_estimado: c.saldo_estimado + newVenta.total,
             };
-            saveDocument('cajas', c.id, updated).catch(() => {});
             return updated;
           }
           return c;
@@ -1610,7 +1117,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setVentas((prev) => [newVenta, ...prev]);
-    saveDocument('ventas', newVenta.id, newVenta).catch(() => {});
 
     logActivity('Venta', 'Ventas', `Comprobante ${numero_comprobante} emitido por ${currentMoneda.simbolo} ${newVenta.total.toFixed(2)}`);
     return newVenta;
@@ -1627,7 +1133,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (itemInVenta) {
           const nuevaCantidad = prod.cantidad + itemInVenta.cantidad;
           const updated = { ...prod, cantidad: nuevaCantidad };
-          saveDocument('productos', prod.id, updated).catch(() => {});
           return updated;
         }
         return prod;
@@ -1659,7 +1164,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setKardex((prev) => [...kardexReversals, ...prev]);
-    kardexReversals.forEach((kr) => saveDocument('kardex', kr.id, kr).catch(() => {}));
 
     // Update active caja
     if (venta.caja_id) {
@@ -1671,7 +1175,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ingresos_ventas: Math.max(0, c.ingresos_ventas - venta.total),
               saldo_estimado: Math.max(0, c.saldo_estimado - venta.total),
             };
-            saveDocument('cajas', c.id, updated).catch(() => {});
             return updated;
           }
           return c;
@@ -1683,7 +1186,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((v) => {
         if (v.id === id) {
           const updated = { ...v, estado: 'Anulada' as const };
-          saveDocument('ventas', id, updated).catch(() => {});
           return updated;
         }
         return v;
@@ -1710,7 +1212,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             precio_compra: itemInCompra.precio_compra > 0 ? itemInCompra.precio_compra : prod.precio_compra,
             precio_venta: itemInCompra.precio_venta_sugerido > 0 ? itemInCompra.precio_venta_sugerido : prod.precio_venta,
           };
-          saveDocument('productos', prod.id, updated).catch(() => {});
           return updated;
         }
         return prod;
@@ -1741,10 +1242,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setKardex((prev) => [...kardexEntries, ...prev]);
-    kardexEntries.forEach((ke) => saveDocument('kardex', ke.id, ke).catch(() => {}));
 
     setCompras((prev) => [newCompra, ...prev]);
-    saveDocument('compras', newCompra.id, newCompra).catch(() => {});
 
     logActivity('Compra', 'Compras', `Compra ${compraData.numero_comprobante} registrada por ${currentMoneda.simbolo} ${newCompra.total.toFixed(2)}`);
   };
@@ -1766,7 +1265,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setCajas((prev) => [nuevaCaja, ...prev]);
-    saveDocument('cajas', nuevaCaja.id, nuevaCaja).catch(() => {});
     logActivity('Apertura', 'Cajas', `Caja "${nombre}" abierta con ${currentMoneda.simbolo} ${montoInicial.toFixed(2)}`);
   };
 
@@ -1782,7 +1280,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             monto_final: montoFinal,
             diferencia: diff,
           };
-          saveDocument('cajas', id, updated).catch(() => {});
           return updated;
         }
         return c;
@@ -1805,7 +1302,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setMovimientosCaja((prev) => [nuevoMovimiento, ...prev]);
-    saveDocument('movimientos_caja', nuevoMovimiento.id, nuevoMovimiento).catch(() => {});
 
     setCajas((prev) =>
       prev.map((c) => {
@@ -1819,7 +1315,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             egresos_movimientos: nuevoEgreso,
             saldo_estimado: c.saldo_estimado + delta,
           };
-          saveDocument('cajas', c.id, updated).catch(() => {});
           return updated;
         }
         return c;
@@ -1843,7 +1338,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setInventarioAjustes((prev) => [ajuste, ...prev]);
-    saveDocument('inventario_ajustes', ajuste.id, ajuste).catch(() => {});
 
     // Update product stock
     setProductos((prev) =>
@@ -1851,7 +1345,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (p.id === productoId) {
           const nuevaCant = tipo === 'Entrada' ? p.cantidad + cantidad : Math.max(0, p.cantidad - cantidad);
           const updated = { ...p, cantidad: nuevaCant };
-          saveDocument('productos', p.id, updated).catch(() => {});
           return updated;
         }
         return p;
@@ -1881,7 +1374,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saldo_total: nuevoStock * costo,
       };
       setKardex((prev) => [kardexEntry, ...prev]);
-      saveDocument('kardex', kardexEntry.id, kardexEntry).catch(() => {});
     }
 
     logActivity('Ajuste', 'Inventario', `Ajuste ${tipo} de ${cantidad} unid. (${motivo})`);
@@ -1892,7 +1384,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newId = empleados.length > 0 ? Math.max(...empleados.map((e) => e.id)) + 1 : 1;
     const nuevo = { ...emp, id: newId };
     setEmpleados((prev) => [...prev, nuevo]);
-    saveDocument('empleados', newId, nuevo).catch(() => {});
     logActivity('Creación', 'Empleados', `Empleado "${emp.nombre} ${emp.apellido}" registrado`);
   };
 
@@ -1901,7 +1392,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((e) => {
         if (e.id === id) {
           const updated = { ...e, ...emp };
-          saveDocument('empleados', id, updated).catch(() => {});
           return updated;
         }
         return e;
@@ -1912,7 +1402,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteEmpleado = (id: number) => {
     setEmpleados((prev) => prev.filter((e) => e.id !== id));
-    deleteDocument('empleados', id).catch(() => {});
     logActivity('Eliminación', 'Empleados', `Empleado #${id} eliminado`);
   };
 
@@ -1939,7 +1428,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActivityLogs(initialActivityLogs);
     setNotificaciones(initialNotificaciones);
     setActiveTab('panel');
-    await seedFirebaseDatabase();
   };
 
   return (
@@ -1977,21 +1465,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         downloadGoogleSheetsExcel,
         showGoogleSheetsModal,
         setShowGoogleSheetsModal,
-
-        firebaseStatus,
-        firebaseMessage,
-        firebaseProjectId: activeConfig.projectId,
-        firebaseDatabaseId: activeConfig.firestoreDatabaseId || '(default)',
-        activeFirebaseConfig: activeConfig,
-        switchFirebaseProject: handleSwitchFirebaseProject,
-        resetToDefaultFirebase: handleResetFirebase,
-        syncNowWithFirebase,
-        seedFirebaseDatabase,
-        uploadCurrentDataToFirebase,
-        downloadDataFromFirebase,
-        syncBidirectionalAll,
-        showFirebaseModal,
-        setShowFirebaseModal,
 
         empresa,
         updateEmpresa,
