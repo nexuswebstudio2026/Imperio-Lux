@@ -219,6 +219,7 @@ interface AppContextType {
   roles: Role[];
 
   activityLogs: ActivityLog[];
+  recordSystemActivity: (id: number, accion: string, modulo: string, descripcion: string, fecha: string) => void;
   notificaciones: Notificacion[];
   markNotificationsAsRead: () => void;
   addNotificacion: (notif: Omit<Notificacion, 'id' | 'fecha' | 'leida'>) => void;
@@ -1109,6 +1110,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setActivityLogs((prev) => [newLog, ...prev]);
   };
 
+  const recordSystemActivity = useCallback((id: number, accion: string, modulo: string, descripcion: string, fecha: string) => {
+    setActivityLogs((prev) => prev.some((entry) => entry.id === id) ? prev : [{ id, accion, modulo, descripcion, user_name: 'Sistema de respaldos', fecha }, ...prev]);
+  }, []);
+
+  useEffect(() => {
+    const syncLastBackupActivity = async () => {
+      try {
+        const response = await fetch('/api/backups/config');
+        if (!response.ok) return;
+        const { lastBackup } = await response.json();
+        if (!lastBackup?.id || localStorage.getItem('pv_last_backup_activity_id') === lastBackup.id) return;
+        const date = new Date(lastBackup.createdAt);
+        recordSystemActivity(date.getTime(), 'Respaldo creado', 'Google Drive', `Respaldo de la hoja principal guardado en Drive: ${lastBackup.name}.`, date.toISOString().replace('T', ' ').slice(0, 19));
+        localStorage.setItem('pv_last_backup_activity_id', lastBackup.id);
+      } catch {
+        // The app remains usable if the backup service is offline.
+      }
+    };
+    void syncLastBackupActivity();
+    const interval = window.setInterval(() => void syncLastBackupActivity(), 60_000);
+    return () => window.clearInterval(interval);
+  }, [recordSystemActivity]);
+
   const updateEmpresa = (partial: Partial<Empresa>) => {
     const updated = { ...empresa, ...partial };
     setEmpresa(updated);
@@ -1895,6 +1919,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         users,
         roles,
         activityLogs,
+        recordSystemActivity,
         notificaciones,
         markNotificationsAsRead,
         addNotificacion,

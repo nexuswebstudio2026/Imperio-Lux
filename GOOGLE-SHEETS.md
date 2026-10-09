@@ -10,4 +10,6 @@ La aplicación usa una cuenta de servicio desde el servidor. La clave privada no
 
 El endpoint `/api/sheets/status` indica si el servidor pudo autenticarse. La cuenta de servicio concede acceso a Google Sheets; no autentica a los usuarios del ERP. Añade autenticación de usuarios y control de roles en el servidor antes de exponer la aplicación públicamente.
 
+La programación de copias requiere que el proceso Node del servidor permanezca ejecutándose y que el directorio de configuración (`.runtime/` por defecto) sea persistente. En despliegues serverless reemplaza el temporizador en memoria por un scheduler administrado antes de usar respaldos automáticos.
+
 Google Sheets sirve para operaciones pequeñas y de baja concurrencia. Para ventas simultáneas, auditoría robusta o contabilidad crítica, migra los datos operativos a una base transaccional y conserva Sheets para exportación y análisis.

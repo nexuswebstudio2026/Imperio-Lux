@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Breadcrumb } from '../layout/Breadcrumb';
+import { BackupSchedulerPanel } from './BackupSchedulerPanel';
 import { GoogleSignInButton } from '../common/GoogleSignInButton';
 import { ConfirmDestructiveModal } from '../common/ConfirmDestructiveModal';
 import {
@@ -12,7 +13,6 @@ import {
   removeLinkedSpreadsheet,
   LinkedSpreadsheet,
   ConnectionValidationResult,
-  createDriveBackupSpreadsheet,
 } from '../../lib/sheets';
 import {
   GOOGLE_APPS_SCRIPT_BACKUP_CODE,
@@ -102,6 +102,7 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
     documentos,
     comprobantes,
     activityLogs,
+    recordSystemActivity,
     notificaciones,
     getTableDataByName,
   } = useApp();
@@ -155,6 +156,62 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
   const [showScriptModal, setShowScriptModal] = useState(false);
   const [scriptCopied, setScriptCopied] = useState(false);
   const [integrityHash, setIntegrityHash] = useState<string>('Calculando...');
+  const [backupSchedule, setBackupSchedule] = useState({ enabled: false, folderId: '', spreadsheetId: googleSheetsId, hour: 2, minute: 0, timezone: 'America/Bogota', lastBackup: null as null | { id: string; name: string; url: string; createdAt: string }, lastError: null as string | null });
+  const [isSavingBackupSchedule, setIsSavingBackupSchedule] = useState(false);
+  const [backupScheduleLoaded, setBackupScheduleLoaded] = useState(false);
+
+  const refreshBackupSchedule = async () => {
+    try {
+      const response = await fetch('/api/backups/config');
+      if (!response.ok) throw new Error('No se pudo consultar la programación de respaldos.');
+      const config = await response.json();
+      setBackupSchedule((current) => ({ ...current, ...config }));
+      if (config.lastBackup?.id) {
+        const loggedId = localStorage.getItem('pv_last_backup_activity_id');
+        if (loggedId !== config.lastBackup.id) {
+          const date = new Date(config.lastBackup.createdAt);
+          const historyRecord: BackupHistoryRecord = {
+            id: config.lastBackup.id, spreadsheetId: config.lastBackup.id, name: config.lastBackup.name,
+            url: config.lastBackup.url, createdAt: config.lastBackup.createdAt, tablesCount: tablesList.length,
+            totalRecords: tablesList.reduce((sum, table) => sum + table.count, 0), sha256Checksum: '', status: 'EXITOSO', latencyMs: 0,
+          };
+          saveBackupHistoryRecord(historyRecord);
+          setBackupsList(getStoredBackupsHistory());
+          recordSystemActivity(date.getTime(), 'Respaldo creado', 'Google Drive', `Respaldo automático de la hoja principal guardado en Drive: ${config.lastBackup.name}.`, date.toISOString().replace('T', ' ').slice(0, 19));
+          localStorage.setItem('pv_last_backup_activity_id', config.lastBackup.id);
+        }
+      }
+    } catch (error) {
+      setBackupStatusMessage({ text: error instanceof Error ? error.message : 'Error al consultar los respaldos.', type: 'error' });
+    } finally {
+      setBackupScheduleLoaded(true);
+    }
+  };
+
+  useEffect(() => {
+    void refreshBackupSchedule();
+    const interval = window.setInterval(() => void refreshBackupSchedule(), 60_000);
+    return () => window.clearInterval(interval);
+  }, [googleSheetsId]);
+
+  const handleSaveBackupSchedule = async () => {
+    setIsSavingBackupSchedule(true);
+    try {
+      const response = await fetch('/api/backups/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...backupSchedule, spreadsheetId: googleSheetsId }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'No se pudo guardar la programación.');
+      setBackupSchedule((current) => ({ ...current, ...result }));
+      setBackupStatusMessage({ text: result.enabled ? `Respaldo diario programado a las ${String(result.hour).padStart(2, '0')}:${String(result.minute).padStart(2, '0')} (${result.timezone}).` : 'Respaldo automático desactivado.', type: 'success' });
+    } catch (error) {
+      setBackupStatusMessage({ text: error instanceof Error ? error.message : 'Error al guardar la programación.', type: 'error' });
+    } finally {
+      setIsSavingBackupSchedule(false);
+    }
+  };
 
   // Refresh history list when validation occurs
   useEffect(() => {
@@ -413,63 +470,26 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
 
   const handleExecuteDriveBackup = async () => {
     setIsBackingUpDrive(true);
-    setBackupStatusMessage({
-      text: 'Conectando con Google Drive y preparando las 21 tablas...',
-      type: 'info',
-    });
-
+    setBackupStatusMessage({ text: "Copiando la hoja principal a la carpeta de Drive configurada...", type: "info" });
     try {
-      let token = googleAccessToken;
-      if (!token) {
-        const res = await signInWithGoogleSheets();
-        token = res?.accessToken || null;
-      }
-      if (!token) {
-        setBackupStatusMessage({
-          text: 'Se requiere iniciar sesión con Google para generar el archivo de respaldo en tu Google Drive.',
-          type: 'error',
-        });
-        setIsBackingUpDrive(false);
-        return;
-      }
-
-      setBackupStatusMessage({
-        text: 'Generando nuevo libro de respaldo en Google Drive con manifiesto de integridad...',
-        type: 'info',
-      });
-
-      const allTables = tablesList.map((t) => ({
-        tableName: t.name,
-        records: getTableDataByName(t.name),
-      }));
-
-      const res = await createDriveBackupSpreadsheet(token, allTables, googleSheetsId);
-
+      const response = await fetch("/api/backups/run", { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "No se pudo crear el respaldo.");
+      const res = result.backup;
       const newRecord: BackupHistoryRecord = {
-        id: res.id,
-        spreadsheetId: res.id,
-        name: res.name,
-        url: res.url,
-        createdAt: res.createdAt,
-        tablesCount: res.tablesCount,
-        totalRecords: res.totalRecords,
-        sha256Checksum: res.sha256,
-        status: 'VERIFICADO',
-        latencyMs: res.latencyMs,
+        id: res.id, spreadsheetId: res.id, name: res.name, url: res.url, createdAt: res.createdAt,
+        tablesCount: tablesList.length, totalRecords: tablesList.reduce((sum, table) => sum + table.count, 0),
+        sha256Checksum: "", status: "EXITOSO", latencyMs: 0,
       };
-
       saveBackupHistoryRecord(newRecord);
       setBackupsList(getStoredBackupsHistory());
-
-      setBackupStatusMessage({
-        text: `¡Respaldo creado con éxito en Google Drive! Archivo: "${res.name}" (${res.totalRecords} registros en ${res.tablesCount} tablas). Integridad SHA-256 verificada.`,
-        type: 'success',
-      });
+      setBackupSchedule((current) => ({ ...current, ...result.config }));
+      const date = new Date(res.createdAt);
+      recordSystemActivity(date.getTime(), "Respaldo creado", "Google Drive", `Respaldo manual de la hoja principal guardado en Drive: ${res.name}.`, date.toISOString().replace("T", " ").slice(0, 19));
+      localStorage.setItem("pv_last_backup_activity_id", res.id);
+      setBackupStatusMessage({ text: `Respaldo creado en la carpeta configurada: "${res.name}".`, type: "success" });
     } catch (err: any) {
-      setBackupStatusMessage({
-        text: `Error al crear respaldo en Google Drive: ${err?.message || 'Error desconocido'}`,
-        type: 'error',
-      });
+      setBackupStatusMessage({ text: `Error al crear respaldo en Google Drive: ${err?.message || "Error desconocido"}`, type: "error" });
     } finally {
       setIsBackingUpDrive(false);
     }
@@ -1140,7 +1160,7 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* Section 4: Respaldo Diario Automático en Google Drive (Google Apps Script) */}
+      {/* Section 4: Respaldo Diario Automático en Google Drive (programación del servidor) */}
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs p-6 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
@@ -1152,30 +1172,12 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
               </h3>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Script en el contexto de Google Sheets que realiza respaldos automáticos diarios a una carpeta dedicada en Google Drive garantizando integridad con Checksums SHA-256.
+              Copia programada por el servidor a la hora y carpeta que configures abajo. Cada ejecución registra su resultado en el log de actividad.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowScriptModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-              title="Ver el código fuente de Google Apps Script y guía de instalación"
-            >
-              <FileCode className="w-3.5 h-3.5 text-sky-400" />
-              <span>Ver Script Google Apps Script</span>
-            </button>
 
-            <button
-              type="button"
-              onClick={handleDownloadScript}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
-              title="Descargar archivo .gs listo para importar"
-            >
-              <Download className="w-3.5 h-3.5 text-indigo-500" />
-              <span>Descargar .gs</span>
-            </button>
 
             <button
               type="button"
@@ -1225,79 +1227,40 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
           </div>
         )}
 
-        {/* 2 Feature Cards: Automated Script Trigger & Cryptographic Integrity Guarantee */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {/* Card 1: Google Apps Script Automatic Trigger Details */}
-          <div className="p-4 rounded-xl bg-gradient-to-br from-indigo-50/60 to-slate-50 dark:from-slate-800/60 dark:to-slate-900 border border-indigo-100 dark:border-slate-800 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CalendarClock className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                  Programación Automática en Google Sheets
-                </h4>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                Trigger 02:00 AM Diario
-              </span>
-            </div>
+        <BackupSchedulerPanel
+          config={backupSchedule}
+          setConfig={setBackupSchedule}
+          loaded={backupScheduleLoaded}
+          saving={isSavingBackupSchedule}
+          onSave={handleSaveBackupSchedule}
+          spreadsheetId={googleSheetsId}
+        />
 
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              El script corre directamente en los servidores de Google mediante <strong>Google Apps Script</strong>. No requiere que tu navegador permanezca abierto ni que la computadora esté encendida.
-            </p>
-
-            <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
-              <div className="p-2 bg-white/80 dark:bg-slate-950/60 rounded border border-indigo-100/80 dark:border-slate-800">
-                <span className="text-slate-500 dark:text-slate-400 block text-[10px]">Carpeta de Destino:</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200 truncate block">
-                  Imperio Lux ERP - Respaldos Automáticos
-                </span>
-              </div>
-              <div className="p-2 bg-white/80 dark:bg-slate-950/60 rounded border border-indigo-100/80 dark:border-slate-800">
-                <span className="text-slate-500 dark:text-slate-400 block text-[10px]">Retención de Datos:</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  30 Días (Auto-purga)
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-2 border-t border-indigo-100 dark:border-slate-800">
-              <span className="text-[11px] text-slate-500">
-                Menú en Sheets: <code className="text-indigo-600 dark:text-indigo-400 font-bold">🛡️ ERP Respaldos</code>
-              </span>
-              <button
-                type="button"
-                onClick={handleCopyScript}
-                className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 font-bold flex items-center gap-1 cursor-pointer"
-              >
-                {scriptCopied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{scriptCopied ? '¡Script Copiado!' : 'Copiar Script'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Card 2: Cryptographic Integrity Guarantee */}
+        {/* Integridad del archivo principal */}
+        <div className="grid grid-cols-1 gap-5">
+          {/* Current source spreadsheet metadata */}
           <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-50/60 to-slate-50 dark:from-slate-800/60 dark:to-slate-900 border border-emerald-100 dark:border-slate-800 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                  Garantía de Integridad Criptográfica (SHA-256)
+                  Estado del archivo fuente y huella local (SHA-256)
                 </h4>
               </div>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> 100% Verificado
+                <CheckCircle2 className="w-3 h-3" /> Copia de Drive
               </span>
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Cada respaldo genera un <strong>_MANIFIESTO_INTEGRIDAD</strong> con firma hash SHA-256 (FIPS 180-4) y audita que las 21 tablas contengan su estructura y datos sin corrupciones ni pérdidas de registros.
+              La copia diaria conserva la hoja como un archivo de Google Sheets dentro de la carpeta configurada. La huella SHA-256 mostrada corresponde a los datos cargados localmente en el panel, no al archivo de Drive.
             </p>
 
             <div className="p-2.5 bg-white/90 dark:bg-slate-950/80 rounded border border-emerald-100 dark:border-slate-800 space-y-1.5 text-[11px]">
               <div className="flex items-center justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Tablas Auditadas:</span>
+                <span className="text-slate-500 dark:text-slate-400">Hoja fuente:</span>
                 <span className="font-bold text-emerald-700 dark:text-emerald-400 font-mono">
-                  21 de 21 Tablas Oficiales OK
+                  Hoja principal: {googleSheetsId ? "Vinculada" : "No configurada"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -1308,7 +1271,7 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
               </div>
               <div className="pt-1 border-t border-slate-100 dark:border-slate-800">
                 <span className="text-[10px] text-slate-500 dark:text-slate-400 block mb-0.5">
-                  Checksum SHA-256 en Vivo:
+                  Huella local calculada en vivo:
                 </span>
                 <code className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono break-all block bg-slate-50 dark:bg-slate-900 p-1 rounded">
                   {integrityHash}
@@ -1420,7 +1383,7 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
                 <FileCode className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Script de Google Apps Script: Respaldo Diario en Google Drive
+                    Script de programación del servidor: Respaldo Diario en Google Drive
                   </h3>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     Instalación en Google Sheets con trigger automatizado a las 02:00 AM y verificación SHA-256.
@@ -1478,7 +1441,7 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
               {/* Code Actions */}
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-slate-700 dark:text-slate-300 text-xs">
-                  Código Fuente Completo (Google Apps Script .gs):
+                  Código Fuente Completo (programación del servidor .gs):
                 </span>
                 <div className="flex items-center gap-2">
                   <button
@@ -1509,7 +1472,7 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
             {/* Modal Footer */}
             <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex items-center justify-between">
               <span className="text-[11px] text-slate-500">
-                Garantiza la preservación de las 21 tablas con SHA-256 y política de retención de 30 días.
+                  Estado del archivo fuente y huella local (SHA-256)
               </span>
               <button
                 type="button"
