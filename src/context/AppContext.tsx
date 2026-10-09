@@ -75,13 +75,13 @@ import {
   downloadGoogleSheetsLiveExcel,
 } from '../lib/excelExport';
 import {
-  initializeFCM,
+  initializeNotificaciones,
   requestPushPermission,
   dispatchPushAlert,
   getPushPreferences,
   savePushPreferences,
   type PushPreferences,
-} from '../lib/fcmService';
+} from '../lib/browserNotificationsService';
 
 export type AppTab =
   | 'panel'
@@ -223,13 +223,13 @@ interface AppContextType {
   markNotificationsAsRead: () => void;
   addNotificacion: (notif: Omit<Notificacion, 'id' | 'fecha' | 'leida'>) => void;
 
-  // Firebase Cloud Messaging (FCM) Push Notifications
-  fcmStatus: { isSupported: boolean; token: string | null; permission: NotificationPermission };
-  fcmPreferences: PushPreferences;
-  updateFcmPreferences: (prefs: Partial<PushPreferences>) => void;
-  requestFcmPermission: () => Promise<{ granted: boolean; token: string | null; error?: string }>;
-  showFcmModal: boolean;
-  setShowFcmModal: (show: boolean) => void;
+  // Browser notification preferences and alerts
+  browserNotificationsStatus: { isSupported: boolean; token: string | null; permission: NotificationPermission };
+  browserNotificationsPreferences: PushPreferences;
+  updateBrowserNotificationPreferences: (prefs: Partial<PushPreferences>) => void;
+  requestBrowserNotificationPermission: () => Promise<{ granted: boolean; token: string | null; error?: string }>;
+  showBrowserNotificationModal: boolean;
+  setShowBrowserNotificationModal: (show: boolean) => void;
   sendPushAlert: (params: {
     title: string;
     body: string;
@@ -608,8 +608,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => saveStorage('notificaciones', notificaciones), [notificaciones]);
   useEffect(() => saveStorage('citasClientes', citas), [citas]);
 
-  // --- FIREBASE CLOUD MESSAGING (FCM) & PUSH NOTIFICATIONS ---
-  const [fcmStatus, setFcmStatus] = useState<{
+  // --- BROWSER NOTIFICATIONS ---
+  const [browserNotificationsStatus, setBrowserNotificationStatus] = useState<{
     isSupported: boolean;
     token: string | null;
     permission: NotificationPermission;
@@ -618,23 +618,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     token: null,
     permission: typeof Notification !== 'undefined' ? Notification.permission : 'denied',
   });
-  const [fcmPreferences, setFcmPreferences] = useState<PushPreferences>(getPushPreferences);
-  const [showFcmModal, setShowFcmModal] = useState<boolean>(false);
+  const [browserNotificationsPreferences, setBrowserNotificationPreferences] = useState<PushPreferences>(getPushPreferences);
+  const [showBrowserNotificationModal, setShowBrowserNotificationModal] = useState<boolean>(false);
 
   useEffect(() => {
-    initializeFCM().then((status) => {
-      setFcmStatus(status);
+    initializeNotificaciones().then((status) => {
+      setBrowserNotificationStatus(status);
     });
   }, []);
 
-  const updateFcmPreferences = (prefs: Partial<PushPreferences>) => {
+  const updateBrowserNotificationPreferences = (prefs: Partial<PushPreferences>) => {
     const updated = savePushPreferences(prefs);
-    setFcmPreferences(updated);
+    setBrowserNotificationPreferences(updated);
   };
 
-  const requestFcmPermission = async () => {
+  const requestBrowserNotificationPermission = async () => {
     const res = await requestPushPermission();
-    setFcmStatus({
+    setBrowserNotificationStatus({
       isSupported: true,
       token: res.token,
       permission: typeof Notification !== 'undefined' ? Notification.permission : 'denied',
@@ -670,7 +670,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       data: params.data,
     });
 
-    // 2. Disparar FCM Push & Web Notification & Sonido sintetizado
+    // 2. Disparar Notificaciones Push & Web Notification & Sonido sintetizado
     dispatchPushAlert(params);
   };
 
@@ -1899,12 +1899,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         markNotificationsAsRead,
         addNotificacion,
         sendPushAlert,
-        fcmStatus,
-        fcmPreferences,
-        updateFcmPreferences,
-        requestFcmPermission,
-        showFcmModal,
-        setShowFcmModal,
+        browserNotificationsStatus,
+        browserNotificationsPreferences,
+        updateBrowserNotificationPreferences,
+        requestBrowserNotificationPermission,
+        showBrowserNotificationModal,
+        setShowBrowserNotificationModal,
         // Citas con Clientes & Calendario Interactivo
         citas,
         addCita,

@@ -39,8 +39,8 @@ export const Navbar: React.FC = () => {
     googleSheetsStatus,
     setShowGoogleSheetsModal,
     currentMoneda,
-    fcmStatus,
-    setShowFcmModal,
+    browserNotificationsStatus,
+    setShowBrowserNotificationModal,
   } = useApp();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -187,19 +187,19 @@ export const Navbar: React.FC = () => {
           <span className="text-[11px] font-bold tracking-wider">{currentMoneda.estandar_iso}</span>
         </button>
 
-        {/* FCM Push Notification Service Button */}
+        {/* Notificaciones Push Notification Service Button */}
         <button
-          id="btn-fcm-push"
+          id="btn-browserNotifications-push"
           type="button"
-          onClick={() => setShowFcmModal(true)}
+          onClick={() => setShowBrowserNotificationModal(true)}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold bg-blue-950/80 hover:bg-blue-900 text-blue-300 border border-blue-800/80 cursor-pointer transition-all shadow-xs"
-          title="Firebase Cloud Messaging (FCM): Alertas push de ventas y stock crítico"
+          title="Notificaciones del navegador: alertas de ventas y stock crítico"
         >
           <Radio className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-          <span className="hidden md:inline font-mono text-[11px]">Push FCM</span>
+          <span className="hidden md:inline font-mono text-[11px]">Push Notificaciones</span>
           <span
             className={`w-2 h-2 rounded-full ${
-              fcmStatus.permission === 'granted' ? 'bg-emerald-400' : 'bg-amber-400'
+              browserNotificationsStatus.permission === 'granted' ? 'bg-emerald-400' : 'bg-amber-400'
             }`}
           />
         </button>
@@ -271,16 +271,16 @@ export const Navbar: React.FC = () => {
                   ))
                 )}
               </div>
-              {/* Dropdown Footer: FCM push config link */}
+              {/* Dropdown Footer: Notificaciones push config link */}
               <div className="p-2 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
                 <span className="text-[10px] text-slate-500 flex items-center gap-1">
                   <Radio className="w-3 h-3 text-blue-600" />
-                  <span>FCM Push: {fcmStatus.permission === 'granted' ? 'Activo' : 'Pendiente'}</span>
+                  <span>Notificaciones Push: {browserNotificationsStatus.permission === 'granted' ? 'Activo' : 'Pendiente'}</span>
                 </span>
                 <button
                   onClick={() => {
                     setShowNotifications(false);
-                    setShowFcmModal(true);
+                    setShowBrowserNotificationModal(true);
                   }}
                   className="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
                 >

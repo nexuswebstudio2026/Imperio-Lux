@@ -222,7 +222,7 @@ export async function fetchSpreadsheetMetadata(
   accessToken: string,
   spreadsheetId: string = getStoredSpreadsheetId()
 ): Promise<SpreadsheetMetadata> {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=properties.title,sheets.properties`;
+  const url = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}?fields=properties.title,sheets.properties`;
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -276,7 +276,7 @@ export async function ensureSheetTabsExist(
     },
   }));
 
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
+  const url = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -430,7 +430,7 @@ export async function writeTableToSheet(
   const values = [headers, ...rows];
 
   // 1. Clear existing sheet content
-  const clearUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:clear`;
+  const clearUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:clear`;
   await fetch(clearUrl, {
     method: 'POST',
     headers: {
@@ -441,7 +441,7 @@ export async function writeTableToSheet(
   }).catch(() => {});
 
   // 2. Write new values
-  const writeUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1?valueInputOption=USER_ENTERED`;
+  const writeUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1?valueInputOption=USER_ENTERED`;
   const res = await fetch(writeUrl, {
     method: 'PUT',
     headers: {
@@ -469,7 +469,7 @@ export async function readTableFromSheet<T = any>(
   spreadsheetId: string,
   sheetName: string
 ): Promise<T[]> {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`;
+  const url = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`;
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -499,7 +499,7 @@ export async function appendRowToSheet(
   rowRecord: any
 ): Promise<void> {
   // Read header row to match order
-  const getHeaderUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!1:1`;
+  const getHeaderUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!1:1`;
   const headerRes = await fetch(getHeaderUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -524,7 +524,7 @@ export async function appendRowToSheet(
     return val;
   });
 
-  const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append?valueInputOption=USER_ENTERED`;
+  const appendUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append?valueInputOption=USER_ENTERED`;
   await fetch(appendUrl, {
     method: 'POST',
     headers: {
@@ -563,7 +563,7 @@ export async function createDriveBackupSpreadsheet(
   const sheetTitles = ['_MANIFIESTO_INTEGRIDAD', ...allTablesData.map((t) => t.tableName)];
 
   // 2. Crear el nuevo Spreadsheet en Google Drive
-  const createUrl = 'https://sheets.googleapis.com/v4/spreadsheets';
+  const createUrl = '/api/google-sheets/v4/spreadsheets';
   const createRes = await fetch(createUrl, {
     method: 'POST',
     headers: {
@@ -650,7 +650,7 @@ export async function createDriveBackupSpreadsheet(
   });
 
   // 6. Escribir todos los datos en un solo batchUpdate
-  const batchUrl = `https://sheets.googleapis.com/v4/spreadsheets/${newSpreadsheetId}/values:batchUpdate`;
+  const batchUrl = `/api/google-sheets/v4/spreadsheets/${newSpreadsheetId}/values:batchUpdate`;
   const batchRes = await fetch(batchUrl, {
     method: 'POST',
     headers: {

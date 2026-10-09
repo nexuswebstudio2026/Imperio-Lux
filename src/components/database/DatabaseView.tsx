@@ -349,8 +349,8 @@ export const DatabaseView: React.FC = () => {
     {
       id: 'notificaciones',
       name: 'notificaciones',
-      label: 'Alertas y Notificaciones FCM',
-      description: 'Notificaciones push en tiempo real (FCM), alertas de nuevas ventas y cambios críticos de inventario.',
+      label: 'Alertas y Notificaciones Notificaciones',
+      description: 'Notificaciones push en tiempo real (Notificaciones), alertas de nuevas ventas y cambios críticos de inventario.',
       category: 'sistema',
       icon: Bell,
       color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20',

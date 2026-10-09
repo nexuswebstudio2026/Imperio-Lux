@@ -1,0 +1,13 @@
+{
+  "name": "Imperio Lux ERP",
+  "short_name": "Imperio Lux",
+  "description": "Gestión de ventas, inventario y caja de Imperio Lux",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    { "src": "/assets/imperio-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

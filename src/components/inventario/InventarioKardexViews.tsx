@@ -33,8 +33,8 @@ export const InventarioView: React.FC = () => {
     setActiveTab,
     marcas,
     presentaciones,
-    setShowFcmModal,
-    fcmStatus,
+    setShowBrowserNotificationModal,
+    browserNotificationsStatus,
   } = useApp();
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -140,12 +140,12 @@ export const InventarioView: React.FC = () => {
         actions={
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowFcmModal(true)}
+              onClick={() => setShowBrowserNotificationModal(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shadow-sm transition-colors cursor-pointer"
-              title="Configurar y probar alertas push FCM en tiempo real"
+              title="Configurar y probar alertas push Notificaciones en tiempo real"
             >
               <Radio className="w-3.5 h-3.5 animate-pulse text-blue-200" />
-              <span>Alertas Push FCM</span>
+              <span>Alertas Push Notificaciones</span>
             </button>
             <button
               onClick={() => setActiveTab('kardex')}

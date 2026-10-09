@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { subscribeToPushNotifications, PushNotificationPayload } from '../../lib/fcmService';
+import { subscribeToPushNotifications, PushNotificationPayload } from '../../lib/browserNotificationsService';
 import {
   ShoppingCart,
   AlertTriangle,
@@ -20,7 +20,7 @@ export const PushNotificationToast: React.FC = () => {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   useEffect(() => {
-    // Escuchar alertas push emitidas por el servicio FCM
+    // Escuchar alertas push emitidas por el servicio Notificaciones
     const unsubscribe = subscribeToPushNotifications((payload) => {
       const id = payload.id;
       const timeoutId = setTimeout(() => {
