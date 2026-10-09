@@ -23,6 +23,7 @@ import {
   Database,
   Cloud,
   FileSpreadsheet,
+  Link2,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -95,7 +96,26 @@ export const Sidebar: React.FC = () => {
                 <span className="font-semibold text-emerald-100">Base de Datos</span>
               </div>
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-500/30">
-                Sheets
+                21 Tablas
+              </span>
+            </button>
+
+            {/* Vincular Google Sheets (Panel de Configuración) */}
+            <button
+              id="nav-sheets-config"
+              onClick={() => setActiveTab('sheets_config')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors cursor-pointer text-left ${
+                isTabActive('sheets_config')
+                  ? 'bg-blue-600 text-white font-medium shadow-xs'
+                  : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Link2 className="w-4 h-4 text-sky-400" />
+                <span>Vincular Sheets</span>
+              </div>
+              <span className="text-[9px] bg-sky-500/20 text-sky-300 font-semibold px-1.5 py-0.5 rounded">
+                Validar
               </span>
             </button>
 

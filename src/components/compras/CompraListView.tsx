@@ -10,10 +10,22 @@ import {
   X,
   FileText,
   Truck,
+  FileDown,
 } from 'lucide-react';
+import {
+  exportComprasListPdf,
+  exportCompraComprobantePdf,
+} from '../../lib/pdfExport';
 
 export const CompraListView: React.FC = () => {
-  const { compras, proveedores, currentMoneda, setActiveTab } = useApp();
+  const {
+    compras,
+    proveedores,
+    empresa,
+    comprobantes,
+    currentMoneda,
+    setActiveTab,
+  } = useApp();
   const [search, setSearch] = useState('');
   const [selectedCompra, setSelectedCompra] = useState<Compra | null>(null);
 
@@ -28,19 +40,52 @@ export const CompraListView: React.FC = () => {
 
   const totalCompras = compras.reduce((sum, c) => sum + c.total, 0);
 
+  const handleExportListPdf = () => {
+    exportComprasListPdf({
+      compras: filteredCompras,
+      proveedores,
+      currentMoneda,
+      empresa,
+      search,
+    });
+  };
+
+  const handleExportCompraPdf = (c: Compra) => {
+    const prov = proveedores.find((p) => p.id === c.proveedor_id);
+    const comp = comprobantes.find((cp) => cp.id === c.comprobante_id);
+    exportCompraComprobantePdf({
+      compra: c,
+      proveedor: prov,
+      comprobante: comp,
+      empresa,
+      currentMoneda,
+    });
+  };
+
   return (
     <div>
       <Breadcrumb
         title="Historial de Compras"
         items={[{ label: 'Compras', tab: 'compras' }, { label: 'Ver Compras' }]}
         actions={
-          <button
-            onClick={() => setActiveTab('compras_create')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-700 hover:bg-violet-800 text-white rounded text-xs font-semibold shadow-sm transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Realizar Nueva Compra</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              id="btn-export-compras-pdf"
+              onClick={handleExportListPdf}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+              title="Exportar listado actual de órdenes de compra a PDF con jsPDF"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              <span>Exportar a PDF</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('compras_create')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-700 hover:bg-violet-800 text-white rounded text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Realizar Nueva Compra</span>
+            </button>
+          </div>
         }
       />
 
@@ -125,13 +170,24 @@ export const CompraListView: React.FC = () => {
                         {currentMoneda.simbolo} {compra.total.toFixed(2)}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => setSelectedCompra(compra)}
-                          className="px-2.5 py-1 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded text-xs font-semibold flex items-center gap-1 mx-auto cursor-pointer transition-colors"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Ver Detalle</span>
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => setSelectedCompra(compra)}
+                            className="px-2 py-1 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Ver Detalle de Compra"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Detalle</span>
+                          </button>
+                          <button
+                            onClick={() => handleExportCompraPdf(compra)}
+                            className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Descargar Comprobante / Orden en PDF (jsPDF)"
+                          >
+                            <FileDown className="w-3.5 h-3.5" />
+                            <span>PDF</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -208,12 +264,21 @@ export const CompraListView: React.FC = () => {
               </table>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setSelectedCompra(null)}
-                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-semibold cursor-pointer"
+                className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-semibold cursor-pointer transition-colors"
               >
                 Cerrar
+              </button>
+              <button
+                id="btn-download-compra-modal-pdf"
+                onClick={() => handleExportCompraPdf(selectedCompra)}
+                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                title="Descargar orden / comprobante en PDF con jsPDF"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                <span>Descargar Comprobante PDF</span>
               </button>
             </div>
           </div>

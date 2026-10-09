@@ -138,6 +138,8 @@ export interface Compra {
   proveedor_id: number;
   user_id: number;
   fecha_hora: string;
+  fecha_vencimiento?: string; // Fecha de vencimiento de la factura (YYYY-MM-DD o string)
+  estado_pago?: 'Pendiente' | 'Pagada' | 'Vencida';
   subtotal: number;
   impuesto: number;
   total: number;
@@ -243,3 +245,18 @@ export interface Notificacion {
   categoria?: 'venta' | 'inventario_critico' | 'ajuste' | 'sistema';
   data?: Record<string, any>;
 }
+
+export interface CitaCliente {
+  id: number;
+  cliente_id: number;
+  cliente_nombre?: string;
+  titulo: string;
+  motivo?: string;
+  fecha: string; // YYYY-MM-DD
+  hora: string; // HH:mm
+  estado: 'Programada' | 'Completada' | 'Cancelada';
+  notas?: string;
+  lugar?: string;
+  telefono?: string;
+}
+

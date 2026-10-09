@@ -21,6 +21,7 @@ import {
   User,
   ActivityLog,
   Notificacion,
+  CitaCliente,
 } from '../types';
 import {
   initialEmpresa,
@@ -44,6 +45,7 @@ import {
   initialKardex,
   initialActivityLogs,
   initialNotificaciones,
+  initialCitasClientes,
 } from '../data/initialData';
 import {
   googleSignIn as libGoogleSignIn,
@@ -58,11 +60,14 @@ import {
   getStoredSpreadsheetId,
   setStoredSpreadsheetId,
   getSpreadsheetUrl,
+  extractSpreadsheetId,
   fetchSpreadsheetMetadata,
   ensureSheetTabsExist,
   writeTableToSheet,
   readTableFromSheet,
   appendRowToSheet,
+  validateSpreadsheetConnection,
+  type ConnectionValidationResult,
 } from '../lib/sheets';
 import {
   exportAllTablesToExcel,
@@ -98,7 +103,8 @@ export type AppTab =
   | 'users'
   | 'roles'
   | 'activity_log'
-  | 'database';
+  | 'database'
+  | 'sheets_config';
 
 interface AppContextType {
   currentUser: User | null;
@@ -135,6 +141,15 @@ interface AppContextType {
   downloadGoogleSheetsExcel: () => void;
   showGoogleSheetsModal: boolean;
   setShowGoogleSheetsModal: (show: boolean) => void;
+
+  // Connection Validation & Linking
+  isSheetsValidated: boolean;
+  validatedSheetsId: string | null;
+  sheetsValidationData: ConnectionValidationResult | null;
+  isValidatingSheets: boolean;
+  validateSheetsConnection: (idToTest?: string) => Promise<ConnectionValidationResult>;
+  resetSheetsValidation: () => void;
+  getTableDataByName: (tableName: string) => any[];
 
   empresa: Empresa;
   updateEmpresa: (empresa: Partial<Empresa>) => void;
@@ -223,6 +238,13 @@ interface AppContextType {
     data?: Record<string, any>;
   }) => void;
 
+  // Citas con Clientes & Calendario Interactivo
+  citas: CitaCliente[];
+  addCita: (cita: Omit<CitaCliente, 'id'>) => CitaCliente;
+  updateCita: (id: number, cita: Partial<CitaCliente>) => void;
+  deleteCita: (id: number) => void;
+  updateCompraDueDate: (compraId: number, fechaVencimiento: string, estadoPago?: 'Pendiente' | 'Pagada' | 'Vencida') => void;
+
   activeComprobanteVenta: Venta | null;
   setActiveComprobanteVenta: (v: Venta | null) => void;
   resetAllDataToDefaults: () => void;
@@ -258,10 +280,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeDatabaseEngine, setActiveDatabaseEngine] = useState<'sheets' | 'local'>('sheets');
   const [showGoogleSheetsModal, setShowGoogleSheetsModal] = useState<boolean>(false);
 
+  // Connection validation states
+  const [validatedSheetsId, setValidatedSheetsId] = useState<string | null>(null);
+  const [sheetsValidationData, setSheetsValidationData] = useState<ConnectionValidationResult | null>(null);
+  const [isValidatingSheets, setIsValidatingSheets] = useState<boolean>(false);
+
+  const cleanGoogleSheetsId = extractSpreadsheetId(googleSheetsId);
+  const isSheetsValidated = Boolean(
+    validatedSheetsId &&
+    validatedSheetsId === cleanGoogleSheetsId &&
+    sheetsValidationData?.success
+  );
+
   const setGoogleSheetsId = useCallback((id: string) => {
-    const trimmed = id.trim();
-    setGoogleSheetsIdState(trimmed);
-    setStoredSpreadsheetId(trimmed);
+    const clean = extractSpreadsheetId(id);
+    setGoogleSheetsIdState(clean);
+    setStoredSpreadsheetId(clean);
+    setValidatedSheetsId((prev) => (prev === clean ? prev : null));
+    setSheetsValidationData((prev) => (prev?.spreadsheetId === clean ? prev : null));
+  }, []);
+
+  const resetSheetsValidation = useCallback(() => {
+    setValidatedSheetsId(null);
+    setSheetsValidationData(null);
   }, []);
 
   // Listen to Google Auth state
@@ -310,6 +351,52 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGoogleSheetsStatus('idle');
     setGoogleSheetsMessage('Sesión cerrada de Google');
   }, []);
+
+  const validateSheetsConnection = useCallback(
+    async (idToTest?: string): Promise<ConnectionValidationResult> => {
+      const targetId = extractSpreadsheetId(idToTest || googleSheetsId);
+      setIsValidatingSheets(true);
+
+      let token = googleAccessToken;
+      if (!token) {
+        try {
+          const signRes = await signInWithGoogleSheets();
+          token = signRes?.accessToken || null;
+        } catch (e) {
+          // Handled in catch
+        }
+      }
+
+      if (!token) {
+        const failedResult: ConnectionValidationResult = {
+          success: false,
+          spreadsheetId: targetId,
+          error: 'No se pudo obtener la sesión de Google. Por favor, inicia sesión con tu cuenta de Google para validar el acceso a la hoja de cálculo.',
+        };
+        setSheetsValidationData(failedResult);
+        setIsValidatingSheets(false);
+        return failedResult;
+      }
+
+      const res = await validateSpreadsheetConnection(token, targetId);
+      setSheetsValidationData(res);
+      setIsValidatingSheets(false);
+
+      if (res.success) {
+        setValidatedSheetsId(res.spreadsheetId);
+        setGoogleSheetsIdState(res.spreadsheetId);
+        setStoredSpreadsheetId(res.spreadsheetId);
+        setGoogleSheetsStatus('connected');
+        setGoogleSheetsMessage(`Conexión validada exitosamente con "${res.title}"`);
+      } else {
+        setGoogleSheetsStatus('error');
+        setGoogleSheetsMessage(res.error || 'Error al validar conexión');
+      }
+
+      return res;
+    },
+    [googleAccessToken, googleSheetsId, signInWithGoogleSheets]
+  );
 
   const [currentUser, setCurrentUser] = useState<User | null>(() =>
     loadStorage<User | null>('currentUser', initialUsers[0])
@@ -453,8 +540,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [ventas, setVentas] = useState<Venta[]>(() =>
     loadStorage<Venta[]>('ventas', initialVentas)
   );
-  const [compras, setCompras] = useState<Compra[]>(() =>
-    loadStorage<Compra[]>('compras', initialCompras)
+  const [compras, setCompras] = useState<Compra[]>(() => {
+    const loaded = loadStorage<Compra[]>('compras', initialCompras);
+    const hasDueDates = loaded.some((c) => c.fecha_vencimiento);
+    if (!hasDueDates) {
+      saveStorage('compras', initialCompras);
+      return initialCompras;
+    }
+    return loaded;
+  });
+  const [citas, setCitas] = useState<CitaCliente[]>(() =>
+    loadStorage<CitaCliente[]>('citasClientes', initialCitasClientes)
   );
   const [cajas, setCajas] = useState<Caja[]>(() =>
     loadStorage<Caja[]>('cajas', initialCajas)
@@ -510,6 +606,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => saveStorage('comprobantes', comprobantes), [comprobantes]);
   useEffect(() => saveStorage('activityLogs', activityLogs), [activityLogs]);
   useEffect(() => saveStorage('notificaciones', notificaciones), [notificaciones]);
+  useEffect(() => saveStorage('citasClientes', citas), [citas]);
 
   // --- FIREBASE CLOUD MESSAGING (FCM) & PUSH NOTIFICATIONS ---
   const [fcmStatus, setFcmStatus] = useState<{
@@ -1639,6 +1736,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
   };
 
+  const addCita = (citaData: Omit<CitaCliente, 'id'>) => {
+    const newId = Math.max(0, ...citas.map((c) => c.id)) + 1;
+    const client = clientes.find((c) => c.id === citaData.cliente_id);
+    const newCita: CitaCliente = {
+      ...citaData,
+      id: newId,
+      cliente_nombre: citaData.cliente_nombre || client?.razon_social || 'Cliente',
+    };
+    setCitas((prev) => [newCita, ...prev]);
+    logActivity('Registro', 'Citas', `Cita programada con "${newCita.cliente_nombre}" para el ${newCita.fecha} a las ${newCita.hora}`);
+    return newCita;
+  };
+
+  const updateCita = (id: number, updatedFields: Partial<CitaCliente>) => {
+    setCitas((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...updatedFields } : c))
+    );
+    logActivity('Edición', 'Citas', `Cita #${id} actualizada`);
+  };
+
+  const deleteCita = (id: number) => {
+    setCitas((prev) => prev.filter((c) => c.id !== id));
+    logActivity('Eliminación', 'Citas', `Cita #${id} cancelada/eliminada`);
+  };
+
+  const updateCompraDueDate = (compraId: number, fechaVencimiento: string, estadoPago?: 'Pendiente' | 'Pagada' | 'Vencida') => {
+    setCompras((prev) =>
+      prev.map((c) =>
+        c.id === compraId
+          ? {
+              ...c,
+              fecha_vencimiento: fechaVencimiento,
+              estado_pago: estadoPago ?? c.estado_pago ?? 'Pendiente',
+            }
+          : c
+      )
+    );
+    logActivity('Edición', 'Compras', `Fecha de vencimiento de Compra #${compraId} actualizada a ${fechaVencimiento}`);
+  };
+
   const resetAllDataToDefaults = async () => {
     localStorage.clear();
     setEmpresa(initialEmpresa);
@@ -1695,6 +1832,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         downloadGoogleSheetsExcel,
         showGoogleSheetsModal,
         setShowGoogleSheetsModal,
+
+        // Connection Validation & Linking
+        isSheetsValidated,
+        validatedSheetsId,
+        sheetsValidationData,
+        isValidatingSheets,
+        validateSheetsConnection,
+        resetSheetsValidation,
+        getTableDataByName,
 
         empresa,
         updateEmpresa,
@@ -1759,6 +1905,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         requestFcmPermission,
         showFcmModal,
         setShowFcmModal,
+        // Citas con Clientes & Calendario Interactivo
+        citas,
+        addCita,
+        updateCita,
+        deleteCita,
+        updateCompraDueDate,
+
         activeComprobanteVenta,
         setActiveComprobanteVenta,
         resetAllDataToDefaults,

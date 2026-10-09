@@ -46,6 +46,7 @@ import {
   Table,
   ChevronDown,
   Settings2,
+  HardDrive,
 } from 'lucide-react';
 
 export type TableCategory =
@@ -104,6 +105,7 @@ export const DatabaseView: React.FC = () => {
     activityLogs,
     notificaciones,
     currentMoneda,
+    setActiveTab,
     addCliente,
     googleUser,
     googleAccessToken,
@@ -698,11 +700,29 @@ export const DatabaseView: React.FC = () => {
             )}
 
             <button
+              onClick={() => setActiveTab('sheets_config')}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              title="Abrir panel de configuración para vincular y validar nuevas hojas de cálculo"
+            >
+              <Settings2 className="w-4 h-4" />
+              <span>Vincular / Validar Hoja</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('sheets_config')}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+              title="Respaldos automáticos diarios en Google Drive con Google Apps Script y verificación SHA-256"
+            >
+              <HardDrive className="w-4 h-4 text-indigo-200" />
+              <span>Respaldos en Drive</span>
+            </button>
+
+            <button
               onClick={() => setShowGoogleSheetsModal(true)}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              <span>Gestor y Pestañas</span>
+              <span>Gestor Rápido</span>
             </button>
           </div>
         </div>

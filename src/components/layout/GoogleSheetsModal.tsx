@@ -18,6 +18,7 @@ import {
   Lock,
   LogOut,
   Info,
+  HardDrive,
 } from 'lucide-react';
 import { GoogleSignInButton } from '../common/GoogleSignInButton';
 import { ConfirmDestructiveModal } from '../common/ConfirmDestructiveModal';
@@ -32,6 +33,9 @@ export const GoogleSheetsModal: React.FC = () => {
   const {
     showGoogleSheetsModal,
     setShowGoogleSheetsModal,
+    setActiveTab: setGlobalTab,
+    isSheetsValidated,
+    validateSheetsConnection,
     googleUser,
     googleAccessToken,
     googleSheetsId,
@@ -254,6 +258,32 @@ export const GoogleSheetsModal: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGoogleSheetsModal(false);
+                  setGlobalTab('sheets_config');
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                title="Abrir el panel completo de vinculación y validación de hojas de cálculo"
+              >
+                <Database className="w-3.5 h-3.5" />
+                <span>Panel Completo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGoogleSheetsModal(false);
+                  setGlobalTab('sheets_config');
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                title="Respaldos automáticos diarios en Google Drive con Google Apps Script y verificación SHA-256"
+              >
+                <HardDrive className="w-3.5 h-3.5" />
+                <span>Respaldos en Drive</span>
+              </button>
+
               <a
                 href={getSpreadsheetUrl(googleSheetsId)}
                 target="_blank"
@@ -517,8 +547,30 @@ export const GoogleSheetsModal: React.FC = () => {
                   </div>
                 )}
 
+                {/* Connection Validation Guard Banner */}
+                {!isSheetsValidated && (
+                  <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs mb-1">
+                    <div className="flex items-center gap-2.5 text-amber-900 dark:text-amber-200">
+                      <Lock className="w-5 h-5 text-amber-600 shrink-0" />
+                      <div>
+                        <strong className="block">Sincronización Bloqueada</strong>
+                        <span>
+                          Debes validar la conexión con la hoja de cálculo antes de permitir la sincronización de las 21 tablas.
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('conexion')}
+                      className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold shrink-0 cursor-pointer shadow-xs transition-colors"
+                    >
+                      Ir a Validar Conexión
+                    </button>
+                  </div>
+                )}
+
                 {/* 3 Main Synchronization Options */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${!isSheetsValidated ? 'opacity-50 pointer-events-none' : ''}`}>
                   {/* Option 1: Bidireccional */}
                   <div className="p-5 bg-white dark:bg-slate-850 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between hover:border-emerald-500/50 transition-all">
                     <div className="space-y-3">

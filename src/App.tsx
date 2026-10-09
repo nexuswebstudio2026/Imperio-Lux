@@ -28,6 +28,7 @@ import {
   ActivityLogView,
 } from './components/configuracion/ConfigViews';
 import { DatabaseView } from './components/database/DatabaseView';
+import { GoogleSheetsConfigPanel } from './components/sheets/GoogleSheetsConfigPanel';
 
 const MainContent: React.FC = () => {
   const { activeTab } = useApp();
@@ -73,6 +74,8 @@ const MainContent: React.FC = () => {
         return <ActivityLogView />;
       case 'database':
         return <DatabaseView />;
+      case 'sheets_config':
+        return <GoogleSheetsConfigPanel />;
       default:
         return <DashboardView />;
     }

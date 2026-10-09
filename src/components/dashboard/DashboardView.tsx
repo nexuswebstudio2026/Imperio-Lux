@@ -37,6 +37,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { Venta } from '../../types';
+import { InteractiveCalendar } from './InteractiveCalendar';
 
 interface WeeklySalesChartProps {
   ventas: Venta[];
@@ -870,6 +871,11 @@ export const DashboardView: React.FC = () => {
 
         {/* Chart 2: Gráfico Recharts de Ventas Diarias durante la última semana */}
         <WeeklySalesChart ventas={ventas} simboloMoneda={currentMoneda.simbolo} />
+      </div>
+
+      {/* Calendario Interactivo de Vencimientos de Facturas y Citas con Clientes */}
+      <div className="mb-6">
+        <InteractiveCalendar />
       </div>
 
       {/* Recent Sales Table */}

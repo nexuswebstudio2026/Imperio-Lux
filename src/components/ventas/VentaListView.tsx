@@ -13,13 +13,17 @@ import {
   Filter,
   CheckCircle,
   XCircle,
+  FileDown,
 } from 'lucide-react';
+import { exportVentasListPdf, exportVentaComprobantePdf } from '../../lib/pdfExport';
 
 export const VentaListView: React.FC = () => {
   const {
     ventas,
     clientes,
     users,
+    empresa,
+    comprobantes,
     currentMoneda,
     setActiveTab,
     setActiveComprobanteVenta,
@@ -46,6 +50,31 @@ export const VentaListView: React.FC = () => {
     .filter((v) => v.estado === 'Completada')
     .reduce((sum, v) => sum + v.total, 0);
 
+  const handleExportListPdf = () => {
+    exportVentasListPdf({
+      ventas: filteredVentas,
+      clientes,
+      currentMoneda,
+      empresa,
+      filterEstado,
+      search,
+    });
+  };
+
+  const handleExportVentaPdf = (v: Venta) => {
+    const client = clientes.find((c) => c.id === v.cliente_id);
+    const comp = comprobantes.find((c) => c.id === v.comprobante_id);
+    const vend = users.find((u) => u.id === v.user_id);
+    exportVentaComprobantePdf({
+      venta: v,
+      cliente: client,
+      comprobante: comp,
+      vendedor: vend,
+      empresa,
+      currentMoneda,
+    });
+  };
+
   const confirmAnular = () => {
     if (anularModalVenta) {
       anularVenta(anularModalVenta.id);
@@ -59,13 +88,24 @@ export const VentaListView: React.FC = () => {
         title="Historial de Ventas"
         items={[{ label: 'Ventas', tab: 'ventas' }, { label: 'Ver Ventas' }]}
         actions={
-          <button
-            onClick={() => setActiveTab('ventas_create')}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-sm transition-colors cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Realizar Nueva Venta</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              id="btn-export-ventas-pdf"
+              onClick={handleExportListPdf}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+              title="Exportar listado actual de ventas a documento PDF con jsPDF"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              <span>Exportar a PDF</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('ventas_create')}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-xs font-semibold shadow-sm transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Realizar Nueva Venta</span>
+            </button>
+          </div>
         }
       />
 
@@ -198,10 +238,19 @@ export const VentaListView: React.FC = () => {
                           <button
                             onClick={() => setActiveComprobanteVenta(venta)}
                             className="px-2 py-1 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                            title="Ver e Imprimir Comprobante"
+                            title="Ver Comprobante Ticket"
                           >
                             <Receipt className="w-3 h-3" />
-                            <span>Comprobante</span>
+                            <span>Ver</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleExportVentaPdf(venta)}
+                            className="px-2 py-1 bg-red-50 text-red-600 hover:bg-red-100 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                            title="Descargar Comprobante Oficial en PDF (jsPDF)"
+                          >
+                            <FileDown className="w-3 h-3" />
+                            <span>PDF</span>
                           </button>
 
                           {!isAnulada && (

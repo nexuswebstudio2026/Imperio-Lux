@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { Printer, X, Download, CheckCircle2 } from 'lucide-react';
+import { Printer, X, Download, CheckCircle2, FileDown } from 'lucide-react';
+import { exportVentaComprobantePdf } from '../../lib/pdfExport';
 
 export const ComprobanteModal: React.FC = () => {
   const {
@@ -24,6 +25,17 @@ export const ComprobanteModal: React.FC = () => {
     window.print();
   };
 
+  const handleDownloadPdf = () => {
+    exportVentaComprobantePdf({
+      venta,
+      cliente,
+      comprobante,
+      vendedor,
+      empresa,
+      currentMoneda,
+    });
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
       <div className="bg-white rounded-lg shadow-2xl border border-slate-300 max-w-md w-full overflow-hidden my-auto">
@@ -36,6 +48,15 @@ export const ComprobanteModal: React.FC = () => {
             </span>
           </div>
           <div className="flex items-center gap-1.5">
+            <button
+              id="btn-download-pdf-ticket"
+              onClick={handleDownloadPdf}
+              className="flex items-center gap-1 px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white rounded text-xs font-semibold cursor-pointer transition-colors shadow-xs"
+              title="Descargar comprobante oficial en PDF (jsPDF)"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              <span>Descargar PDF</span>
+            </button>
             <button
               id="btn-print-ticket"
               onClick={handlePrint}
@@ -192,13 +213,21 @@ export const ComprobanteModal: React.FC = () => {
         <div className="bg-slate-50 px-4 py-2.5 border-t border-slate-200 flex justify-end gap-2 print:hidden">
           <button
             onClick={() => setActiveComprobanteVenta(null)}
-            className="px-4 py-1.5 text-xs text-slate-600 hover:bg-slate-200 rounded font-semibold transition-colors cursor-pointer"
+            className="px-3.5 py-1.5 text-xs text-slate-600 hover:bg-slate-200 rounded font-semibold transition-colors cursor-pointer"
           >
             Cerrar
           </button>
           <button
+            id="btn-footer-download-pdf"
+            onClick={handleDownloadPdf}
+            className="px-3.5 py-1.5 text-xs bg-red-600 hover:bg-red-700 text-white rounded font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <FileDown className="w-3.5 h-3.5" />
+            <span>Descargar PDF</span>
+          </button>
+          <button
             onClick={handlePrint}
-            className="px-4 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
+            className="px-3.5 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded font-bold shadow-sm transition-colors cursor-pointer flex items-center gap-1.5"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Imprimir Ticket</span>

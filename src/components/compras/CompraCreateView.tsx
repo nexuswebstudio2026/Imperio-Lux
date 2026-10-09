@@ -10,7 +10,9 @@ import {
   CheckCircle2,
   RotateCcw,
   Building,
+  FileDown,
 } from 'lucide-react';
+import { exportCompraComprobantePdf } from '../../lib/pdfExport';
 
 export const CompraCreateView: React.FC = () => {
   const {
@@ -137,6 +139,35 @@ export const CompraCreateView: React.FC = () => {
 
     showToast('Compra registrada e inventario actualizado correctamente', 'success');
     setActiveTab('compras');
+  };
+
+  const handleGeneratePdfOrder = () => {
+    if (items.length === 0) {
+      showToast('Agregue al menos un artículo para generar la orden en PDF', 'error');
+      return;
+    }
+    const prov = proveedores.find((p) => p.id === Number(proveedorId));
+    const comp = comprobantes.find((cp) => cp.id === Number(comprobanteId));
+    exportCompraComprobantePdf({
+      compra: {
+        id: Date.now(),
+        numero_comprobante: numeroComprobante,
+        comprobante_id: Number(comprobanteId),
+        proveedor_id: Number(proveedorId),
+        user_id: 1,
+        fecha_hora: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        subtotal,
+        impuesto: igv,
+        total,
+        estado: 'Completada',
+        items,
+      },
+      proveedor: prov,
+      comprobante: comp,
+      empresa,
+      currentMoneda,
+    });
+    showToast('Orden de compra en PDF generada exitosamente', 'success');
   };
 
   return (
@@ -389,13 +420,28 @@ export const CompraCreateView: React.FC = () => {
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-3 pt-2">
+            <div className="flex flex-wrap items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => setItems([])}
                 className="px-4 py-2 text-xs border border-slate-300 rounded font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 Limpiar Lista
+              </button>
+              <button
+                type="button"
+                id="btn-generate-order-pdf"
+                onClick={handleGeneratePdfOrder}
+                disabled={items.length === 0}
+                className={`px-4 py-2 rounded text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                  items.length > 0
+                    ? 'border-red-600 bg-red-50 text-red-700 hover:bg-red-100'
+                    : 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                }`}
+                title="Descargar orden de compra / cotización en formato PDF con jsPDF"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                <span>Exportar Orden a PDF</span>
               </button>
               <button
                 type="submit"
