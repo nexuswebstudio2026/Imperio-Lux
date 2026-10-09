@@ -28,7 +28,7 @@ type BackupConfig = {
 const defaultBackupConfig: BackupConfig = {
   enabled: false,
   folderId: '',
-  spreadsheetId: process.env.GOOGLE_SHEETS_ID || '',
+  spreadsheetId: process.env.GOOGLE_SHEETS_ID || '1CzufAtWYpkx5dYWjPiqdltMyiuIWeR7G4zTKy3_uxcg',
   hour: 2,
   minute: 0,
   timezone: 'America/Bogota',
@@ -204,6 +204,10 @@ if (process.env.NODE_ENV !== 'production') {
 
 const server = createServer(app);
 await loadBackupConfig();
-setInterval(() => { void checkScheduledBackup(); }, 30_000);
-void checkScheduledBackup();
-server.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => console.log(`Imperio Lux disponible en puerto ${process.env.PORT || 3000}`));
+if (process.env.VERCEL !== '1') {
+  setInterval(() => { void checkScheduledBackup(); }, 30_000);
+  void checkScheduledBackup();
+  server.listen(Number(process.env.PORT || 3000), '0.0.0.0', () => console.log(`Imperio Lux disponible en puerto ${process.env.PORT || 3000}`));
+}
+
+export default app;

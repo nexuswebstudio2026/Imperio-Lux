@@ -3,15 +3,16 @@
  * Manages Google Sheets as the cloud database engine using Google Sheets API v4.
  */
 
-export const DEFAULT_SPREADSHEET_ID = '12hdlu9ph-YSU9IfwXh44cqJVHjaNxQD3MP3CXyrfwwk';
+export const DEFAULT_SPREADSHEET_ID = '1CzufAtWYpkx5dYWjPiqdltMyiuIWeR7G4zTKy3_uxcg';
+const PREVIOUS_DEFAULT_SPREADSHEET_ID = '12hdlu9ph-YSU9IfwXh44cqJVHjaNxQD3MP3CXyrfwwk';
 const SPREADSHEET_ID_STORAGE_KEY = 'pv_sheets_spreadsheet_id';
 const SPREADSHEETS_HISTORY_STORAGE_KEY = 'pv_sheets_history_list';
 
 /**
  * Cleanly extracts a Google Spreadsheet ID from either a raw ID or full Google Sheets URL.
  * Handles forms like:
- * - 12hdlu9ph-YSU9IfwXh44cqJVHjaNxQD3MP3CXyrfwwk
- * - https://docs.google.com/spreadsheets/d/12hdlu9ph-YSU9IfwXh44cqJVHjaNxQD3MP3CXyrfwwk/edit#gid=0
+ * - 1CzufAtWYpkx5dYWjPiqdltMyiuIWeR7G4zTKy3_uxcg
+ * - https://docs.google.com/spreadsheets/d/1CzufAtWYpkx5dYWjPiqdltMyiuIWeR7G4zTKy3_uxcg/edit#gid=0
  * - https://docs.google.com/spreadsheets/d/e/2PACX-.../pubhtml
  */
 export function extractSpreadsheetId(input: string): string {
@@ -88,7 +89,14 @@ export function getStoredSpreadsheetId(): string {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       const stored = localStorage.getItem(SPREADSHEET_ID_STORAGE_KEY);
-      if (stored && stored.trim()) return extractSpreadsheetId(stored.trim());
+      if (stored && stored.trim()) {
+        const cleanId = extractSpreadsheetId(stored.trim());
+        if (cleanId === PREVIOUS_DEFAULT_SPREADSHEET_ID) {
+          localStorage.setItem(SPREADSHEET_ID_STORAGE_KEY, DEFAULT_SPREADSHEET_ID);
+          return DEFAULT_SPREADSHEET_ID;
+        }
+        return cleanId;
+      }
     }
   } catch (e) {
     // ignore

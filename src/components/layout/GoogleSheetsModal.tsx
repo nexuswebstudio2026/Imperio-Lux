@@ -433,7 +433,7 @@ export const GoogleSheetsModal: React.FC = () => {
                       value={spreadsheetIdInput}
                       onChange={(e) => setSpreadsheetIdInput(e.target.value)}
                       className="flex-1 px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-emerald-500"
-                      placeholder="ID del Spreadsheet (ej. 12hdlu9ph-YSU9IfwXh44cqJVHjaNxQD3MP3CXyrfwwk)"
+                      placeholder="ID del Spreadsheet (ej. 1CzufAtWYpkx5dYWjPiqdltMyiuIWeR7G4zTKy3_uxcg)"
                     />
                     <button
                       type="button"

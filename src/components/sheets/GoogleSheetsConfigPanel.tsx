@@ -608,7 +608,7 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
                 <div className="p-2 bg-slate-900 text-slate-200 rounded font-mono text-[11px] overflow-x-auto select-all">
                   https://docs.google.com/spreadsheets/d/
                   <span className="text-amber-400 font-bold bg-amber-950/80 px-1 rounded">
-                    12hdlu9ph-YSU9IfwXh44cqJVHjaNxQD3MP3CXyrfwwk
+                    1CzufAtWYpkx5dYWjPiqdltMyiuIWeR7G4zTKy3_uxcg
                   </span>
                   /edit#gid=0
                 </div>
