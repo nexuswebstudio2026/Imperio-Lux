@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Empresa,
   Moneda,
@@ -69,6 +69,14 @@ import {
   exportSingleTableToExcel,
   downloadGoogleSheetsLiveExcel,
 } from '../lib/excelExport';
+import {
+  initializeFCM,
+  requestPushPermission,
+  dispatchPushAlert,
+  getPushPreferences,
+  savePushPreferences,
+  type PushPreferences,
+} from '../lib/fcmService';
 
 export type AppTab =
   | 'panel'
@@ -132,6 +140,8 @@ interface AppContextType {
   updateEmpresa: (empresa: Partial<Empresa>) => void;
   monedas: Moneda[];
   currentMoneda: Moneda;
+  setMonedaPrincipal: (monedaId: number) => void;
+  formatCurrency: (amount: number, showSymbol?: boolean) => string;
   documentos: DocumentoTipo[];
   comprobantes: ComprobanteTipo[];
 
@@ -196,6 +206,22 @@ interface AppContextType {
   activityLogs: ActivityLog[];
   notificaciones: Notificacion[];
   markNotificationsAsRead: () => void;
+  addNotificacion: (notif: Omit<Notificacion, 'id' | 'fecha' | 'leida'>) => void;
+
+  // Firebase Cloud Messaging (FCM) Push Notifications
+  fcmStatus: { isSupported: boolean; token: string | null; permission: NotificationPermission };
+  fcmPreferences: PushPreferences;
+  updateFcmPreferences: (prefs: Partial<PushPreferences>) => void;
+  requestFcmPermission: () => Promise<{ granted: boolean; token: string | null; error?: string }>;
+  showFcmModal: boolean;
+  setShowFcmModal: (show: boolean) => void;
+  sendPushAlert: (params: {
+    title: string;
+    body: string;
+    tipo: 'warning' | 'info' | 'success';
+    categoria: 'venta' | 'inventario_critico' | 'ajuste' | 'sistema';
+    data?: Record<string, any>;
+  }) => void;
 
   activeComprobanteVenta: Venta | null;
   setActiveComprobanteVenta: (v: Venta | null) => void;
@@ -333,13 +359,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [theme]);
 
-  const [empresa, setEmpresa] = useState<Empresa>(() =>
-    loadStorage<Empresa>('empresa', initialEmpresa)
+  const [empresa, setEmpresa] = useState<Empresa>(() => {
+    const loaded = loadStorage<Empresa>('empresa', initialEmpresa);
+    // Ensure default currency is Peso colombiano (moneda_id: 1) and Colombia location
+    if (
+      !loaded.moneda_id ||
+      loaded.moneda_id !== 1 ||
+      (loaded.ubicacion && (loaded.ubicacion.includes('Perú') || loaded.ubicacion.includes('Lima')))
+    ) {
+      const updated: Empresa = {
+        ...loaded,
+        moneda_id: 1,
+        ubicacion: loaded.ubicacion && (loaded.ubicacion.includes('Perú') || loaded.ubicacion.includes('Lima')) ? initialEmpresa.ubicacion : (loaded.ubicacion || initialEmpresa.ubicacion),
+        abreviatura_impuesto: loaded.abreviatura_impuesto === 'IGV' ? 'IVA' : (loaded.abreviatura_impuesto || 'IVA'),
+        porcentaje_impuesto: loaded.porcentaje_impuesto === 18 ? 19 : (loaded.porcentaje_impuesto || 19),
+        ruc: loaded.ruc === '20601234567' ? initialEmpresa.ruc : (loaded.ruc || initialEmpresa.ruc),
+        propietario: loaded.propietario?.includes('S.A.C.') ? initialEmpresa.propietario : (loaded.propietario || initialEmpresa.propietario),
+      };
+      saveStorage('empresa', updated);
+      return updated;
+    }
+    return loaded;
+  });
+
+  const [monedas, setMonedas] = useState<Moneda[]>(() => {
+    const loaded = loadStorage<Moneda[]>('monedas', initialMonedas);
+    // Ensure COP (Peso colombiano) is present, is ID 1, and is first in list
+    const copItem = loaded.find((m) => m.estandar_iso === 'COP');
+    if (!copItem || loaded[0]?.estandar_iso !== 'COP' || copItem.id !== 1) {
+      saveStorage('monedas', initialMonedas);
+      return initialMonedas;
+    }
+    return loaded;
+  });
+
+  const currentMoneda = useMemo(() => {
+    return (
+      monedas.find((m) => m.id === empresa.moneda_id) ||
+      monedas.find((m) => m.estandar_iso === 'COP') ||
+      monedas[0]
+    );
+  }, [monedas, empresa.moneda_id]);
+
+  const formatCurrency = useCallback(
+    (amount: number, showSymbol = true) => {
+      const num = Number(amount) || 0;
+      const formatted = num.toLocaleString('es-CO', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      });
+      return showSymbol ? `${currentMoneda.simbolo} ${formatted}` : formatted;
+    },
+    [currentMoneda.simbolo]
   );
-  const [monedas, setMonedas] = useState<Moneda[]>(() =>
-    loadStorage<Moneda[]>('monedas', initialMonedas)
-  );
-  const currentMoneda = monedas.find((m) => m.id === empresa.moneda_id) || monedas[0];
   const [documentos, setDocumentos] = useState<DocumentoTipo[]>(() =>
     loadStorage<DocumentoTipo[]>('documentos', initialDocumentos)
   );
@@ -356,9 +428,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [marcas, setMarcas] = useState<Marca[]>(() =>
     loadStorage<Marca[]>('marcas', initialMarcas)
   );
-  const [productos, setProductos] = useState<Producto[]>(() =>
-    loadStorage<Producto[]>('productos', initialProductos)
-  );
+  const [productos, setProductos] = useState<Producto[]>(() => {
+    const loaded = loadStorage<Producto[]>('productos', initialProductos);
+    const needsMigration = loaded.some((p) => p.stock_minimo === undefined);
+    if (needsMigration) {
+      const updated = loaded.map((p) => {
+        const init = initialProductos.find((ip) => ip.id === p.id);
+        return {
+          ...p,
+          stock_minimo: p.stock_minimo ?? init?.stock_minimo ?? 5,
+        };
+      });
+      saveStorage('productos', updated);
+      return updated;
+    }
+    return loaded;
+  });
   const [clientes, setClientes] = useState<Cliente[]>(() =>
     loadStorage<Cliente[]>('clientes', initialClientes)
   );
@@ -425,6 +510,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => saveStorage('comprobantes', comprobantes), [comprobantes]);
   useEffect(() => saveStorage('activityLogs', activityLogs), [activityLogs]);
   useEffect(() => saveStorage('notificaciones', notificaciones), [notificaciones]);
+
+  // --- FIREBASE CLOUD MESSAGING (FCM) & PUSH NOTIFICATIONS ---
+  const [fcmStatus, setFcmStatus] = useState<{
+    isSupported: boolean;
+    token: string | null;
+    permission: NotificationPermission;
+  }>({
+    isSupported: false,
+    token: null,
+    permission: typeof Notification !== 'undefined' ? Notification.permission : 'denied',
+  });
+  const [fcmPreferences, setFcmPreferences] = useState<PushPreferences>(getPushPreferences);
+  const [showFcmModal, setShowFcmModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    initializeFCM().then((status) => {
+      setFcmStatus(status);
+    });
+  }, []);
+
+  const updateFcmPreferences = (prefs: Partial<PushPreferences>) => {
+    const updated = savePushPreferences(prefs);
+    setFcmPreferences(updated);
+  };
+
+  const requestFcmPermission = async () => {
+    const res = await requestPushPermission();
+    setFcmStatus({
+      isSupported: true,
+      token: res.token,
+      permission: typeof Notification !== 'undefined' ? Notification.permission : 'denied',
+    });
+    return res;
+  };
+
+  const addNotificacion = (notif: Omit<Notificacion, 'id' | 'fecha' | 'leida'>) => {
+    const newId = notificaciones.length > 0 ? Math.max(...notificaciones.map((n) => n.id)) + 1 : 1;
+    const nowStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const newN: Notificacion = {
+      ...notif,
+      id: newId,
+      fecha: nowStr,
+      leida: false,
+    };
+    setNotificaciones((prev) => [newN, ...prev]);
+  };
+
+  const sendPushAlert = (params: {
+    title: string;
+    body: string;
+    tipo: 'warning' | 'info' | 'success';
+    categoria: 'venta' | 'inventario_critico' | 'ajuste' | 'sistema';
+    data?: Record<string, any>;
+  }) => {
+    // 1. Registrar en el listado de notificaciones del sistema
+    addNotificacion({
+      titulo: params.title,
+      mensaje: params.body,
+      tipo: params.tipo,
+      categoria: params.categoria,
+      data: params.data,
+    });
+
+    // 2. Disparar FCM Push & Web Notification & Sonido sintetizado
+    dispatchPushAlert(params);
+  };
 
   // --- GOOGLE SHEETS SYNCHRONIZATION METHODS ---
   const uploadAllToGoogleSheets = useCallback(
@@ -864,7 +1015,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateEmpresa = (partial: Partial<Empresa>) => {
     const updated = { ...empresa, ...partial };
     setEmpresa(updated);
+    saveStorage('empresa', updated);
     logActivity('Actualización', 'Empresa', 'Datos generales de Imperio Lux actualizados');
+  };
+
+  const setMonedaPrincipal = (monedaId: number) => {
+    const selected = monedas.find((m) => m.id === monedaId);
+    if (!selected) return;
+    const updated = { ...empresa, moneda_id: monedaId };
+    setEmpresa(updated);
+    saveStorage('empresa', updated);
+    logActivity('Configuración', 'Monedas', `Moneda principal cambiada a ${selected.nombre_completo} (${selected.simbolo})`);
   };
 
   // Categorías
@@ -1117,6 +1278,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     setVentas((prev) => [newVenta, ...prev]);
+
+    // Push notification y alertas de inventario crítico
+    const totalArticulosVenta = ventaData.items.reduce((acc, it) => acc + it.cantidad, 0);
+    const clienteObj = clientes.find((c) => c.id === ventaData.cliente_id);
+    const clienteNombre = clienteObj?.razon_social || 'Cliente Ocasional';
+    const totalFormatted = `${currentMoneda.simbolo} ${newVenta.total.toLocaleString('es-CO')}`;
+
+    // Disparar Push Notification por Nueva Venta
+    sendPushAlert({
+      title: `🛒 ¡Nueva Venta Registrada! (#${numero_comprobante})`,
+      body: `Venta por ${totalFormatted} emitida para ${clienteNombre} (${totalArticulosVenta} items).`,
+      tipo: 'success',
+      categoria: 'venta',
+      data: { ventaId: newVenta.id, numero_comprobante, total: newVenta.total },
+    });
+
+    // Validar si algún producto vendido quedó en stock crítico o totalmente agotado
+    ventaData.items.forEach((it) => {
+      const prodOriginal = productos.find((p) => p.id === it.producto_id);
+      if (prodOriginal) {
+        const nuevoStock = Math.max(0, prodOriginal.cantidad - it.cantidad);
+        if (nuevoStock === 0) {
+          sendPushAlert({
+            title: `🚨 ¡STOCK AGOTADO! - ${prodOriginal.nombre}`,
+            body: `El producto se ha agotado por completo (0 unidades). Nivel mínimo: ${prodOriginal.stock_minimo}. ¡Requiere reposición urgente!`,
+            tipo: 'warning',
+            categoria: 'inventario_critico',
+            data: { productoId: prodOriginal.id, stock: 0, stock_minimo: prodOriginal.stock_minimo },
+          });
+        } else if (nuevoStock <= prodOriginal.stock_minimo) {
+          sendPushAlert({
+            title: `⚠️ Alerta de Stock Crítico - ${prodOriginal.nombre}`,
+            body: `Quedan solo ${nuevoStock} unidades en existencias (Nivel mínimo definido: ${prodOriginal.stock_minimo}).`,
+            tipo: 'warning',
+            categoria: 'inventario_critico',
+            data: { productoId: prodOriginal.id, stock: nuevoStock, stock_minimo: prodOriginal.stock_minimo },
+          });
+        }
+      }
+    });
 
     logActivity('Venta', 'Ventas', `Comprobante ${numero_comprobante} emitido por ${currentMoneda.simbolo} ${newVenta.total.toFixed(2)}`);
     return newVenta;
@@ -1374,6 +1575,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saldo_total: nuevoStock * costo,
       };
       setKardex((prev) => [kardexEntry, ...prev]);
+
+      // Push notification por ajuste crítico o reposición
+      if (tipo === 'Salida') {
+        if (nuevoStock === 0) {
+          sendPushAlert({
+            title: `🚨 ¡STOCK AGOTADO POR AJUSTE! - ${prod.nombre}`,
+            body: `Ajuste de salida de ${cantidad} unid. (${motivo}). El producto ha quedado con 0 existencias disponibles.`,
+            tipo: 'warning',
+            categoria: 'inventario_critico',
+            data: { productoId: prod.id, stock: 0, stock_minimo: prod.stock_minimo },
+          });
+        } else if (nuevoStock <= prod.stock_minimo) {
+          sendPushAlert({
+            title: `⚠️ Stock Crítico por Ajuste - ${prod.nombre}`,
+            body: `Ajuste de salida de ${cantidad} unid. (${motivo}). Stock resultante en nivel crítico: ${nuevoStock} (Mínimo: ${prod.stock_minimo}).`,
+            tipo: 'warning',
+            categoria: 'inventario_critico',
+            data: { productoId: prod.id, stock: nuevoStock, stock_minimo: prod.stock_minimo },
+          });
+        }
+      } else if (tipo === 'Entrada') {
+        sendPushAlert({
+          title: `📦 Reabastecimiento de Inventario - ${prod.nombre}`,
+          body: `Ingreso de +${cantidad} unidades registrado (${motivo}). Stock total ahora: ${nuevoStock}.`,
+          tipo: 'info',
+          categoria: 'ajuste',
+          data: { productoId: prod.id, stock: nuevoStock },
+        });
+      }
     }
 
     logActivity('Ajuste', 'Inventario', `Ajuste ${tipo} de ${cantidad} unid. (${motivo})`);
@@ -1470,6 +1700,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateEmpresa,
         monedas,
         currentMoneda,
+        setMonedaPrincipal,
+        formatCurrency,
         documentos,
         comprobantes,
         categorias,
@@ -1519,6 +1751,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activityLogs,
         notificaciones,
         markNotificationsAsRead,
+        addNotificacion,
+        sendPushAlert,
+        fcmStatus,
+        fcmPreferences,
+        updateFcmPreferences,
+        requestFcmPermission,
+        showFcmModal,
+        setShowFcmModal,
         activeComprobanteVenta,
         setActiveComprobanteVenta,
         resetAllDataToDefaults,

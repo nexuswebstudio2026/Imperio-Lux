@@ -17,6 +17,8 @@ import {
   Moon,
   FileSpreadsheet,
   ExternalLink,
+  Radio,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -36,6 +38,9 @@ export const Navbar: React.FC = () => {
     googleSheetsId,
     googleSheetsStatus,
     setShowGoogleSheetsModal,
+    currentMoneda,
+    fcmStatus,
+    setShowFcmModal,
   } = useApp();
 
   const [showNotifications, setShowNotifications] = useState(false);
@@ -171,6 +176,34 @@ export const Navbar: React.FC = () => {
           )}
         </button>
 
+        {/* Moneda Activa */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('empresa')}
+          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-semibold bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/80 cursor-pointer transition-colors shadow-xs"
+          title={`Moneda del Sistema: ${currentMoneda.nombre_completo} (${currentMoneda.simbolo}). Clic para configurar empresa.`}
+        >
+          <span className="font-mono text-emerald-400 font-bold">{currentMoneda.simbolo}</span>
+          <span className="text-[11px] font-bold tracking-wider">{currentMoneda.estandar_iso}</span>
+        </button>
+
+        {/* FCM Push Notification Service Button */}
+        <button
+          id="btn-fcm-push"
+          type="button"
+          onClick={() => setShowFcmModal(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold bg-blue-950/80 hover:bg-blue-900 text-blue-300 border border-blue-800/80 cursor-pointer transition-all shadow-xs"
+          title="Firebase Cloud Messaging (FCM): Alertas push de ventas y stock crítico"
+        >
+          <Radio className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+          <span className="hidden md:inline font-mono text-[11px]">Push FCM</span>
+          <span
+            className={`w-2 h-2 rounded-full ${
+              fcmStatus.permission === 'granted' ? 'bg-emerald-400' : 'bg-amber-400'
+            }`}
+          />
+        </button>
+
         {/* Notifications Dropdown */}
         <div className="relative" ref={notifRef}>
           <button
@@ -188,18 +221,23 @@ export const Navbar: React.FC = () => {
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 mt-2 w-80 bg-white text-slate-800 rounded-lg shadow-xl border border-slate-200 py-2 z-50 text-xs">
+            <div className="absolute right-0 mt-2 w-84 bg-white text-slate-800 rounded-lg shadow-xl border border-slate-200 py-2 z-50 text-xs">
               <div className="px-3 py-1.5 border-b border-slate-100 flex items-center justify-between">
-                <span className="font-semibold text-slate-900">Notificaciones</span>
-                {unreadCount > 0 && (
-                  <button
-                    onClick={markNotificationsAsRead}
-                    className="text-[11px] text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
-                  >
-                    <Check className="w-3 h-3" />
-                    Marcar leídas
-                  </button>
-                )}
+                <span className="font-semibold text-slate-900 flex items-center gap-1.5">
+                  <Bell className="w-3.5 h-3.5 text-blue-600" />
+                  <span>Notificaciones del Sistema</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={markNotificationsAsRead}
+                      className="text-[11px] text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer font-semibold"
+                    >
+                      <Check className="w-3 h-3" />
+                      Marcar leídas
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="max-h-64 overflow-y-auto divide-y divide-slate-100">
                 {notificaciones.length === 0 ? (
@@ -214,22 +252,41 @@ export const Navbar: React.FC = () => {
                     >
                       <div className="flex items-center justify-between mb-0.5">
                         <span
-                          className={`font-semibold ${
+                          className={`font-semibold flex items-center gap-1 ${
                             n.tipo === 'warning'
-                              ? 'text-amber-700'
+                              ? 'text-red-700'
                               : n.tipo === 'info'
                               ? 'text-blue-700'
                               : 'text-emerald-700'
                           }`}
                         >
-                          {n.titulo}
+                          {n.categoria === 'venta' && <ShoppingCart className="w-3 h-3 inline text-emerald-600" />}
+                          {n.categoria === 'inventario_critico' && <AlertTriangle className="w-3 h-3 inline text-red-600" />}
+                          <span>{n.titulo}</span>
                         </span>
-                        <span className="text-[10px] text-slate-400">{n.fecha}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">{n.fecha.substring(11, 16) || n.fecha}</span>
                       </div>
                       <p className="text-slate-600 text-[11px] leading-snug">{n.mensaje}</p>
                     </div>
                   ))
                 )}
+              </div>
+              {/* Dropdown Footer: FCM push config link */}
+              <div className="p-2 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                <span className="text-[10px] text-slate-500 flex items-center gap-1">
+                  <Radio className="w-3 h-3 text-blue-600" />
+                  <span>FCM Push: {fcmStatus.permission === 'granted' ? 'Activo' : 'Pendiente'}</span>
+                </span>
+                <button
+                  onClick={() => {
+                    setShowNotifications(false);
+                    setShowFcmModal(true);
+                  }}
+                  className="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                >
+                  <span>Configurar Push</span>
+                  <ExternalLink className="w-3 h-3" />
+                </button>
               </div>
             </div>
           )}

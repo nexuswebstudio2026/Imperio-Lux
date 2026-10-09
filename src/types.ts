@@ -52,6 +52,7 @@ export interface Producto {
   presentacione_id: number;
   categoria_ids: number[];
   cantidad: number; // Stock actual
+  stock_minimo?: number; // Nivel mínimo de stock definido
   precio_compra: number;
   precio_venta: number;
   estado: boolean;
@@ -239,4 +240,6 @@ export interface Notificacion {
   fecha: string;
   leida: boolean;
   tipo: 'warning' | 'info' | 'success';
+  categoria?: 'venta' | 'inventario_critico' | 'ajuste' | 'sistema';
+  data?: Record<string, any>;
 }

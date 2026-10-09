@@ -3,6 +3,8 @@ import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
 import { GoogleSheetsModal } from './components/layout/GoogleSheetsModal';
+import { PushNotificationToast } from './components/notifications/PushNotificationToast';
+import { FcmConfigModal } from './components/notifications/FcmConfigModal';
 
 // Views
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -80,6 +82,8 @@ const MainContent: React.FC = () => {
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col font-sans text-slate-800 dark:text-slate-100 transition-colors duration-200">
       <Navbar />
       <GoogleSheetsModal />
+      <FcmConfigModal />
+      <PushNotificationToast />
       <div className="flex-1 flex overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-200">

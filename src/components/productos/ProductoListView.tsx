@@ -43,6 +43,7 @@ export const ProductoListView: React.FC = () => {
   const [presentacionId, setPresentacionId] = useState<number>(presentaciones[0]?.id || 1);
   const [selectedCats, setSelectedCats] = useState<number[]>([categorias[0]?.id || 1]);
   const [cantidad, setCantidad] = useState<number>(0);
+  const [stockMinimo, setStockMinimo] = useState<number>(5);
   const [precioCompra, setPrecioCompra] = useState<number>(0);
   const [precioVenta, setPrecioVenta] = useState<number>(0);
 
@@ -56,6 +57,7 @@ export const ProductoListView: React.FC = () => {
     setPresentacionId(presentaciones[0]?.id || 1);
     setSelectedCats([categorias[0]?.id || 1]);
     setCantidad(10);
+    setStockMinimo(5);
     setPrecioCompra(2.50);
     setPrecioVenta(4.00);
     setModalOpen(true);
@@ -71,6 +73,7 @@ export const ProductoListView: React.FC = () => {
     setPresentacionId(p.presentacione_id);
     setSelectedCats(p.categoria_ids || []);
     setCantidad(p.cantidad);
+    setStockMinimo(p.stock_minimo ?? 5);
     setPrecioCompra(p.precio_compra);
     setPrecioVenta(p.precio_venta);
     setModalOpen(true);
@@ -90,6 +93,7 @@ export const ProductoListView: React.FC = () => {
         presentacione_id: presentacionId,
         categoria_ids: selectedCats,
         cantidad,
+        stock_minimo: Number(stockMinimo) || 5,
         precio_compra: Number(precioCompra),
         precio_venta: Number(precioVenta),
       });
@@ -103,6 +107,7 @@ export const ProductoListView: React.FC = () => {
         presentacione_id: presentacionId,
         categoria_ids: selectedCats,
         cantidad,
+        stock_minimo: Number(stockMinimo) || 5,
         precio_compra: Number(precioCompra),
         precio_venta: Number(precioVenta),
         estado: true,
@@ -199,7 +204,8 @@ export const ProductoListView: React.FC = () => {
                 filteredProductos.map((prod) => {
                   const marca = marcas.find((m) => m.id === prod.marca_id);
                   const pres = presentaciones.find((pr) => pr.id === prod.presentacione_id);
-                  const isLowStock = prod.cantidad <= 5;
+                  const minNivel = prod.stock_minimo !== undefined ? prod.stock_minimo : 5;
+                  const isLowStock = prod.cantidad < minNivel;
                   return (
                     <tr key={prod.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3 font-mono font-bold text-slate-700 flex items-center gap-1.5">
@@ -220,12 +226,14 @@ export const ProductoListView: React.FC = () => {
                         <span
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold ${
                             isLowStock
-                              ? 'bg-red-100 text-red-700'
+                              ? 'bg-red-100 text-red-700 border border-red-300'
                               : 'bg-emerald-100 text-emerald-800'
                           }`}
+                          title={`Stock actual: ${prod.cantidad} / Mínimo: ${minNivel}`}
                         >
-                          {isLowStock && <AlertTriangle className="w-3 h-3 text-red-600" />}
+                          {isLowStock && <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />}
                           <span>{prod.cantidad}</span>
+                          <span className="text-[9px] font-normal text-slate-500">/ Mín {minNivel}</span>
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-slate-600">
@@ -398,10 +406,10 @@ export const ProductoListView: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 bg-slate-50 p-3 rounded border border-slate-200">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded border border-slate-200">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">
-                    Stock Inicial:
+                    Stock Actual:
                   </label>
                   <input
                     type="number"
@@ -409,6 +417,19 @@ export const ProductoListView: React.FC = () => {
                     value={cantidad}
                     onChange={(e) => setCantidad(Number(e.target.value))}
                     className="w-full border border-slate-300 rounded px-2 py-1.5 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 text-red-600 flex items-center gap-1">
+                    <span>Stock Mínimo:</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={stockMinimo}
+                    onChange={(e) => setStockMinimo(Number(e.target.value))}
+                    className="w-full border border-red-300 bg-red-50/40 rounded px-2 py-1.5 font-bold text-red-700"
+                    title="Nivel de alerta visual cuando el stock sea inferior a este valor"
                   />
                 </div>
                 <div>

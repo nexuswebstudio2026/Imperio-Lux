@@ -1,6 +1,17 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Breadcrumb } from '../layout/Breadcrumb';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+} from 'recharts';
 import {
   Users,
   Store,
@@ -15,7 +26,287 @@ import {
   Package,
   Database,
   FileSpreadsheet,
+  BarChart2,
+  LineChart as LineChartIcon,
+  Calendar,
+  Sparkles,
+  DollarSign,
+  Receipt,
+  Boxes,
+  RefreshCw,
+  CheckCircle2,
 } from 'lucide-react';
+import { Venta } from '../../types';
+
+interface WeeklySalesChartProps {
+  ventas: Venta[];
+  simboloMoneda: string;
+}
+
+const CustomWeeklyTooltip = ({ active, payload, simboloMoneda }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    return (
+      <div className="bg-slate-900/95 backdrop-blur-xs text-white p-3 rounded-lg shadow-xl border border-slate-700/80 text-xs z-50">
+        <p className="font-bold text-slate-200 border-b border-slate-800 pb-1.5 mb-1.5 flex items-center justify-between gap-4">
+          <span>{data.fullDayOfWeek || data.label}</span>
+          <span className="font-mono text-[11px] text-slate-400">{data.dateStr}</span>
+        </p>
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-slate-400">Total vendido:</span>
+            <span className="font-bold text-emerald-400 font-mono text-sm">
+              {simboloMoneda} {data.total.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-4 text-[11px]">
+            <span className="text-slate-400">Transacciones:</span>
+            <span className="font-semibold text-slate-200">
+              {data.transacciones} {data.transacciones === 1 ? 'venta' : 'ventas'}
+            </span>
+          </div>
+          {data.transacciones > 0 && (
+            <div className="flex items-center justify-between gap-4 text-[11px] pt-1 border-t border-slate-800">
+              <span className="text-slate-400">Ticket promedio:</span>
+              <span className="font-medium text-blue-300 font-mono">
+                {simboloMoneda} {(data.total / data.transacciones).toFixed(2)}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
+export const WeeklySalesChart: React.FC<WeeklySalesChartProps> = ({
+  ventas,
+  simboloMoneda,
+}) => {
+  const [chartMode, setChartMode] = useState<'area' | 'bar'>('area');
+
+  const dayNamesShort = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+  const dayNamesFull = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+  const weeklyData = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+      const dayOfWeek = dayNamesShort[d.getDay()];
+      const fullDayOfWeek = dayNamesFull[d.getDay()];
+      const label = `${dayOfWeek} ${day}/${month}`;
+      const shortLabel = `${day}/${month}`;
+
+      const dayVentas = ventas.filter((v) => {
+        if (v.estado !== 'Completada') return false;
+        const vDate = v.fecha_hora ? v.fecha_hora.slice(0, 10) : '';
+        return vDate === dateStr;
+      });
+
+      const total = dayVentas.reduce((sum, v) => sum + (Number(v.total) || 0), 0);
+      const transacciones = dayVentas.length;
+
+      return {
+        dateStr,
+        label,
+        shortLabel,
+        dayOfWeek,
+        fullDayOfWeek,
+        total: Math.round(total * 100) / 100,
+        transacciones,
+      };
+    });
+  }, [ventas]);
+
+  const totalSemana = useMemo(
+    () => weeklyData.reduce((sum, d) => sum + d.total, 0),
+    [weeklyData]
+  );
+
+  const transaccionesSemana = useMemo(
+    () => weeklyData.reduce((sum, d) => sum + d.transacciones, 0),
+    [weeklyData]
+  );
+
+  const promedioDiario = useMemo(
+    () => totalSemana / 7,
+    [totalSemana]
+  );
+
+  const mejorDia = useMemo(() => {
+    return weeklyData.reduce(
+      (best, curr) => (curr.total > best.total ? curr : best),
+      weeklyData[0]
+    );
+  }, [weeklyData]);
+
+  return (
+    <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col justify-between">
+      {/* Card Header */}
+      <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-blue-600" />
+          <span className="font-semibold text-slate-800 text-xs sm:text-sm">
+            Ventas Diarias (Última Semana)
+          </span>
+          <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
+            <Calendar className="w-3 h-3" /> 7 días
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Mode toggle */}
+          <div className="inline-flex rounded-md bg-slate-200/70 p-0.5 border border-slate-200 text-xs">
+            <button
+              type="button"
+              onClick={() => setChartMode('area')}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                chartMode === 'area'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Gráfico de Área"
+            >
+              <LineChartIcon className="w-3 h-3" />
+              <span>Tendencia</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setChartMode('bar')}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                chartMode === 'bar'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Gráfico de Barras"
+            >
+              <BarChart2 className="w-3 h-3" />
+              <span>Barras</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Chart Body */}
+      <div className="p-4 flex-1 flex flex-col justify-between">
+        {/* Top Summary Badges */}
+        <div className="flex items-center justify-between mb-3 text-xs">
+          <div>
+            <span className="text-[11px] text-slate-500 font-medium block">Total de la Semana</span>
+            <span className="text-base sm:text-lg font-bold text-slate-900 font-mono">
+              {simboloMoneda} {totalSemana.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+          <div className="text-right">
+            <span className="text-[11px] text-slate-500 font-medium block">Transacciones</span>
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              <Sparkles className="w-3 h-3 text-emerald-600" />
+              {transaccionesSemana} {transaccionesSemana === 1 ? 'venta' : 'ventas'}
+            </span>
+          </div>
+        </div>
+
+        {/* Recharts Chart Container */}
+        <div className="w-full h-52 min-h-[200px]">
+          <ResponsiveContainer width="100%" height="100%">
+            {chartMode === 'area' ? (
+              <AreaChart
+                data={weeklyData}
+                margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="colorWeeklySales" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  axisLine={{ stroke: '#e2e8f0' }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(val) =>
+                    `${simboloMoneda}${val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val}`
+                  }
+                />
+                <Tooltip content={<CustomWeeklyTooltip simboloMoneda={simboloMoneda} />} />
+                <Area
+                  type="monotone"
+                  dataKey="total"
+                  stroke="#2563eb"
+                  strokeWidth={2.5}
+                  fillOpacity={1}
+                  fill="url(#colorWeeklySales)"
+                  dot={{ r: 3.5, fill: '#2563eb', strokeWidth: 1.5, stroke: '#fff' }}
+                  activeDot={{ r: 5.5, fill: '#1d4ed8', stroke: '#fff', strokeWidth: 2 }}
+                />
+              </AreaChart>
+            ) : (
+              <BarChart
+                data={weeklyData}
+                margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  axisLine={{ stroke: '#e2e8f0' }}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: '#64748b' }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(val) =>
+                    `${simboloMoneda}${val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val}`
+                  }
+                />
+                <Tooltip content={<CustomWeeklyTooltip simboloMoneda={simboloMoneda} />} />
+                <Bar
+                  dataKey="total"
+                  fill="#2563eb"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={40}
+                />
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        </div>
+
+        {/* Footer Metrics */}
+        <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-xs">
+          <div className="bg-slate-50 p-2 rounded border border-slate-100">
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">
+              Promedio Diario
+            </span>
+            <span className="font-bold text-slate-800 font-mono text-xs">
+              {simboloMoneda} {promedioDiario.toFixed(2)}
+            </span>
+          </div>
+          <div className="bg-slate-50 p-2 rounded border border-slate-100 text-right">
+            <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">
+              Día con Mayor Venta
+            </span>
+            <span className="font-bold text-blue-700 font-mono text-xs truncate block" title={`${mejorDia.label} (${simboloMoneda} ${mejorDia.total.toFixed(2)})`}>
+              {mejorDia.total > 0 ? `${mejorDia.dayOfWeek}: ${simboloMoneda} ${mejorDia.total.toFixed(2)}` : 'Sin ventas aún'}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const DashboardView: React.FC = () => {
   const {
@@ -33,6 +324,22 @@ export const DashboardView: React.FC = () => {
     setShowGoogleSheetsModal,
   } = useApp();
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
+
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setTimeout(() => {
+      setIsRefreshing(false);
+      setRefreshNotice(
+        `¡Panel principal e indicadores actualizados! Moneda activa: ${currentMoneda.nombre_completo} (${currentMoneda.simbolo} ${currentMoneda.estandar_iso}).`
+      );
+      setTimeout(() => {
+        setRefreshNotice(null);
+      }, 5000);
+    }, 450);
+  };
+
   // 5 lowest stock products
   const lowestStockProductos = [...productos]
     .sort((a, b) => a.cantidad - b.cantidad)
@@ -40,35 +347,80 @@ export const DashboardView: React.FC = () => {
 
   const maxStock = Math.max(...lowestStockProductos.map((p) => p.cantidad), 10);
 
-  // Group sales for the last 7 days
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const dateStr = `${year}-${month}-${day}`;
-    const displayStr = `${day}/${month}`;
-    return { dateStr, displayStr };
-  });
-
-  const dailySales = last7Days.map((day) => {
-    const totalDay = ventas
-      .filter((v) => v.estado === 'Completada' && v.fecha_hora.startsWith(day.dateStr))
-      .reduce((sum, v) => sum + v.total, 0);
-    return { ...day, total: totalDay };
-  });
-
-  // Calculate highest daily sale for scale
-  const maxDaySale = Math.max(...dailySales.map((d) => d.total), 150);
-
-  // Total sales revenue
-  const totalRevenue = ventas
-    .filter((v) => v.estado === 'Completada')
-    .reduce((sum, v) => sum + v.total, 0);
-
   // Recent 5 sales
   const recentVentas = [...ventas].slice(0, 5);
+
+  // Today's date calculations
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }, []);
+
+  const todayFormatted = useMemo(() => {
+    const now = new Date();
+    return now.toLocaleDateString('es-CO', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+    });
+  }, []);
+
+  // 1. KPI: Daily Revenue (Ingresos Diarios de Hoy)
+  const todayVentas = useMemo(() => {
+    return ventas.filter((v) => {
+      if (v.estado !== 'Completada') return false;
+      const datePart = v.fecha_hora ? v.fecha_hora.slice(0, 10) : '';
+      return datePart === todayStr;
+    });
+  }, [ventas, todayStr]);
+
+  const todayRevenue = useMemo(() => {
+    return todayVentas.reduce((sum, v) => sum + (Number(v.total) || 0), 0);
+  }, [todayVentas]);
+
+  const todaySalesCount = todayVentas.length;
+
+  // 2. KPI: Total Sales Count (Total de Ventas Realizadas)
+  const completedVentas = useMemo(() => {
+    return ventas.filter((v) => v.estado === 'Completada');
+  }, [ventas]);
+
+  const totalSalesCount = completedVentas.length;
+
+  const totalAllTimeRevenue = useMemo(() => {
+    return completedVentas.reduce((sum, v) => sum + (Number(v.total) || 0), 0);
+  }, [completedVentas]);
+
+  const averageTicket = useMemo(() => {
+    return totalSalesCount > 0 ? totalAllTimeRevenue / totalSalesCount : 0;
+  }, [totalAllTimeRevenue, totalSalesCount]);
+
+  // 3. KPI: Current Inventory Value (Valor del Inventario Actual)
+  const inventoryStats = useMemo(() => {
+    let totalValueCost = 0;
+    let totalValueSale = 0;
+    let totalUnits = 0;
+
+    productos.forEach((p) => {
+      const qty = Math.max(0, Number(p.cantidad) || 0);
+      const buyPrice = Number(p.precio_compra) || 0;
+      const sellPrice = Number(p.precio_venta) || 0;
+
+      totalValueCost += qty * buyPrice;
+      totalValueSale += qty * sellPrice;
+      totalUnits += qty;
+    });
+
+    return {
+      totalValueCost: Math.round(totalValueCost * 100) / 100,
+      totalValueSale: Math.round(totalValueSale * 100) / 100,
+      totalUnits,
+      productCount: productos.length,
+    };
+  }, [productos]);
 
   return (
     <div>
@@ -77,6 +429,15 @@ export const DashboardView: React.FC = () => {
         items={[{ label: 'Panel' }]}
         actions={
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-75 text-white rounded text-xs font-semibold shadow-sm transition-all cursor-pointer"
+              title="Actualizar datos del panel, métricas de ventas y sincronización en Peso colombiano (COP)"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span>{isRefreshing ? 'Actualizando...' : 'Actualizar'}</span>
+            </button>
             <button
               onClick={() => setActiveTab('ventas_create')}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-semibold shadow-sm transition-colors cursor-pointer"
@@ -94,6 +455,201 @@ export const DashboardView: React.FC = () => {
           </div>
         }
       />
+
+      {/* Alerta / Notificación de Actualización */}
+      {refreshNotice && (
+        <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3.5 py-2.5 rounded-lg flex items-center justify-between shadow-2xs transition-all animate-fadeIn">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="font-semibold">{refreshNotice}</span>
+          </div>
+          <button
+            onClick={() => setRefreshNotice(null)}
+            className="text-emerald-700 hover:text-emerald-900 text-xs font-bold px-2 py-0.5 rounded cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* KPI Cards Summary Section: Daily Revenue, Total Sales Count, Current Inventory Value */}
+      <div className="mb-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Card 1: Daily Revenue */}
+          <div className="bg-white rounded-xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all p-4.5 flex flex-col justify-between group relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-400" />
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0 shadow-2xs group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                    <DollarSign className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Ingresos Diarios
+                    </h3>
+                    <span className="text-[11px] text-slate-400 capitalize">
+                      {todayFormatted}
+                    </span>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Hoy
+                </span>
+              </div>
+
+              <div className="space-y-1 my-2">
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-mono">
+                  {currentMoneda.simbolo}{' '}
+                  {todayRevenue.toLocaleString('es-CO', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2,
+                  })}
+                </div>
+                <p className="text-xs text-slate-500 font-medium">
+                  {todaySalesCount === 1
+                    ? '1 venta registrada hoy'
+                    : `${todaySalesCount} ventas registradas hoy`}
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+              <span className="text-slate-400 text-[11px]">
+                {todayRevenue > 0 ? 'Facturación activa' : 'Sin ventas hoy aún'}
+              </span>
+              <button
+                onClick={() => setActiveTab('ventas')}
+                className="text-emerald-600 hover:text-emerald-700 font-semibold inline-flex items-center gap-1 cursor-pointer"
+              >
+                <span>Ver ventas</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Card 2: Total Sales Count */}
+          <div className="bg-white rounded-xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all p-4.5 flex flex-col justify-between group relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-500" />
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0 shadow-2xs group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                    <Receipt className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Total de Ventas
+                    </h3>
+                    <span className="text-[11px] text-slate-400">
+                      Histórico acumulado
+                    </span>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                  <ShoppingCart className="w-3 h-3 text-blue-600" />
+                  Global
+                </span>
+              </div>
+
+              <div className="space-y-1 my-2">
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-mono">
+                  {totalSalesCount.toLocaleString('es-CO')}
+                  <span className="text-sm font-semibold text-slate-500 ml-1.5">
+                    {totalSalesCount === 1 ? 'operación' : 'operaciones'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-medium">
+                  Total acumulado:{' '}
+                  <strong className="text-slate-800 font-bold font-mono">
+                    {currentMoneda.simbolo}{' '}
+                    {totalAllTimeRevenue.toLocaleString('es-CO', {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 2,
+                    })}
+                  </strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+              <span className="text-slate-400 text-[11px]">
+                Ticket prom:{' '}
+                <strong className="text-slate-700 font-mono">
+                  {currentMoneda.simbolo} {averageTicket.toFixed(2)}
+                </strong>
+              </span>
+              <button
+                onClick={() => setActiveTab('ventas')}
+                className="text-blue-600 hover:text-blue-700 font-semibold inline-flex items-center gap-1 cursor-pointer"
+              >
+                <span>Historial</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Card 3: Current Inventory Value */}
+          <div className="bg-white rounded-xl border border-slate-200/90 shadow-sm hover:shadow-md transition-all p-4.5 flex flex-col justify-between group relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 to-orange-500" />
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0 shadow-2xs group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                    <Boxes className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Valor de Inventario
+                    </h3>
+                    <span className="text-[11px] text-slate-400">
+                      Precio de venta activo
+                    </span>
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                  <Package className="w-3 h-3 text-amber-600" />
+                  {inventoryStats.totalUnits} unid.
+                </span>
+              </div>
+
+              <div className="space-y-1 my-2">
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight font-mono">
+                  {currentMoneda.simbolo}{' '}
+                  {inventoryStats.totalValueSale.toLocaleString('es-CO', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2,
+                  })}
+                </div>
+                <p className="text-xs text-slate-500 font-medium">
+                  Costo de reposición:{' '}
+                  <strong className="text-slate-800 font-bold font-mono">
+                    {currentMoneda.simbolo}{' '}
+                    {inventoryStats.totalValueCost.toLocaleString('es-CO', {
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 2,
+                    })}
+                  </strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+              <span className="text-slate-400 text-[11px]">
+                {inventoryStats.productCount} productos registrados
+              </span>
+              <button
+                onClick={() => setActiveTab('inventario')}
+                className="text-amber-600 hover:text-amber-700 font-semibold inline-flex items-center gap-1 cursor-pointer"
+              >
+                <span>Ver inventario</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Caja status alert banner */}
       {activeCaja ? (
@@ -281,7 +837,8 @@ export const DashboardView: React.FC = () => {
           <div className="p-4 space-y-3.5">
             {lowestStockProductos.map((prod) => {
               const pct = Math.min(100, Math.round((prod.cantidad / maxStock) * 100));
-              const isCritical = prod.cantidad <= 5;
+              const min = prod.stock_minimo !== undefined ? prod.stock_minimo : 5;
+              const isCritical = prod.cantidad < min;
               return (
                 <div key={prod.id} className="space-y-1">
                   <div className="flex items-center justify-between text-xs">
@@ -290,10 +847,11 @@ export const DashboardView: React.FC = () => {
                     </span>
                     <span
                       className={`font-bold px-1.5 py-0.5 rounded text-[11px] ${
-                        isCritical ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                        isCritical ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-amber-100 text-amber-700'
                       }`}
+                      title={`Stock actual: ${prod.cantidad} / Mínimo: ${min}`}
                     >
-                      {prod.cantidad} unid.
+                      {prod.cantidad} unid. <span className="text-[9px] font-normal opacity-80">(Mín: {min})</span>
                     </span>
                   </div>
                   <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
@@ -310,40 +868,8 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
 
-        {/* Chart 2: Ventas en los últimos 7 días */}
-        <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-          <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
-            <div className="flex items-center gap-2 font-semibold text-slate-800 text-xs sm:text-sm">
-              <TrendingUp className="w-4 h-4 text-blue-600" />
-              <span>Ventas en los últimos 7 días</span>
-            </div>
-            <span className="text-xs font-bold text-slate-700">
-              Total: {currentMoneda.simbolo} {totalRevenue.toFixed(2)}
-            </span>
-          </div>
-
-          <div className="p-4">
-            <div className="h-44 flex items-end justify-between gap-2 pt-6 pb-2">
-              {dailySales.map((item, idx) => {
-                const heightPct = Math.min(100, Math.round((item.total / maxDaySale) * 100));
-                return (
-                  <div key={idx} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
-                    <div className="text-[10px] font-bold text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {currentMoneda.simbolo}
-                      {item.total.toFixed(0)}
-                    </div>
-                    <div
-                      className="w-full bg-blue-500 hover:bg-blue-600 rounded-t transition-all duration-300 relative"
-                      style={{ height: `${Math.max(6, heightPct)}%` }}
-                      title={`${item.displayStr}: ${currentMoneda.simbolo} ${item.total.toFixed(2)}`}
-                    />
-                    <span className="text-[10px] font-medium text-slate-500">{item.displayStr}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        {/* Chart 2: Gráfico Recharts de Ventas Diarias durante la última semana */}
+        <WeeklySalesChart ventas={ventas} simboloMoneda={currentMoneda.simbolo} />
       </div>
 
       {/* Recent Sales Table */}
