@@ -1,5 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#0f172a"/>
-  <path d="M110 350V162h58l88 112 88-112h58v188h-62V253l-84 103-84-103v97z" fill="#f5c96a"/>
-  <circle cx="256" cy="405" r="12" fill="#f5c96a"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <rect width="512" height="512" fill="#09090b" rx="100"/>
+  <rect x="16" y="16" width="480" height="480" fill="none" stroke="#b45309" stroke-width="6" rx="84" opacity="0.7"/>
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#d97706" stroke-width="4" opacity="0.4"/>
+
+  <!-- Glowing Globe Lines -->
+  <circle cx="256" cy="256" r="140" fill="none" stroke="#f59e0b" stroke-width="3" opacity="0.5"/>
+  <ellipse cx="256" cy="256" rx="140" ry="60" fill="none" stroke="#f59e0b" stroke-width="3" opacity="0.5"/>
+  <ellipse cx="256" cy="256" rx="60" ry="140" fill="none" stroke="#f59e0b" stroke-width="3" opacity="0.5"/>
+  <line x1="116" y1="256" x2="396" y2="256" stroke="#f59e0b" stroke-width="3" opacity="0.5"/>
+  <line x1="256" y1="116" x2="256" y2="396" stroke="#f59e0b" stroke-width="3" opacity="0.5"/>
+
+  <!-- Crown / Star Accent -->
+  <circle cx="256" cy="100" r="12" fill="#fbbf24"/>
+
+  <!-- Monogram text -->
+  <text x="256" y="270" font-family="'Georgia', 'Playfair Display', serif" font-size="150" font-weight="bold" fill="#fef3c7" text-anchor="middle" dominant-baseline="middle" letter-spacing="-4">IL</text>
+  <text x="256" y="380" font-family="'Inter', sans-serif" font-size="28" font-weight="800" fill="#f59e0b" text-anchor="middle" letter-spacing="8">IMPERIO LUX</text>
 </svg>

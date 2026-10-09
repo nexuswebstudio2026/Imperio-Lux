@@ -11,7 +11,6 @@ import {
   Check,
   Search,
   ShoppingCart,
-  Store,
   Database,
   Sun,
   Moon,
@@ -88,9 +87,11 @@ export const Navbar: React.FC = () => {
           onClick={() => setActiveTab('panel')}
           className="flex items-center gap-2 cursor-pointer group"
         >
-          <div className="w-8 h-8 rounded bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow">
-            <Store className="w-4 h-4" />
-          </div>
+          <img
+            src="/assets/imperio-icon.svg"
+            alt="Logo de Imperio Lux"
+            className="w-9 h-9 rounded-lg object-cover shadow ring-1 ring-amber-500/40"
+          />
           <div className="flex flex-col leading-tight">
             <span className="font-semibold text-white tracking-wide text-sm group-hover:text-blue-400 transition-colors">
               {empresa.nombre || 'SK SAC'}
