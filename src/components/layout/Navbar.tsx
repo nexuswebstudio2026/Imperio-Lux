@@ -379,7 +379,11 @@ export const Navbar: React.FC = () => {
               <div className="pt-1">
                 <button
                   onClick={() => {
-                    setCurrentUser(null);
+                    void fetch('/api/auth/logout', { method: 'POST' }).finally(() => {
+                      setCurrentUser(null);
+                      window.history.pushState({}, '', '/');
+                      window.dispatchEvent(new PopStateEvent('popstate'));
+                    });
                     setShowUserMenu(false);
                   }}
                   className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 flex items-center gap-2 cursor-pointer font-medium"

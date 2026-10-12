@@ -224,6 +224,7 @@ export interface User {
   email: string;
   role: string;
   empleado_id?: number;
+  user_type?: 'admin' | 'employee' | 'client';
 }
 
 export interface ActivityLog {

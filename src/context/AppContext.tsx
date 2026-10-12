@@ -402,7 +402,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   const [currentUser, setCurrentUser] = useState<User | null>(() =>
-    loadStorage<User | null>('currentUser', initialUsers[0])
+    null
   );
   const [activeTab, setActiveTab] = useState<AppTab>(() =>
     loadStorage<AppTab>('activeTab', 'panel')
@@ -586,7 +586,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeComprobanteVenta, setActiveComprobanteVenta] = useState<Venta | null>(null);
 
   // Sync state to local storage
-  useEffect(() => saveStorage('currentUser', currentUser), [currentUser]);
+  useEffect(() => { try { localStorage.removeItem('currentUser'); } catch { /* storage unavailable */ } }, [currentUser]);
   useEffect(() => saveStorage('activeTab', activeTab), [activeTab]);
   useEffect(() => saveStorage('empresa', empresa), [empresa]);
   useEffect(() => saveStorage('categorias', categorias), [categorias]);
@@ -739,7 +739,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const table = tablesToUpload[i];
         const percent = Math.round(15 + ((i + 1) / tablesToUpload.length) * 80);
         onProgress?.(`Subiendo tabla "${table.name}" (${table.data.length} registros)...`, percent);
-        await writeTableToSheet(token, googleSheetsId, table.name, table.data);
+        if (table.name === 'Usuarios') {
+          const response = await fetch('/api/auth/admin/sync-users', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ users: table.data }) });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'No se pudo sincronizar la hoja Usuarios.');
+        } else await writeTableToSheet(token, googleSheetsId, table.name, table.data);
         totalRecordsUploaded += table.data.length;
       }
 
@@ -1039,7 +1043,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const tableData = data ?? getTableDataByName(tableName);
       onProgress?.(`Escribiendo ${tableData.length} registros en "${tableName}"...`, 60);
-      await writeTableToSheet(token, googleSheetsId, tableName, tableData);
+      if (tableName === 'Usuarios') {
+        const response = await fetch('/api/auth/admin/sync-users', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ users: tableData }) });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'No se pudo sincronizar la hoja Usuarios.');
+      } else await writeTableToSheet(token, googleSheetsId, tableName, tableData);
 
       const msg = `Pestaña "${tableName}" generada y actualizada con éxito (${tableData.length} registros).`;
       onProgress?.(msg, 100);

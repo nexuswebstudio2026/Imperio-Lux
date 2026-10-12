@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Breadcrumb } from '../layout/Breadcrumb';
 import { Empleado } from '../../types';
@@ -480,6 +480,11 @@ export const RegisteredUsersView: React.FC = () => {
   const [search, setSearch] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
+  const [authAccounts, setAuthAccounts] = useState<Array<{ id: string; name: string; email: string; type: string; username: string; configured: boolean }>>([]);
+  const [credentialDrafts, setCredentialDrafts] = useState<Record<string, { username: string; password: string }>>({});
+  const [credentialMessage, setCredentialMessage] = useState('');
+  const [credentialError, setCredentialError] = useState('');
+  const [savingAccount, setSavingAccount] = useState('');
   const registeredUsers = buildRegisteredUsers(users, empleados, clientes);
   const normalizedSearch = search.trim().toLocaleLowerCase('es');
   const filteredUsers = registeredUsers.filter((user) => {
@@ -489,6 +494,25 @@ export const RegisteredUsersView: React.FC = () => {
       .toLocaleLowerCase('es');
     return matchesType && (!normalizedSearch || searchable.includes(normalizedSearch));
   });
+  const loadAuthAccounts = async () => {
+    const response = await fetch('/api/auth/admin/users');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'No se pudieron leer las cuentas.');
+    setAuthAccounts(data.users || []);
+  };
+  useEffect(() => { void loadAuthAccounts().catch((error) => setCredentialError(error instanceof Error ? error.message : 'No se pudieron leer las cuentas.')); }, []);
+  const saveCredentials = async (id: string) => {
+    setSavingAccount(id); setCredentialError(''); setCredentialMessage('');
+    const draft = credentialDrafts[id];
+    try {
+      const response = await fetch('/api/auth/admin/credentials', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, username: draft?.username, password: draft?.password }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudieron guardar las credenciales.');
+      setCredentialMessage(data.message); setCredentialDrafts((previous) => ({ ...previous, [id]: { username: '', password: '' } }));
+      await loadAuthAccounts();
+    } catch (error) { setCredentialError(error instanceof Error ? error.message : 'No se pudieron guardar las credenciales.'); }
+    finally { setSavingAccount(''); }
+  };
   const counts = {
     Administrador: registeredUsers.filter((user) => user.tipo_usuario === 'Administrador').length,
     Empleado: registeredUsers.filter((user) => user.tipo_usuario === 'Empleado').length,
@@ -606,6 +630,27 @@ export const RegisteredUsersView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      <section className="mt-7 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-4 dark:border-slate-700 dark:bg-slate-800">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Acceso al sistema</h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Asigna usuario y contraseña a cada cuenta. Las contraseñas se guardan únicamente como hash.</p>
+        </div>
+        {credentialMessage && <p role="status" className="m-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">{credentialMessage}</p>}
+        {credentialError && <p role="alert" className="m-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-200">{credentialError}</p>}
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          {authAccounts.map((account) => {
+            const draft = credentialDrafts[account.id] || { username: account.username, password: '' };
+            return <div key={account.id} className="grid gap-3 px-4 py-4 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
+              <div><p className="text-xs font-semibold text-slate-900 dark:text-white">{account.name || 'Cuenta'}</p><p className="mt-1 text-[11px] text-slate-500">{account.email} · {account.type === 'admin' ? 'Administrador' : account.type === 'employee' ? 'Empleado' : 'Cliente'}</p><p className="mt-1 text-[10px] text-slate-400">{account.configured ? 'Credenciales configuradas' : 'Sin credenciales'}</p></div>
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Usuario<input value={draft.username} onChange={(event) => setCredentialDrafts((previous) => ({ ...previous, [account.id]: { ...draft, username: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 dark:border-slate-600 dark:bg-slate-950 dark:text-white" /></label>
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{account.configured ? 'Nueva contraseña' : 'Contraseña inicial'}<input type="password" autoComplete="new-password" placeholder="Mínimo 10 caracteres" value={draft.password} onChange={(event) => setCredentialDrafts((previous) => ({ ...previous, [account.id]: { ...draft, password: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 dark:border-slate-600 dark:bg-slate-950 dark:text-white" /></label>
+              <button disabled={savingAccount === account.id} onClick={() => void saveCredentials(account.id)} className="rounded-lg bg-[#152238] px-4 py-2 text-xs font-semibold text-white hover:bg-[#233b5d] disabled:opacity-50 dark:bg-[#bd9858] dark:text-[#101b2d]">{savingAccount === account.id ? 'Guardando…' : 'Guardar'}</button>
+            </div>;
+          })}
+          {authAccounts.length === 0 && <p className="px-4 py-8 text-center text-xs text-slate-500">No hay filas en la hoja Usuarios.</p>}
+        </div>
+      </section>
     </div>
   );
 };

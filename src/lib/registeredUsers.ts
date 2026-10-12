@@ -8,6 +8,9 @@ export const REGISTERED_USERS_HEADERS = [
   'cargo',
   'rol',
   'estado',
+  'usuario',
+  'contrasena_salt',
+  'contrasena_hash',
 ];
 
 export interface RegisteredUser {

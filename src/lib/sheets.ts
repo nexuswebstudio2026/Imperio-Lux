@@ -315,7 +315,7 @@ export const TABLE_DEFAULT_HEADERS: Record<string, string[]> = {
   kardex: ['id', 'producto_id', 'producto_nombre', 'tipo_movimiento', 'motivo', 'cantidad', 'costo_unitario', 'total', 'saldo_stock', 'fecha'],
   empresas: ['id', 'nombre', 'propietario', 'ruc', 'porcentaje_impuesto', 'abreviatura_impuesto', 'direccion', 'ubicacion', 'telefono', 'correo', 'moneda_id'],
   users: ['id', 'name', 'email', 'role_id', 'role_name', 'status', 'created_at'],
-  Usuarios: ['id', 'tipo_usuario', 'nombre', 'email', 'cargo', 'rol', 'estado'],
+  Usuarios: ['id', 'tipo_usuario', 'nombre', 'email', 'cargo', 'rol', 'estado', 'usuario', 'contrasena_salt', 'contrasena_hash'],
   roles: ['id', 'name', 'description', 'permissions'],
   monedas: ['id', 'estandar_iso', 'nombre_completo', 'simbolo'],
   documentos: ['id', 'nombre'],

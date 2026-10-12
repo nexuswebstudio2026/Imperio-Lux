@@ -1,16 +1,84 @@
 import express from 'express';
 import 'dotenv/config';
 import { createServer } from 'node:http';
-import { createSign } from 'node:crypto';
+import { createSign, randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import nodemailer from 'nodemailer';
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 const root = path.dirname(fileURLToPath(import.meta.url));
 const backupConfigPath = process.env.BACKUP_CONFIG_FILE || path.join(root, '.runtime', 'backup-scheduler.json');
 let tokenCache: { token: string; expires: number } | null = null;
+
+type AuthUser = { id: string; name: string; email: string; role: string; type: 'admin' | 'employee' | 'client' };
+const sessions = new Map<string, { user: AuthUser; expires: number }>();
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const recoveryCodes = new Map<string, { codeHash: string; expires: number; attempts: number; row: Record<string, string>; headers: string[]; mode: 'username' | 'password' }>();
+const recoveryRequestAttempts = new Map<string, { count: number; resetAt: number }>();
+const USERS_SHEET = 'Usuarios';
+const AUTH_HEADERS = ['usuario', 'contrasena_salt', 'contrasena_hash'];
+
+async function readUsersSheet() {
+  const spreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;
+  const range = encodeURIComponent(`${USERS_SHEET}!A:Z`);
+  const data = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueRenderOption=UNFORMATTED_VALUE`);
+  const values: unknown[][] = data.values || [];
+  const headers = (values[0] || []).map((v) => String(v || '').trim());
+  const missing = AUTH_HEADERS.filter((header) => !headers.includes(header));
+  if (missing.length) {
+    const nextHeaders = [...headers, ...missing];
+    await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${USERS_SHEET}!A1`)}?valueInputOption=RAW`, {
+      method: 'PUT', body: JSON.stringify({ values: [nextHeaders] }),
+    });
+    headers.push(...missing);
+  }
+  if (!headers.length) throw new Error('La hoja Usuarios debe incluir sus encabezados y los datos de cada cuenta.');
+  const rows = values.slice(1).map((valuesRow, index) => ({
+    rowNumber: index + 2,
+    data: Object.fromEntries(headers.map((header, i) => [header, String(valuesRow[i] ?? '').trim()])),
+  }));
+  return { spreadsheetId, headers, rows };
+}
+
+async function writeUserRow(spreadsheetId: string, headers: string[], rowNumber: number, row: Record<string, string>) {
+  const values = headers.map((header) => row[header] ?? '');
+  await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${USERS_SHEET}!A${rowNumber}`)}?valueInputOption=RAW`, {
+    method: 'PUT', body: JSON.stringify({ values: [values] }),
+  });
+}
+
+function normalizeUsername(value: unknown) { return String(value || '').trim().toLocaleLowerCase('es'); }
+function verifyPassword(password: string, salt: string, hash: string) {
+  if (!salt || !hash) return false;
+  const actual = scryptSync(password, salt, 64);
+  const expected = Buffer.from(hash, 'hex');
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+function classifyUser(row: Record<string, string>): AuthUser['type'] {
+  const type = `${row.tipo_usuario || ''} ${row.rol || ''} ${row.role || ''}`.toLocaleLowerCase('es');
+  if (/admin|administrador/.test(type)) return 'admin';
+  if (/empleado|employee|cajero|vendedor/.test(type)) return 'employee';
+  return 'client';
+}
+function safeUser(row: Record<string, string>): AuthUser {
+  const type = classifyUser(row);
+  return { id: row.id, name: row.nombre || row.name || 'Usuario', email: row.email || '', role: row.rol || row.role || row.tipo_usuario || type, type };
+}
+function currentSession(req: express.Request) {
+  const token = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith('imperio_session='))?.slice('imperio_session='.length);
+  const session = token ? sessions.get(token) : undefined;
+  if (!session || session.expires < Date.now()) { if (token) sessions.delete(token); return null; }
+  return { token: token!, ...session };
+}
+function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const session = currentSession(req);
+  if (!session) return res.status(401).json({ error: 'Inicia sesión para continuar.' });
+  if (session.user.type !== 'admin') return res.status(403).json({ error: 'No tienes permisos para esta sección.' });
+  next();
+}
 
 type BackupConfig = {
   enabled: boolean;
@@ -158,9 +226,187 @@ app.get('/api/database/status', async (_req, res) => {
   }
 });
 
-app.get('/api/backups/config', (_req, res) => res.json(publicBackupConfig()));
+app.get('/api/auth/session', (req, res) => {
+  const session = currentSession(req);
+  res.json({ user: session?.user || null });
+});
 
-app.post('/api/backups/config', async (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
+  const ip = req.ip || 'unknown';
+  const attempt = loginAttempts.get(ip);
+  if (attempt && attempt.resetAt > Date.now() && attempt.count >= 8) return res.status(429).json({ error: 'Demasiados intentos. Espera 15 minutos y vuelve a intentarlo.' });
+  try {
+    const username = normalizeUsername(req.body?.username);
+    const password = String(req.body?.password || '');
+    if (!username || !password || password.length > 256) return res.status(400).json({ error: 'Escribe tu usuario y contraseña.' });
+    const { rows } = await readUsersSheet();
+    const found = rows.find(({ data }) => normalizeUsername(data.usuario) === username && data.estado.toLowerCase() !== 'false' && data.estado.toLowerCase() !== 'inactivo');
+    if (!found || !verifyPassword(password, found.data.contrasena_salt, found.data.contrasena_hash)) {
+      const current = loginAttempts.get(ip);
+      loginAttempts.set(ip, { count: current?.resetAt && current.resetAt > Date.now() ? (current.count + 1) : 1, resetAt: current?.resetAt && current.resetAt > Date.now() ? current.resetAt : Date.now() + 15 * 60_000 });
+      return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
+    }
+    loginAttempts.delete(ip);
+    const token = randomBytes(32).toString('base64url');
+    const user = safeUser(found.data);
+    sessions.set(token, { user, expires: Date.now() + 12 * 60 * 60_000 });
+    res.setHeader('Set-Cookie', `imperio_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=43200${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
+    res.json({ user });
+  } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo validar la cuenta en Google Sheets.' }); }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  const session = currentSession(req);
+  if (session) sessions.delete(session.token);
+  res.setHeader('Set-Cookie', 'imperio_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+  res.json({ ok: true });
+});
+
+app.post('/api/auth/recovery/request', async (req, res) => {
+  const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASSWORD && process.env.SMTP_FROM);
+  if (!smtpConfigured) return res.status(503).json({ error: 'La recuperación por correo todavía no está habilitada. Configura SMTP en el servidor.' });
+  const mode = req.body?.mode === 'username' ? 'username' : 'password';
+  const requestIp = req.ip || 'unknown';
+  const requestLimit = recoveryRequestAttempts.get(requestIp);
+  if (requestLimit && requestLimit.resetAt > Date.now() && requestLimit.count >= 4) return res.status(429).json({ error: 'Demasiadas solicitudes. Espera 15 minutos y vuelve a intentarlo.' });
+  recoveryRequestAttempts.set(requestIp, { count: requestLimit?.resetAt && requestLimit.resetAt > Date.now() ? requestLimit.count + 1 : 1, resetAt: requestLimit?.resetAt && requestLimit.resetAt > Date.now() ? requestLimit.resetAt : Date.now() + 15 * 60_000 });
+  const identifier = String(req.body?.identifier || '').trim();
+  if (!identifier || identifier.length > 254) return res.status(400).json({ error: 'Escribe tu usuario o correo registrado.' });
+  try {
+    const { rows } = await readUsersSheet();
+    const normalized = normalizeUsername(identifier);
+    const recoveryId = randomBytes(24).toString('base64url');
+    const found = mode === 'username'
+      ? rows.find(({ data }) => data.email.toLocaleLowerCase('es') === normalized)
+      : rows.find(({ data }) => normalizeUsername(data.usuario) === normalized);
+    if (found?.data.email) {
+      const code = String(randomBytes(4).readUInt32BE(0) % 1_000_000).padStart(6, '0');
+      const codeHash = createHash('sha256').update(code).digest('hex');
+      recoveryCodes.set(recoveryId, { codeHash, expires: Date.now() + 10 * 60_000, attempts: 0, row: found.data, headers: (await readUsersSheet()).headers, mode });
+      const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT), secure: Number(process.env.SMTP_PORT) === 465, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } });
+      const text = mode === 'username'
+        ? `Tu usuario de Imperio Lux es: ${found.data.usuario || '(sin usuario asignado)'}. Código de verificación: ${code}. Vence en 10 minutos.`
+        : `Tu código para restablecer la contraseña de Imperio Lux es: ${code}. Vence en 10 minutos.`;
+      await transporter.sendMail({ from: process.env.SMTP_FROM, to: found.data.email, subject: 'Recuperación de cuenta · Imperio Lux', text });
+    }
+    // Generic response and opaque handle prevent revealing whether a username or email exists.
+    res.json({ message: 'Si los datos corresponden a una cuenta, recibirás instrucciones en el correo registrado.', recoveryId });
+  } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo enviar el correo de recuperación.' }); }
+});
+
+app.post('/api/auth/recovery/confirm', async (req, res) => {
+  const recoveryId = String(req.body?.recoveryId || '');
+  const code = String(req.body?.code || '');
+  const recovery = recoveryCodes.get(recoveryId);
+  const suppliedHash = createHash('sha256').update(code).digest();
+  const expectedHash = recovery ? Buffer.from(recovery.codeHash, 'hex') : Buffer.alloc(32);
+  const codeMatches = suppliedHash.length === expectedHash.length && timingSafeEqual(suppliedHash, expectedHash);
+  if (recovery) recovery.attempts += 1;
+  if (!recovery || recovery.expires < Date.now() || recovery.attempts > 6 || !/^\d{6}$/.test(code) || !codeMatches) {
+    if (recovery && recovery.attempts >= 6) recoveryCodes.delete(recoveryId);
+    if (recovery?.expires && recovery.expires < Date.now()) recoveryCodes.delete(recoveryId);
+    return res.status(400).json({ error: 'El código no es válido o venció.' });
+  }
+  const { spreadsheetId, headers, rows } = await readUsersSheet();
+  const match = rows.find(({ data }) => data.id === recovery.row.id);
+  if (!match) return res.status(400).json({ error: 'No se encontró la cuenta.' });
+  const nextUsername = String(req.body?.newUsername || '').trim();
+  const nextPassword = String(req.body?.newPassword || '');
+  if (recovery.mode === 'username' && nextUsername) {
+    if (nextUsername.length < 4 || nextUsername.length > 64) return res.status(400).json({ error: 'El usuario debe tener entre 4 y 64 caracteres.' });
+    if (rows.some(({ data }) => data.id !== match.data.id && normalizeUsername(data.usuario) === normalizeUsername(nextUsername))) return res.status(409).json({ error: 'Ese nombre de usuario ya está ocupado.' });
+    match.data.usuario = nextUsername;
+  } else if (recovery.mode === 'password') {
+    if (nextPassword.length < 10 || nextPassword.length > 256) return res.status(400).json({ error: 'La contraseña nueva debe tener al menos 10 caracteres.' });
+    match.data.contrasena_salt = randomBytes(16).toString('hex');
+    match.data.contrasena_hash = scryptSync(nextPassword, match.data.contrasena_salt, 64).toString('hex');
+  } else return res.status(400).json({ error: 'Indica el nuevo usuario para completar el cambio.' });
+  await writeUserRow(spreadsheetId, headers, match.rowNumber, match.data);
+  recoveryCodes.delete(recoveryId);
+  for (const [token, session] of sessions) if (session.user.id === match.data.id) sessions.delete(token);
+  res.json({ message: 'La información de la cuenta fue actualizada.' });
+});
+
+app.post('/api/auth/bootstrap-admin', async (req, res) => {
+  const configuredSecret = process.env.AUTH_BOOTSTRAP_SECRET;
+  const suppliedSecret = String(req.body?.bootstrapSecret || '');
+  const expectedSecret = Buffer.from(configuredSecret || '');
+  const providedSecret = Buffer.from(suppliedSecret);
+  const paddedSecret = Buffer.alloc(expectedSecret.length);
+  providedSecret.copy(paddedSecret, 0, 0, expectedSecret.length);
+  const secretMatches = Boolean(configuredSecret && providedSecret.length === expectedSecret.length && timingSafeEqual(expectedSecret, paddedSecret));
+  if (!secretMatches) return res.status(403).json({ error: 'Configuración inicial no autorizada.' });
+  try {
+    const email = String(req.body?.email || '').trim().toLocaleLowerCase('es');
+    const username = String(req.body?.username || '').trim();
+    const password = String(req.body?.password || '');
+    if (username.length < 4 || password.length < 10) return res.status(400).json({ error: 'El usuario requiere 4 caracteres y la contraseña al menos 10.' });
+    const { spreadsheetId, headers, rows } = await readUsersSheet();
+    const admins = rows.filter(({ data }) => classifyUser(data) === 'admin');
+    if (!admins.length) return res.status(409).json({ error: 'Agrega primero la fila del administrador a la hoja Usuarios.' });
+    if (admins.some(({ data }) => data.usuario || data.contrasena_hash)) return res.status(409).json({ error: 'Ya existe una cuenta de administrador configurada.' });
+    const admin = admins.find(({ data }) => data.email.toLocaleLowerCase('es') === email);
+    if (!admin) return res.status(404).json({ error: 'El correo no coincide con un administrador registrado.' });
+    if (rows.some(({ data }) => normalizeUsername(data.usuario) === normalizeUsername(username))) return res.status(409).json({ error: 'Ese nombre de usuario ya está ocupado.' });
+    admin.data.usuario = username;
+    admin.data.contrasena_salt = randomBytes(16).toString('hex');
+    admin.data.contrasena_hash = scryptSync(password, admin.data.contrasena_salt, 64).toString('hex');
+    await writeUserRow(spreadsheetId, headers, admin.rowNumber, admin.data);
+    res.json({ message: 'Cuenta de administrador configurada.' });
+  } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo configurar la cuenta.' }); }
+});
+
+app.get('/api/auth/admin/users', requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await readUsersSheet();
+    res.json({ users: rows.map(({ data }) => ({ id: data.id, name: data.nombre || data.name || '', email: data.email || '', type: classifyUser(data), username: data.usuario || '', configured: Boolean(data.contrasena_hash) })) });
+  } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo leer la hoja Usuarios.' }); }
+});
+
+app.post('/api/auth/admin/credentials', requireAdmin, async (req, res) => {
+  try {
+    const id = String(req.body?.id || '');
+    const username = String(req.body?.username || '').trim();
+    const password = String(req.body?.password || '');
+    if (username.length < 4 || username.length > 64 || password.length < 10 || password.length > 256) return res.status(400).json({ error: 'El usuario debe tener entre 4 y 64 caracteres y la contraseña al menos 10.' });
+    const { spreadsheetId, headers, rows } = await readUsersSheet();
+    const target = rows.find(({ data }) => data.id === id);
+    if (!target) return res.status(404).json({ error: 'No se encontró el usuario.' });
+    if (rows.some(({ data }) => data.id !== id && normalizeUsername(data.usuario) === normalizeUsername(username))) return res.status(409).json({ error: 'Ese nombre de usuario ya está ocupado.' });
+    target.data.usuario = username;
+    target.data.contrasena_salt = randomBytes(16).toString('hex');
+    target.data.contrasena_hash = scryptSync(password, target.data.contrasena_salt, 64).toString('hex');
+    await writeUserRow(spreadsheetId, headers, target.rowNumber, target.data);
+    res.json({ message: 'Credenciales actualizadas correctamente.' });
+  } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudieron guardar las credenciales.' }); }
+});
+
+app.post('/api/auth/admin/sync-users', requireAdmin, async (req, res) => {
+  try {
+    const incoming = Array.isArray(req.body?.users) ? req.body.users : null;
+    if (!incoming || incoming.length > 1000) return res.status(400).json({ error: 'La lista de usuarios no es válida.' });
+    const { spreadsheetId, headers, rows } = await readUsersSheet();
+    const byId = new Map(rows.map(({ data }) => [data.id, data]));
+    const merged: Record<string, string>[] = incoming.map((raw: Record<string, unknown>) => {
+      const id = String(raw.id ?? '');
+      const existing = byId.get(id) || {};
+      const safe: Record<string, string> = Object.fromEntries(Object.entries(raw)
+        .filter(([key]) => !AUTH_HEADERS.includes(key))
+        .map(([key, value]) => [key, value === null || value === undefined ? '' : String(value)]));
+      return { ...existing, ...safe };
+    });
+    const mergedHeaders = [...new Set(merged.flatMap((row) => Object.keys(row)))];
+    const nextHeaders = [...headers, ...mergedHeaders.filter((header) => !headers.includes(header))];
+    const valueRows = [nextHeaders, ...merged.map((row) => nextHeaders.map((header) => row[header] || ''))];
+    await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${USERS_SHEET}!A:Z`)}:clear`, { method: 'POST', body: JSON.stringify({}) });
+    await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${USERS_SHEET}!A1`)}?valueInputOption=RAW`, { method: 'PUT', body: JSON.stringify({ values: valueRows }) });
+    res.json({ count: merged.length });
+  } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo sincronizar la hoja Usuarios.' }); }
+});
+
+app.get('/api/backups/config', requireAdmin, (_req, res) => res.json(publicBackupConfig()));
+
+app.post('/api/backups/config', requireAdmin, async (req, res) => {
   try {
     const folderInput = String(req.body?.folderId || '').trim();
     const folderId = folderInput.match(/\/folders\/([\w-]+)/)?.[1] || folderInput;
@@ -187,12 +433,12 @@ app.post('/api/backups/config', async (req, res) => {
   } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : 'No se pudo guardar la programación.' }); }
 });
 
-app.post('/api/backups/run', async (_req, res) => {
+app.post('/api/backups/run', requireAdmin, async (_req, res) => {
   try { res.json({ backup: await runDriveBackup('Manual'), config: publicBackupConfig() }); }
   catch (error) { res.status(502).json({ error: error instanceof Error ? error.message : 'No se pudo crear el respaldo.' }); }
 });
 
-app.use('/api/google-sheets', async (req, res) => {
+app.use('/api/google-sheets', requireAdmin, async (req, res) => {
   try {
     const upstreamPath = req.originalUrl.replace(/^\/api\/google-sheets/, '');
     if (upstreamPath.includes('..')) return res.status(400).json({ error: { message: 'Ruta inválida' } });
@@ -210,11 +456,12 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(vite.middlewares);
 } else {
   app.use(express.static(path.join(root, 'dist')));
-  app.get('/admin', (_req, res) => res.sendFile(path.join(root, 'dist', 'index.html')));
+  app.get(['/admin', '/login', '/empleado', '/cliente'], (_req, res) => res.sendFile(path.join(root, 'dist', 'index.html')));
 }
 
 const server = createServer(app);
 await loadBackupConfig();
+void readUsersSheet().then(() => console.log('Columnas de autenticación listas en Google Sheets.')).catch((error) => console.error('No se pudieron preparar las columnas de autenticación en Google Sheets:', error instanceof Error ? error.message : 'Error desconocido'));
 if (process.env.VERCEL !== '1') {
   setInterval(() => { void checkScheduledBackup(); }, 30_000);
   void checkScheduledBackup();
