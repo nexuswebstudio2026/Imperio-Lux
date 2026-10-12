@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
@@ -24,14 +24,34 @@ import { InventarioView, KardexView } from './components/inventario/InventarioKa
 import {
   EmpresaConfigView,
   EmpleadoListView,
+  RegisteredUsersView,
   UsuariosRolesView,
   ActivityLogView,
 } from './components/configuracion/ConfigViews';
 import { DatabaseView } from './components/database/DatabaseView';
 import { GoogleSheetsConfigPanel } from './components/sheets/GoogleSheetsConfigPanel';
+import { PublicStorefront } from './components/storefront/PublicStorefront';
 
 const MainContent: React.FC = () => {
-  const { activeTab } = useApp();
+  const { activeTab, setActiveTab } = useApp();
+  const [isAdminRoute, setIsAdminRoute] = useState(() => window.location.pathname.startsWith('/admin'));
+
+  useEffect(() => {
+    const handleRouteChange = () => setIsAdminRoute(window.location.pathname.startsWith('/admin'));
+    window.addEventListener('popstate', handleRouteChange);
+    return () => window.removeEventListener('popstate', handleRouteChange);
+  }, []);
+
+  useEffect(() => {
+    if (isAdminRoute) setActiveTab('panel');
+  }, [isAdminRoute, setActiveTab]);
+
+  const enterAdmin = () => {
+    window.history.pushState({}, '', '/admin');
+    setIsAdminRoute(true);
+  };
+
+  if (!isAdminRoute) return <PublicStorefront onAdminLogin={enterAdmin} />;
 
   const renderCurrentView = () => {
     switch (activeTab) {
@@ -67,6 +87,8 @@ const MainContent: React.FC = () => {
         return <EmpresaConfigView />;
       case 'empleados':
         return <EmpleadoListView />;
+      case 'usuarios_registrados':
+        return <RegisteredUsersView />;
       case 'users':
       case 'roles':
         return <UsuariosRolesView />;
@@ -82,7 +104,7 @@ const MainContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col font-sans text-slate-800 dark:text-slate-100 transition-colors duration-200">
+    <div className="admin-shell min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col font-sans text-slate-800 dark:text-slate-100 transition-colors duration-200">
       <Navbar />
       <GoogleSheetsModal />
       <NotificationConfigModal />

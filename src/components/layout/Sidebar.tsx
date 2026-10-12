@@ -49,7 +49,7 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside
-      className={`bg-slate-950 text-slate-300 w-60 shrink-0 border-r border-slate-800 transition-all duration-200 flex flex-col justify-between select-none ${
+      className={`admin-sidebar bg-slate-950 text-slate-300 w-60 shrink-0 border-r border-slate-800 transition-all duration-200 flex flex-col justify-between select-none ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden w-0'
       }`}
       style={{ minHeight: 'calc(100vh - 3.5rem)' }}
@@ -96,7 +96,7 @@ export const Sidebar: React.FC = () => {
                 <span className="font-semibold text-emerald-100">Base de Datos</span>
               </div>
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-500/30">
-                21 Tablas
+                22 Hojas
               </span>
             </button>
 
@@ -358,6 +358,19 @@ export const Sidebar: React.FC = () => {
             </button>
 
             <button
+              id="nav-usuarios-registrados"
+              onClick={() => setActiveTab('usuarios_registrados')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors cursor-pointer text-left ${
+                isTabActive('usuarios_registrados')
+                  ? 'bg-blue-600 text-white font-medium'
+                  : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+              }`}
+            >
+              <Users className="w-4 h-4 text-amber-400" />
+              <span>Usuarios Registrados</span>
+            </button>
+
+            <button
               id="nav-empleados"
               onClick={() => setActiveTab('empleados')}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-colors cursor-pointer text-left ${
@@ -407,7 +420,7 @@ export const Sidebar: React.FC = () => {
             ></span>
           </div>
           <p className="text-[10px] text-slate-400 leading-tight">
-            Base de datos en la nube (21 tablas)
+            Base de datos en la nube (22 hojas)
           </p>
         </div>
       </div>

@@ -348,7 +348,7 @@ export const GoogleSheetsModal: React.FC = () => {
                   : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              Estructura de 21 Pestañas
+              Estructura de 22 Pestañas
             </button>
           </div>
 
@@ -544,7 +544,7 @@ export const GoogleSheetsModal: React.FC = () => {
                       <div>
                         <strong className="block">Sincronización Bloqueada</strong>
                         <span>
-                          Debes validar la conexión con la hoja de cálculo antes de permitir la sincronización de las 21 tablas.
+                          Debes validar la conexión con la hoja de cálculo antes de permitir la sincronización de las 22 pestañas.
                         </span>
                       </div>
                     </div>
@@ -570,7 +570,7 @@ export const GoogleSheetsModal: React.FC = () => {
                         Sincronización Inteligente
                       </h4>
                       <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                        Verifica el contenido de Google Sheets: si ya contiene datos, los descarga en la app; si está vacío, siembra todas las 21 tablas locales.
+                          Verifica el contenido de Google Sheets: si ya contiene datos, los descarga en la app; si está vacío, siembra todas las 22 pestañas locales.
                       </p>
                     </div>
                     <button
@@ -594,7 +594,7 @@ export const GoogleSheetsModal: React.FC = () => {
                         Subir Todo a Sheets
                       </h4>
                       <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                        Exporta las 21 tablas ({totalRecords} registros locales) hacia las pestañas de Google Sheets. Requiere confirmación explícita.
+                        Exporta las 22 pestañas ({totalRecords} registros locales) hacia Google Sheets. Requiere confirmación explícita.
                       </p>
                     </div>
                     <button
@@ -656,7 +656,7 @@ export const GoogleSheetsModal: React.FC = () => {
             {activeTab === 'tablas' && (
               <div className="space-y-4">
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Las siguientes 21 colecciones se mapean a pestañas independientes en Google Sheets:
+                  Las siguientes 22 colecciones se mapean a pestañas independientes en Google Sheets:
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
@@ -725,9 +725,9 @@ export const GoogleSheetsModal: React.FC = () => {
       <ConfirmDestructiveModal
         isOpen={showConfirmUpload}
         title="¿Sobrescribir datos en Google Sheets?"
-        description="Esta acción escribirá y actualizará todas las 21 pestañas del spreadsheet con los datos actuales del sistema Imperio Lux."
+        description="Esta acción escribirá y actualizará las 22 pestañas del spreadsheet con los datos actuales del sistema Imperio Lux."
         itemCount={totalRecords}
-        itemDescription="registros en 21 pestañas"
+        itemDescription="registros en 22 pestañas"
         affectedItems={[
           'productos',
           'categorias',

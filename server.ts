@@ -78,7 +78,7 @@ async function appendBackupActivity(action: string, description: string) {
   const headers: string[] = result.values?.[0] || ['id', 'usuario_id', 'usuario_nombre', 'modulo', 'accion', 'descripcion', 'fecha'];
   const record: Record<string, unknown> = {
     id: Date.now(), usuario_id: 0, usuario_nombre: 'Sistema de respaldos', modulo: 'Google Drive',
-    accion: action, descripcion, fecha: new Date().toISOString().replace('T', ' ').slice(0, 19),
+    accion: action, descripcion: description, fecha: new Date().toISOString().replace('T', ' ').slice(0, 19),
   };
   const values = headers.map((header) => {
     const value = record[header];
@@ -208,7 +208,10 @@ if (process.env.NODE_ENV !== 'production') {
   const { createServer: createViteServer } = await import('vite');
   const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
   app.use(vite.middlewares);
-} else app.use(express.static(path.join(root, 'dist')));
+} else {
+  app.use(express.static(path.join(root, 'dist')));
+  app.get('/admin', (_req, res) => res.sendFile(path.join(root, 'dist', 'index.html')));
+}
 
 const server = createServer(app);
 await loadBackupConfig();

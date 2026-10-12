@@ -50,7 +50,7 @@ function autoFitColumns(ws: XLSX.WorkSheet, data: any[]) {
 }
 
 /**
- * Export all 21 tables of the database to a multi-tab Excel (.xlsx) file
+ * Export all synchronized sheets of the database to a multi-tab Excel (.xlsx) file
  */
 export function exportAllTablesToExcel(
   tables: TableExportItem[],

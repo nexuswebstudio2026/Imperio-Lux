@@ -4,6 +4,7 @@ import { Breadcrumb } from '../layout/Breadcrumb';
 import { GoogleSignInButton } from '../common/GoogleSignInButton';
 import { ConfirmDestructiveModal } from '../common/ConfirmDestructiveModal';
 import { getSpreadsheetUrl } from '../../lib/sheets';
+import { buildRegisteredUsers } from '../../lib/registeredUsers';
 import {
   Database,
   Cloud,
@@ -60,14 +61,14 @@ export type TableCategory =
   | 'sistema';
 
 export const CATEGORY_LABELS: Record<TableCategory, string> = {
-  todos: 'Todas las Tablas (21)',
+  todos: 'Todas las Tablas (22)',
   catalogo: 'Catálogo (4)',
   ventas_clientes: 'Ventas & Clientes (4)',
   compras_proveedores: 'Compras & Proveedores (2)',
   caja_finanzas: 'Caja & Finanzas (3)',
   inventario: 'Inventario & Kardex (2)',
   empresa_personal: 'Empresa & Empleados (2)',
-  sistema: 'Sistema & Auditoría (4)',
+  sistema: 'Sistema & Auditoría (5)',
 };
 
 interface CollectionMeta {
@@ -296,6 +297,16 @@ export const DatabaseView: React.FC = () => {
       data: users,
     },
     {
+      id: 'Usuarios',
+      name: 'Usuarios',
+      label: 'Usuarios Registrados',
+      description: 'Directorio consolidado de administradores, empleados y clientes.',
+      category: 'sistema',
+      icon: Users,
+      color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+      data: buildRegisteredUsers(users, empleados, clientes),
+    },
+    {
       id: 'roles',
       name: 'roles',
       label: 'Roles y Permisos',
@@ -380,7 +391,7 @@ export const DatabaseView: React.FC = () => {
   ]);
 
   // Tablas de la base de datos de la página web:
-  // Permite mostrar las 21 tablas completas o filtrar por registros y categoría
+  // Permite mostrar las 22 tablas completas o filtrar por registros y categoría
   const collections: CollectionMeta[] = useMemo(() => {
     let list = allCollectionSchemas;
     if (!showAllTables) {
@@ -488,13 +499,13 @@ export const DatabaseView: React.FC = () => {
 
     setIsSheetsPushing(true);
     setUploadProgressPct(5);
-    setSheetsStatusMsg(`Generando las 21 tablas en Google Sheets (ID: ${googleSheetsId})...`);
+    setSheetsStatusMsg(`Generando las 22 pestañas en Google Sheets (ID: ${googleSheetsId})...`);
     try {
       const res = await uploadAllToGoogleSheets((msg, pct) => {
         setSheetsStatusMsg(msg);
         if (pct !== undefined) setUploadProgressPct(pct);
       });
-      setSheetsStatusMsg(`¡Éxito! ${res.message}. Se crearon/actualizaron las 21 pestañas en Google Sheets.`);
+      setSheetsStatusMsg(`¡Éxito! ${res.message}.`);
       setSheetsToast(true);
       setTimeout(() => setSheetsToast(false), 8000);
     } catch (err: any) {
@@ -518,7 +529,7 @@ export const DatabaseView: React.FC = () => {
     } catch (err: any) {
       console.warn('Fallback a exportación de Excel', err);
       exportAllToExcel();
-      setSheetsStatusMsg('Descargando archivo Excel (.xlsx) con las 21 tablas de la base de datos.');
+      setSheetsStatusMsg('Descargando archivo Excel (.xlsx) con las 22 hojas de la base de datos.');
       setSheetsToast(true);
       setTimeout(() => setSheetsToast(false), 6000);
     } finally {
@@ -739,7 +750,7 @@ export const DatabaseView: React.FC = () => {
               id="btn-sheets-push"
               onClick={() => setShowConfirmSheetsUpload(true)}
               disabled={isSheetsSyncing || isSheetsPushing || isSheetsPulling}
-              title="A partir del ID de Google Sheets, genera o actualiza todas las 21 tablas de la base de datos en cada hoja"
+              title="A partir del ID de Google Sheets, genera o actualiza las 22 hojas de la base de datos"
               className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 active:bg-amber-700 text-white rounded-lg font-bold shadow-md shadow-amber-900/30 transition-all cursor-pointer disabled:opacity-50"
             >
               <Upload className={`w-4 h-4 ${isSheetsPushing ? 'animate-bounce' : ''}`} />
@@ -788,7 +799,7 @@ export const DatabaseView: React.FC = () => {
                   <button
                     onClick={() => {
                       exportAllToExcel();
-                      setSheetsStatusMsg('Descargando archivo Excel completo (21 tablas de la base de datos).');
+                      setSheetsStatusMsg('Descargando archivo Excel completo (22 hojas de la base de datos).');
                       setSheetsToast(true);
                       setTimeout(() => setSheetsToast(false), 5000);
                     }}
@@ -796,7 +807,7 @@ export const DatabaseView: React.FC = () => {
                   >
                     <FileSpreadsheet className="w-4 h-4 text-blue-400 shrink-0" />
                     <div>
-                      <p className="font-bold text-white">Descargar Libro Excel (21 Hojas)</p>
+                      <p className="font-bold text-white">Descargar Libro Excel (22 Hojas)</p>
                       <p className="text-[10px] text-slate-400">Genera libro con todas las tablas del sistema</p>
                     </div>
                   </button>
@@ -933,7 +944,7 @@ export const DatabaseView: React.FC = () => {
               }`}
             >
               <Table className="w-3.5 h-3.5" />
-              <span>Todas las Tablas de la Web (21)</span>
+              <span>Todas las Tablas de la Web (22)</span>
             </button>
 
             <button
@@ -959,7 +970,7 @@ export const DatabaseView: React.FC = () => {
               }`}
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>Hojas en Google Sheets (21)</span>
+              <span>Hojas en Google Sheets (22)</span>
             </button>
           </div>
 
@@ -972,7 +983,7 @@ export const DatabaseView: React.FC = () => {
                 onChange={(e) => setShowAllTables(e.target.checked)}
                 className="w-3.5 h-3.5 accent-amber-600 rounded"
               />
-              <span className="font-medium">Mostrar las 21 tablas completas</span>
+              <span className="font-medium">Mostrar las 22 tablas completas</span>
             </label>
 
             <button
@@ -993,7 +1004,7 @@ export const DatabaseView: React.FC = () => {
             Categoría:
           </span>
           {[
-            { id: 'todos' as TableCategory, label: `Todas (21)` },
+            { id: 'todos' as TableCategory, label: `Todas (22)` },
             { id: 'catalogo' as TableCategory, label: `Catálogo (4)` },
             { id: 'ventas_clientes' as TableCategory, label: `Ventas & Clientes (4)` },
             { id: 'compras_proveedores' as TableCategory, label: `Compras & Proveedores (2)` },
@@ -1020,7 +1031,7 @@ export const DatabaseView: React.FC = () => {
         </div>
       </div>
 
-      {/* VIEW 1: All 21 Tables Grid View */}
+      {/* VIEW 1: All 22 Sheets Grid View */}
       {activeViewMode === 'all_tables' && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1028,7 +1039,7 @@ export const DatabaseView: React.FC = () => {
               <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
                 <span>Tablas de la Base de Datos en la Página Web</span>
                 <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                  {collections.length} de 21 tablas
+                  {collections.length} de 22 hojas
                 </span>
               </h3>
             </div>
@@ -1045,7 +1056,7 @@ export const DatabaseView: React.FC = () => {
             </div>
           </div>
 
-          {/* Grid of 21 Tables */}
+          {/* Grid of 22 Sheets */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {collections
               .filter((col) => {
@@ -1150,14 +1161,14 @@ export const DatabaseView: React.FC = () => {
         </div>
       )}
 
-      {/* VIEW 2: Sheets Status Table (21 Sheets) */}
+      {/* VIEW 2: Sheets Status Table (22 Sheets) */}
       {activeViewMode === 'sheets_sync' && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden space-y-4 p-5">
           <div className="flex items-center justify-between gap-3 flex-wrap border-b border-slate-100 pb-4">
             <div>
               <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
                 <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-                <span>Estructura de las 21 Hojas en Google Sheets</span>
+                <span>Estructura de las 22 Hojas en Google Sheets</span>
               </h3>
               <p className="text-xs text-slate-500 mt-1">
                 Spreadsheet ID: <code className="font-mono text-emerald-700 font-bold">{googleSheetsId}</code>. Cada tabla de la página web se mapea a una hoja de cálculo individual.
@@ -1586,12 +1597,12 @@ export const DatabaseView: React.FC = () => {
       {/* Confirm Destructive Upload to Google Sheets Modal */}
       <ConfirmDestructiveModal
         isOpen={showConfirmSheetsUpload}
-        title="¿Subir y generar las 21 tablas en Google Sheets?"
-        description={`A partir del ID de Google Sheets (${googleSheetsId}), se crearán o actualizarán automáticamente todas las tablas de la base de datos de la página web en cada una de sus 21 hojas de cálculo correspondientes.`}
+        title="¿Subir y generar las 22 hojas en Google Sheets?"
+        description={`A partir del ID de Google Sheets (${googleSheetsId}), se crearán o actualizarán automáticamente las 22 hojas de datos de Imperio Lux.`}
         itemCount={totalDocuments}
         itemDescription="registros del sistema"
         affectedItems={allCollectionSchemas.map((c) => `Hoja '${c.name}': ${c.label} (${c.data?.length || 0} registros)`)}
-        confirmLabel="Subir y Generar las 21 Hojas en Sheets"
+        confirmLabel="Subir y Generar las 22 Hojas en Sheets"
         cancelLabel="Cancelar"
         isProcessing={isSheetsPushing}
         onConfirm={handleSheetsPushData}

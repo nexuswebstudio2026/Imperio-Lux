@@ -1,0 +1,206 @@
+import React from 'react';
+import { ArrowDown, ArrowRight, ArrowUpRight, Clock3, Mail, MapPin, Moon, ShieldCheck, Sparkles, Sun, Truck } from 'lucide-react';
+import { useApp } from '../../context/AppContext';
+
+interface PublicStorefrontProps {
+  onAdminLogin: () => void;
+}
+
+export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ onAdminLogin }) => {
+  const { empresa, productos, categorias, marcas, formatCurrency, theme, toggleTheme } = useApp();
+  const featuredProducts = productos.filter((product) => product.estado).slice(0, 4);
+  const featuredCategories = categorias.filter((category) => category.estado).slice(0, 4);
+  const phone = (empresa.telefono || '').replace(/\D/g, '');
+  const whatsapp = phone ? `https://wa.me/${phone}` : `mailto:${empresa.correo}`;
+
+  return (
+    <div className="storefront min-h-screen bg-[#f7f5f0] text-[#171714]" data-theme={theme}>
+      <div className="bg-[#151512] px-4 py-2 text-center text-[10px] font-medium uppercase tracking-[0.22em] text-[#d8c38c] sm:text-[11px]">
+        Una selección extraordinaria · Envíos a todo Colombia
+      </div>
+
+      <header className="sticky top-0 z-40 border-b border-black/10 bg-[#f7f5f0]/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-4 sm:gap-4 sm:px-5 lg:px-8">
+          <a href="#inicio" className="flex shrink-0 items-center gap-2 sm:gap-3" aria-label="Imperio Lux, inicio">
+            <img src="/assets/imperio-icon.svg" alt="" className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+            <span className="font-serif text-base tracking-[0.1em] sm:text-xl sm:tracking-[0.12em]">IMPERIO LUX</span>
+          </a>
+
+          <nav aria-label="Navegación principal" className="hidden items-center gap-8 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#55534c] md:flex">
+            <a className="store-nav-link" href="#inicio">Inicio</a>
+            <a className="store-nav-link" href="#catalogo">Catálogo</a>
+            <a className="store-nav-link" href="#nosotros">Sobre nosotros</a>
+            <a className="store-nav-link" href="#contacto">Contáctenos</a>
+          </nav>
+
+          <div className="flex shrink-0 items-center gap-1 sm:gap-3">
+            <button type="button" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Cambiar a modo día' : 'Cambiar a modo noche'} title={theme === 'dark' ? 'Modo día' : 'Modo noche'} className="inline-flex h-10 w-10 items-center justify-center border border-[#b9b3a5] text-[#5d584c] transition hover:border-[#9b7b3e] hover:text-[#9b7b3e]">
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={onAdminLogin}
+              className="inline-flex shrink-0 items-center gap-1.5 bg-[#b89652] px-3 py-3 text-[9px] font-bold uppercase tracking-[0.12em] text-white transition hover:bg-[#9c7838] sm:gap-2 sm:px-5 sm:text-[10px] sm:tracking-[0.16em]"
+            >
+              Iniciar sesión <ArrowUpRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </div>
+        <nav aria-label="Navegación móvil" className="flex justify-center gap-6 overflow-x-auto border-t border-black/5 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#55534c] md:hidden">
+          <a className="store-nav-link" href="#inicio">Inicio</a>
+          <a className="store-nav-link" href="#catalogo">Catálogo</a>
+          <a className="store-nav-link" href="#nosotros">Nosotros</a>
+          <a className="store-nav-link" href="#contacto">Contacto</a>
+        </nav>
+      </header>
+
+      <main>
+        <section id="inicio" className="relative isolate min-h-[620px] overflow-hidden bg-[#171714] text-white lg:min-h-[690px]">
+          <div className="hero-background absolute inset-0 -z-20 bg-[radial-gradient(ellipse_at_70%_35%,rgba(184,150,82,0.24),transparent_48%),linear-gradient(110deg,#171714_0%,#202019_54%,#121210_100%)]" />
+          <div className="absolute -right-24 top-16 -z-10 h-[490px] w-[490px] rounded-full border border-[#d0b475]/20 lg:right-[8%] lg:top-20 lg:h-[560px] lg:w-[560px]" />
+          <div className="absolute right-[-2%] top-1/2 -z-10 hidden h-[430px] w-[430px] -translate-y-1/2 rounded-full border border-[#d0b475]/15 lg:block" />
+          <div className="mx-auto grid min-h-[620px] max-w-7xl items-center gap-12 px-6 py-20 lg:min-h-[690px] lg:grid-cols-[1.05fr_0.95fr] lg:px-8">
+            <div className="max-w-2xl">
+              <p className="mb-7 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[0.32em] text-[#d8c38c] sm:text-xs">
+                <span className="h-px w-10 bg-[#b89652]" /> Lujo seleccionado, estilo atemporal
+              </p>
+              <h1 className="font-serif text-5xl leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
+                El arte de elegir <span className="italic text-[#d8c38c]">lo extraordinario.</span>
+              </h1>
+              <p className="mt-7 max-w-lg text-sm leading-7 text-white/65 sm:text-base">
+                Piezas que cuentan historias. Descubre relojería, joyería, fragancias y accesorios elegidos para acompañarte siempre.
+              </p>
+              <div className="mt-10 flex flex-wrap items-center gap-4">
+                <a href="#catalogo" className="store-hero-primary inline-flex items-center gap-3 bg-[#b89652] px-6 py-4 text-[10px] font-bold uppercase tracking-[0.2em] text-white transition hover:bg-[#c9a968]">
+                  Explorar catálogo <ArrowRight className="h-4 w-4" />
+                </a>
+                <a href="#nosotros" className="px-4 py-4 text-[10px] font-bold uppercase tracking-[0.2em] text-white/75 transition hover:text-white">Nuestra historia</a>
+              </div>
+              <div className="mt-16 flex flex-wrap gap-x-8 gap-y-4 border-t border-white/15 pt-6 text-[10px] uppercase tracking-[0.16em] text-white/55">
+                <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#d8c38c]" /> Selección de confianza</span>
+                <span className="flex items-center gap-2"><Truck className="h-4 w-4 text-[#d8c38c]" /> Envíos nacionales</span>
+              </div>
+            </div>
+
+            <div className="relative mx-auto flex h-[380px] w-full max-w-[500px] items-center justify-center lg:h-[500px]">
+              <div className="absolute h-[290px] w-[290px] rounded-full border border-[#d8c38c]/35 sm:h-[360px] sm:w-[360px]" />
+              <div className="absolute h-[245px] w-[245px] rounded-full bg-[#b89652]/10 blur-3xl sm:h-[310px] sm:w-[310px]" />
+              {featuredProducts[0]?.imagen ? (
+                <img src={featuredProducts[0].imagen} alt={featuredProducts[0].nombre} className="relative h-[300px] w-[260px] rounded-t-full object-cover shadow-2xl shadow-black/60 sm:h-[390px] sm:w-[330px]" />
+              ) : (
+                <div className="relative flex h-[300px] w-[260px] items-center justify-center rounded-t-full border border-[#d8c38c]/30 bg-gradient-to-br from-[#d3bd88]/30 via-[#544a34] to-[#191916] shadow-2xl sm:h-[390px] sm:w-[330px]">
+                  <Sparkles className="h-20 w-20 text-[#e6d4a4]" strokeWidth={0.8} />
+                </div>
+              )}
+              <div className="absolute bottom-5 left-0 max-w-[220px] border border-white/15 bg-[#171714]/90 p-4 backdrop-blur sm:bottom-10 sm:left-3">
+                <p className="text-[9px] uppercase tracking-[0.22em] text-[#d8c38c]">Imperio Lux · Edición selecta</p>
+                <p className="mt-2 font-serif text-lg leading-tight">Detalles que dejan huella.</p>
+              </div>
+              <div className="hero-location-badge absolute right-0 top-7 hidden rounded-full border border-[#d8c38c]/40 px-5 py-3 text-[9px] uppercase tracking-[0.22em] text-[#e4d4ad] sm:block">Bogotá · Colombia</div>
+            </div>
+          </div>
+          <a href="#catalogo" aria-label="Desplazarse al catálogo" className="absolute bottom-7 left-1/2 hidden -translate-x-1/2 items-center gap-2 text-[9px] uppercase tracking-[0.22em] text-white/50 lg:flex">
+            Descubrir <ArrowDown className="h-3.5 w-3.5" />
+          </a>
+        </section>
+
+        <section id="catalogo" className="scroll-mt-28 px-5 py-20 lg:px-8 lg:py-28">
+          <div className="mx-auto max-w-7xl">
+            <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#9b7b3e]">Curaduría Imperio Lux</p>
+                <h2 className="mt-3 font-serif text-4xl sm:text-5xl">Un universo de distinción</h2>
+              </div>
+              <p className="max-w-sm text-sm leading-6 text-[#77746c]">Explora piezas escogidas por su diseño, carácter y calidad excepcional.</p>
+            </div>
+
+            {featuredCategories.length > 0 && (
+              <div className="mt-10 flex flex-wrap gap-2">
+                {featuredCategories.map((category) => (
+                  <span key={category.id} className="border border-[#ded9cd] px-4 py-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-[#66635a]">{category.nombre}</span>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+              {featuredProducts.map((product) => {
+                const brand = marcas.find((item) => item.id === product.marca_id)?.nombre;
+                return (
+                  <article key={product.id} className="group bg-white">
+                    <div className="relative aspect-[4/5] overflow-hidden bg-[#e9e5dc]">
+                      {product.imagen ? (
+                        <img src={product.imagen} alt={product.nombre} loading="lazy" className="h-full w-full object-cover transition duration-700 group-hover:scale-105" />
+                      ) : (
+                        <div className="flex h-full items-center justify-center bg-gradient-to-br from-[#e9e5dc] to-[#c8bd9e]"><Sparkles className="h-10 w-10 text-[#9b7b3e]" /></div>
+                      )}
+                      <span className="absolute left-3 top-3 bg-[#f7f5f0]/90 px-3 py-1.5 text-[8px] font-bold uppercase tracking-[0.16em] text-[#6f5a31]">Selección Lux</span>
+                    </div>
+                    <div className="p-4">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#9b7b3e]">{brand || 'Imperio Lux'}</p>
+                      <h3 className="mt-2 min-h-[42px] font-serif text-lg leading-snug">{product.nombre}</h3>
+                      <div className="mt-4 flex items-center justify-between border-t border-[#eeeae2] pt-3">
+                        <span className="text-sm font-semibold">{formatCurrency(product.precio_venta)}</span>
+                        <a href={whatsapp} target={phone ? '_blank' : undefined} rel={phone ? 'noreferrer' : undefined} className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#8b6d35] hover:text-[#151512]">Consultar</a>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+            {featuredProducts.length === 0 && (
+              <div className="mt-8 border border-dashed border-[#d9d3c6] bg-white/60 px-6 py-12 text-center text-sm text-[#77746c]">Pronto encontrarás aquí nuestra selección de productos.</div>
+            )}
+          </div>
+        </section>
+
+        <section id="nosotros" className="scroll-mt-28 bg-[#eae6dd] px-5 py-20 lg:px-8 lg:py-28">
+          <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-2 lg:items-center">
+            <div className="store-about-panel relative min-h-[360px] overflow-hidden bg-[#26251f] p-8 text-white sm:min-h-[440px] sm:p-12">
+              <div className="store-about-glow absolute inset-0 bg-[radial-gradient(ellipse_at_70%_30%,rgba(184,150,82,0.28),transparent_55%)]" />
+              <div className="relative flex h-full min-h-[290px] flex-col justify-between border border-[#d8c38c]/30 p-7 sm:min-h-[340px] sm:p-10">
+                <p className="text-[9px] uppercase tracking-[0.3em] text-[#d8c38c]">Nuestra esencia</p>
+                <div>
+                  <p className="font-serif text-4xl leading-tight sm:text-5xl">El lujo está en cada detalle.</p>
+                  <p className="mt-5 max-w-sm text-xs leading-6 text-white/60">Una experiencia cercana para encontrar piezas con personalidad, autenticidad y belleza duradera.</p>
+                </div>
+                <span className="text-[9px] uppercase tracking-[0.22em] text-white/40">{empresa.ubicacion || 'Colombia'}</span>
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#9b7b3e]">Sobre nosotros</p>
+              <h2 className="mt-4 font-serif text-4xl leading-tight sm:text-5xl">Elegancia con una historia propia.</h2>
+              <p className="mt-6 text-sm leading-7 text-[#6f6c64]">En {empresa.nombre || 'Imperio Lux'} creemos que los objetos que elegimos hablan de quiénes somos. Por eso reunimos una colección de relojería, joyería, perfumería y accesorios donde cada pieza tiene algo especial que contar.</p>
+              <p className="mt-4 text-sm leading-7 text-[#6f6c64]">Te acompañamos con asesoría personalizada para que encuentres el detalle perfecto, para ti o para alguien importante.</p>
+              <div className="mt-9 grid gap-5 border-t border-[#d2ccbf] pt-6 sm:grid-cols-2">
+                <div className="flex gap-3"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[#9b7b3e]" /><div><p className="text-xs font-bold">Selección cuidada</p><p className="mt-1 text-xs leading-5 text-[#77746c]">Calidad y diseño en cada colección.</p></div></div>
+                <div className="flex gap-3"><Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-[#9b7b3e]" /><div><p className="text-xs font-bold">Asesoría personal</p><p className="mt-1 text-xs leading-5 text-[#77746c]">Atención cercana para elegir mejor.</p></div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="contacto" className="scroll-mt-28 bg-[#171714] px-5 py-20 text-white lg:px-8 lg:py-24">
+          <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#d8c38c]">Contáctenos</p>
+              <h2 className="mt-4 max-w-2xl font-serif text-4xl leading-tight sm:text-5xl">Tu próxima pieza favorita empieza con una conversación.</h2>
+              <a href={whatsapp} target={phone ? '_blank' : undefined} rel={phone ? 'noreferrer' : undefined} className="mt-8 inline-flex items-center gap-3 border border-[#b89652] px-6 py-4 text-[10px] font-bold uppercase tracking-[0.18em] text-[#e5d4a8] transition hover:bg-[#b89652] hover:text-white">Escríbenos <ArrowRight className="h-4 w-4" /></a>
+            </div>
+            <div className="grid gap-5 border-t border-white/15 pt-6 text-sm text-white/70 sm:grid-cols-3 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
+              <div className="flex gap-3"><MapPin className="h-4 w-4 shrink-0 text-[#d8c38c]" /><span>{empresa.direccion || empresa.ubicacion}</span></div>
+              <a href={`tel:${empresa.telefono}`} className="flex gap-3 hover:text-white"><Clock3 className="h-4 w-4 shrink-0 text-[#d8c38c]" /><span>{empresa.telefono || 'Atención personalizada'}</span></a>
+              <a href={`mailto:${empresa.correo}`} className="flex gap-3 hover:text-white"><Mail className="h-4 w-4 shrink-0 text-[#d8c38c]" /><span>{empresa.correo}</span></a>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="bg-[#11110f] px-5 py-6 text-white/45">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 text-[9px] uppercase tracking-[0.16em] sm:flex-row">
+          <span>© {new Date().getFullYear()} {empresa.nombre || 'Imperio Lux'}. Todos los derechos reservados.</span>
+          <span>Elegancia que permanece</span>
+        </div>
+      </footer>
+    </div>
+  );
+};

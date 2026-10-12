@@ -72,7 +72,7 @@ export const Navbar: React.FC = () => {
   };
 
   return (
-    <nav className="bg-slate-900 text-slate-100 h-14 flex items-center justify-between px-4 border-b border-slate-800 sticky top-0 z-30 select-none shadow-md">
+    <nav className="admin-navbar bg-slate-900 text-slate-100 h-14 flex items-center justify-between px-4 border-b border-slate-800 sticky top-0 z-30 select-none shadow-md">
       {/* Brand & Toggle */}
       <div className="flex items-center gap-3">
         <button
@@ -101,6 +101,9 @@ export const Navbar: React.FC = () => {
             </span>
           </div>
         </div>
+        <a href="/" className="hidden items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 transition hover:text-amber-300 lg:flex">
+          Ver tienda <ExternalLink className="h-3 w-3" />
+        </a>
       </div>
 
       {/* Database Status Buttons & POS Quick Action */}

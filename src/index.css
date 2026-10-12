@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap');
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -10,6 +11,145 @@ html {
 html.dark {
   color-scheme: dark;
 }
+
+html { scroll-behavior: smooth; }
+
+.storefront { font-family: 'DM Sans', sans-serif; }
+.storefront .font-serif { font-family: 'Playfair Display', Georgia, serif; }
+.store-nav-link { position: relative; transition: color 160ms ease; }
+.store-nav-link:hover { color: #9b7b3e; }
+.store-nav-link::after { position: absolute; right: 0; bottom: -7px; left: 0; height: 1px; background: #b89652; content: ''; transform: scaleX(0); transform-origin: left; transition: transform 160ms ease; }
+.store-nav-link:hover::after { transform: scaleX(1); }
+
+/* Day theme: keep the admin shell bright as well as the dashboard content. */
+html:not(.dark) .admin-navbar { background-color: #fff; color: #334155; border-color: #e2e8f0; }
+html:not(.dark) .admin-shell,
+html:not(.dark) .admin-shell main { background-color: #f3f0e8; color: #29271f; }
+html:not(.dark) .admin-navbar [class~="bg-slate-800"] { background-color: #f1f5f9; }
+html:not(.dark) .admin-navbar [class~="bg-slate-700"] { background-color: #e2e8f0; }
+html:not(.dark) .admin-navbar [class~="text-slate-100"],
+html:not(.dark) .admin-navbar [class~="text-slate-200"],
+html:not(.dark) .admin-navbar [class~="text-slate-300"] { color: #475569; }
+html:not(.dark) .admin-navbar [class~="text-white"] { color: #1e293b; }
+html:not(.dark) .admin-navbar #nav-btn-nueva-venta.text-white,
+html:not(.dark) .admin-navbar [class~="bg-red-500"].text-white { color: #fff; }
+html:not(.dark) .admin-navbar [class~="border-slate-800"],
+html:not(.dark) .admin-navbar [class~="border-slate-700"] { border-color: #e2e8f0; }
+html:not(.dark) .admin-navbar [class~="hover:bg-slate-800"]:hover { background-color: #e2e8f0; }
+
+html:not(.dark) .admin-sidebar { background-color: #fff; color: #475569; border-color: #e2e8f0; }
+html:not(.dark) .admin-sidebar [class~="text-slate-200"],
+html:not(.dark) .admin-sidebar [class~="text-slate-300"],
+html:not(.dark) .admin-sidebar [class~="text-slate-400"] { color: #475569; }
+html:not(.dark) .admin-sidebar [class~="text-slate-500"] { color: #64748b; }
+html:not(.dark) .admin-sidebar [class~="bg-slate-900"],
+html:not(.dark) .admin-sidebar [class~="bg-slate-900/60"] { background-color: #f1f5f9; }
+html:not(.dark) .admin-sidebar [class~="hover:bg-slate-900"]:hover { background-color: #f1f5f9; }
+html:not(.dark) .admin-sidebar [class~="hover:text-white"]:hover { color: #0f172a; }
+html:not(.dark) .admin-sidebar [class~="text-blue-400"] { color: #1d4ed8; }
+html:not(.dark) .admin-sidebar [class~="text-emerald-400"] { color: #047857; }
+html:not(.dark) .admin-sidebar [class~="border-slate-800"] { border-color: #e2e8f0; }
+html:not(.dark) .admin-sidebar [class~="bg-blue-600"],
+html:not(.dark) .admin-sidebar [class~="bg-emerald-600"] { background-color: #9b7b3e; }
+html:not(.dark) .admin-sidebar [class~="text-emerald-100"] { color: #725a2d; }
+
+/* A shared ivory, charcoal and champagne palette connects the admin to the storefront. */
+.admin-shell { font-family: 'DM Sans', sans-serif; }
+.admin-dashboard { color: #29271f; }
+html:not(.dark) .admin-dashboard .bg-white { background-color: #fffdf8; }
+html:not(.dark) .admin-dashboard [class~="border-slate-200"] { border-color: #ded8ca; }
+html:not(.dark) .admin-dashboard [class~="bg-slate-50"] { background-color: #f4f0e7; }
+html:not(.dark) .admin-dashboard [class~="bg-emerald-600"],
+html:not(.dark) .admin-dashboard [class~="bg-blue-600"] { background-color: #9b7b3e; }
+html:not(.dark) .admin-dashboard [class~="bg-emerald-700"],
+html:not(.dark) .admin-dashboard [class~="bg-blue-700"] { background-color: #80632f; }
+html:not(.dark) .admin-dashboard [class~="text-emerald-600"],
+html:not(.dark) .admin-dashboard [class~="text-blue-600"],
+html:not(.dark) .admin-dashboard [class~="text-amber-600"] { color: #8b6d35; }
+html:not(.dark) .admin-dashboard [class~="text-emerald-700"],
+html:not(.dark) .admin-dashboard [class~="text-blue-700"],
+html:not(.dark) .admin-dashboard [class~="text-amber-700"] { color: #725a2d; }
+html:not(.dark) .admin-dashboard .admin-dashboard-stat {
+  background: linear-gradient(145deg, #353128, #24231f);
+  color: #f7f1e6;
+  border: 1px solid rgba(184,150,82,.3);
+}
+html:not(.dark) .admin-dashboard .admin-dashboard-stat button {
+  background: rgba(184,150,82,.2);
+  border-color: rgba(184,150,82,.28);
+}
+html:not(.dark) .admin-dashboard .admin-dashboard-database {
+  background: linear-gradient(110deg, #2c2a23, #171715 68%, #30291d);
+  border-color: rgba(184,150,82,.42);
+}
+html.dark .admin-shell,
+html.dark .admin-shell main { background-color: #10100f !important; color: #eee9de; }
+html.dark .admin-dashboard .bg-white { background-color: #1b1b18 !important; }
+html.dark .admin-dashboard .bg-slate-50 { background-color: #22211d !important; }
+html.dark .admin-dashboard .admin-dashboard-stat {
+  background: linear-gradient(145deg, #292720, #171715);
+  border: 1px solid rgba(184,150,82,.35);
+}
+html.dark .admin-dashboard .admin-dashboard-stat button {
+  background: rgba(184,150,82,.18);
+  border-color: rgba(184,150,82,.26);
+}
+html.dark .admin-dashboard .admin-dashboard-database {
+  background: linear-gradient(110deg, #292720, #121211 68%, #30291d);
+  border-color: rgba(184,150,82,.42);
+}
+html.dark .admin-dashboard [class~="text-blue-600"],
+html.dark .admin-dashboard [class~="text-emerald-600"],
+html.dark .admin-dashboard [class~="text-amber-600"] { color: #c2a361; }
+html.dark .admin-sidebar [class~="bg-blue-600"],
+html.dark .admin-sidebar [class~="bg-emerald-600"] { background-color: #80632f; }
+
+/* Both storefront themes follow the shared theme control in AppContext. */
+html:not(.dark) .storefront #inicio { background-color: #e9e5dc; color: #211f19; }
+html:not(.dark) .storefront #inicio .hero-background { background-image: radial-gradient(ellipse at 70% 35%, rgba(184,150,82,.19), transparent 48%), linear-gradient(110deg,#eeeae1 0%,#e5dfd2 54%,#f3f0e9 100%); }
+html:not(.dark) .storefront #inicio [class~="text-white"]:not(.store-hero-primary) { color: #29271f; }
+html:not(.dark) .storefront #inicio [class~="text-white/65"],
+html:not(.dark) .storefront #inicio [class~="text-white/75"],
+html:not(.dark) .storefront #inicio [class~="text-white/55"],
+html:not(.dark) .storefront #inicio [class~="text-white/50"],
+html:not(.dark) .storefront #inicio [class~="text-white/40"] { color: #625e54; }
+html:not(.dark) .storefront #inicio .store-hero-primary { color: #fff; }
+html:not(.dark) .storefront #inicio .hero-location-badge { color: #715a2d; border-color: rgba(113,90,45,.35); }
+html:not(.dark) .storefront #inicio .absolute.bottom-5 { background-color: rgba(255,255,255,.88); border-color: rgba(30,29,25,.12); }
+html:not(.dark) .storefront #inicio .absolute.bottom-5 [class~="text-[#d8c38c]"] { color: #8b6d35; }
+html:not(.dark) .storefront #nosotros .store-about-panel { background-color: #ded8ca; color: #211f19; }
+html:not(.dark) .storefront #nosotros .store-about-glow { background-image: radial-gradient(ellipse at 70% 30%,rgba(184,150,82,.22),transparent 55%); }
+html:not(.dark) .storefront #nosotros .store-about-panel [class~="text-white"] { color: #29271f; }
+html:not(.dark) .storefront #nosotros .store-about-panel [class~="text-white/60"],
+html:not(.dark) .storefront #nosotros .store-about-panel [class~="text-white/40"] { color: #625e54; }
+html:not(.dark) .storefront #contacto { background-color: #e4dfd5; color: #211f19; }
+html:not(.dark) .storefront #contacto [class~="text-white/70"] { color: #625e54; }
+html:not(.dark) .storefront #contacto [class~="border-white/15"] { border-color: rgba(33,31,25,.16); }
+html:not(.dark) .storefront #contacto a { color: #725a2d; }
+html:not(.dark) .storefront #contacto a:hover { color: #211f19; }
+html:not(.dark) .storefront footer { background-color: #d9d3c8; color: #625e54; }
+
+html.dark .storefront { background-color: #10100f; color: #eee9de; }
+html.dark .storefront header { background-color: rgba(21,21,18,.96); border-color: rgba(255,255,255,.1); }
+html.dark .storefront header .font-serif { color: #f4efe5; }
+html.dark .storefront header nav { color: #c3bfb4; }
+html.dark .storefront header button[aria-label] { color: #e4d4ad; border-color: #655b43; }
+html.dark .storefront #catalogo { background-color: #10100f; color: #eee9de; }
+html.dark .storefront #catalogo article { background-color: #1b1b18; }
+html.dark .storefront #catalogo h2,
+html.dark .storefront #catalogo h3 { color: #f4efe5; }
+html.dark .storefront #catalogo .text-\[\#77746c\],
+html.dark .storefront #catalogo .text-\[\#66635a\] { color: #b2ada2; }
+html.dark .storefront #catalogo [class~="border-[#ded9cd]"] { border-color: #3d3a32; }
+html.dark .storefront #catalogo [class~="border-[#eeeae2]"] { border-color: #34332d; }
+html.dark .storefront #catalogo .bg-\[\#e9e5dc\] { background-color: #302e27; }
+html.dark .storefront #nosotros { background-color: #1a1a17; color: #eee9de; }
+html.dark .storefront #nosotros h2 { color: #f4efe5; }
+html.dark .storefront #nosotros .text-\[\#6f6c64\],
+html.dark .storefront #nosotros .text-\[\#77746c\] { color: #b2ada2; }
+html.dark .storefront #nosotros [class~="border-[#d2ccbf]"] { border-color: #3d3a32; }
+html.dark .storefront #contacto { background-color: #090909; color: #eee9de; }
+html.dark .storefront footer { background-color: #050505; }
 
 /* Estilos de Modo Noche (Dark Mode) de Alto Lujo */
 html.dark body {
@@ -114,4 +254,174 @@ html.dark .shadow-lg,
 html.dark .shadow-xl,
 html.dark .shadow-2xl {
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 8px 10px -6px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Imperio Lux visual system: porcelain, midnight blue and champagne. */
+:root {
+  --lux-ink: #152238;
+  --lux-navy: #101b2d;
+  --lux-blue: #233b5d;
+  --lux-gold: #bd9858;
+  --lux-gold-light: #dfc58f;
+  --lux-paper: #f4f6f9;
+  --lux-muted: #647184;
+}
+
+.storefront,
+.admin-shell { font-family: 'DM Sans', sans-serif; }
+.storefront .font-serif { font-family: 'Playfair Display', Georgia, serif; }
+.store-nav-link:hover { color: var(--lux-gold); }
+.store-nav-link::after { background: var(--lux-gold); }
+
+/* Public storefront, day theme */
+html:not(.dark) .storefront { background: var(--lux-paper); color: var(--lux-ink); }
+html:not(.dark) .storefront header { background-color: rgba(255,255,255,.96); border-color: #e1e6ee; color: var(--lux-ink); box-shadow: 0 8px 24px rgba(16,27,45,.05); }
+html:not(.dark) .storefront header .font-serif { color: var(--lux-ink); }
+html:not(.dark) .storefront header nav { color: #506078; }
+html:not(.dark) .storefront header button[aria-label] { color: var(--lux-blue); border-color: #d4dce6; border-radius: 999px; }
+html:not(.dark) .storefront header button[aria-label]:hover { border-color: var(--lux-gold); color: #8b692e; }
+html:not(.dark) .storefront header button:not([aria-label]) { border-radius: 999px; background-color: var(--lux-navy); }
+html:not(.dark) .storefront #inicio { background-color: var(--lux-navy); color: #fff; }
+html:not(.dark) .storefront #inicio .hero-background {
+  background-image: radial-gradient(ellipse at 78% 32%, rgba(189,152,88,.2), transparent 42%), radial-gradient(ellipse at 12% 82%, rgba(64,96,143,.28), transparent 48%), linear-gradient(112deg,#101b2d 0%,#17263d 55%,#0c1524 100%);
+}
+html:not(.dark) .storefront #inicio [class~="text-white"]:not(.store-hero-primary) { color: #fff; }
+html:not(.dark) .storefront #inicio [class~="text-white/65"] { color: #c3cbd7; }
+html:not(.dark) .storefront #inicio [class~="text-white/75"] { color: #d5dbe4; }
+html:not(.dark) .storefront #inicio [class~="text-white/55"],
+html:not(.dark) .storefront #inicio [class~="text-white/50"],
+html:not(.dark) .storefront #inicio [class~="text-white/40"] { color: #aab5c4; }
+html:not(.dark) .storefront #inicio [class~="text-[#d8c38c]"],
+html:not(.dark) .storefront #inicio .hero-location-badge { color: var(--lux-gold-light); }
+html:not(.dark) .storefront #inicio .store-hero-primary { color: #111a28; background-color: var(--lux-gold-light); border-radius: 999px; }
+html:not(.dark) .storefront #inicio .store-hero-primary:hover { background-color: #f0dba9; }
+html:not(.dark) .storefront #inicio .hero-location-badge { border-color: rgba(223,197,143,.48); }
+html:not(.dark) .storefront #inicio .absolute.bottom-5 { background-color: rgba(14,25,42,.88); border-color: rgba(223,197,143,.3); color: white; border-radius: 12px; }
+html:not(.dark) .storefront #catalogo { background: #f4f6f9; color: var(--lux-ink); }
+html:not(.dark) .storefront #catalogo article { background: #fff; border: 1px solid #e5e9ef; border-radius: 14px; overflow: hidden; box-shadow: 0 12px 32px rgba(21,34,56,.06); transition: transform .25s ease, box-shadow .25s ease; }
+html:not(.dark) .storefront #catalogo article:hover { transform: translateY(-4px); box-shadow: 0 20px 44px rgba(21,34,56,.12); }
+html:not(.dark) .storefront #catalogo h2,
+html:not(.dark) .storefront #catalogo h3 { color: var(--lux-ink); }
+html:not(.dark) .storefront #catalogo [class~="text-[#77746c]"],
+html:not(.dark) .storefront #catalogo [class~="text-[#66635a]"] { color: var(--lux-muted); }
+html:not(.dark) .storefront #catalogo [class~="text-[#9b7b3e]"],
+html:not(.dark) .storefront #catalogo a { color: #96723a; }
+html:not(.dark) .storefront #catalogo [class~="border-[#ded9cd]"] { border-color: #dce2ea; background: #fff; border-radius: 999px; }
+html:not(.dark) .storefront #catalogo [class~="border-[#eeeae2]"] { border-color: #e8ecf1; }
+html:not(.dark) .storefront #catalogo [class~="bg-[#e9e5dc]"] { background-color: #e6ebf1; }
+html:not(.dark) .storefront #nosotros { background: #e9edf3; color: var(--lux-ink); }
+html:not(.dark) .storefront #nosotros .store-about-panel { background-color: #15233a; border-radius: 18px; box-shadow: 0 24px 55px rgba(16,27,45,.18); }
+html:not(.dark) .storefront #nosotros .store-about-glow { background-image: radial-gradient(ellipse at 75% 24%,rgba(189,152,88,.23),transparent 52%), radial-gradient(ellipse at 12% 92%,rgba(58,89,132,.28),transparent 58%); }
+html:not(.dark) .storefront #nosotros .store-about-panel [class~="text-white"] { color: #fff; }
+html:not(.dark) .storefront #nosotros .store-about-panel [class~="text-white/60"],
+html:not(.dark) .storefront #nosotros .store-about-panel [class~="text-white/40"] { color: #b9c3d1; }
+html:not(.dark) .storefront #nosotros .store-about-panel [class~="text-[#d8c38c]"],
+html:not(.dark) .storefront #nosotros [class~="text-[#9b7b3e]"] { color: #bd9858; }
+html:not(.dark) .storefront #nosotros [class~="text-[#6f6c64]"],
+html:not(.dark) .storefront #nosotros [class~="text-[#77746c]"] { color: #5b687b; }
+html:not(.dark) .storefront #nosotros [class~="border-[#d2ccbf]"] { border-color: #cdd5df; }
+html:not(.dark) .storefront #contacto { background: #101b2d; color: #fff; }
+html:not(.dark) .storefront #contacto [class~="text-white/70"] { color: #c3cbd7; }
+html:not(.dark) .storefront #contacto [class~="border-white/15"] { border-color: rgba(255,255,255,.18); }
+html:not(.dark) .storefront #contacto [class~="text-[#d8c38c]"] { color: var(--lux-gold-light); }
+html:not(.dark) .storefront #contacto a { color: var(--lux-gold-light); }
+html:not(.dark) .storefront #contacto a:hover { color: #fff; }
+html:not(.dark) .storefront #contacto a.mt-8:hover { background: var(--lux-gold); }
+html:not(.dark) .storefront footer { background: #0b1422; color: #9aa7b9; }
+
+/* Public storefront, night theme */
+html.dark .storefront { background: #0b1321; color: #eef2f7; }
+html.dark .storefront header { background-color: rgba(13,22,37,.96); border-color: #27354a; }
+html.dark .storefront header .font-serif { color: #f2f4f8; }
+html.dark .storefront header nav { color: #c1cad6; }
+html.dark .storefront header button[aria-label] { color: #e0c78f; border-color: #536078; border-radius: 999px; }
+html.dark .storefront #inicio .hero-background { background-image: radial-gradient(ellipse at 78% 32%, rgba(189,152,88,.18), transparent 42%), radial-gradient(ellipse at 12% 82%, rgba(64,96,143,.24), transparent 48%), linear-gradient(112deg,#0b1321 0%,#142138 55%,#09111e 100%); }
+html.dark .storefront #inicio [class~="text-white/65"] { color: #c3cbd7; }
+html.dark .storefront #catalogo { background: #0d1727; color: #eef2f7; }
+html.dark .storefront #catalogo article { background: #152238; border: 1px solid #293951; border-radius: 14px; overflow: hidden; box-shadow: 0 12px 32px rgba(0,0,0,.2); }
+html.dark .storefront #catalogo h2,
+html.dark .storefront #catalogo h3 { color: #f1f4f8; }
+html.dark .storefront #catalogo [class~="text-[#77746c]"],
+html.dark .storefront #catalogo [class~="text-[#66635a]"] { color: #aab6c5; }
+html.dark .storefront #catalogo [class~="border-[#ded9cd]"] { border-color: #34445c; background: #17253a; }
+html.dark .storefront #catalogo [class~="border-[#eeeae2]"] { border-color: #2b3a50; }
+html.dark .storefront #catalogo [class~="bg-[#e9e5dc]"] { background-color: #25354b; }
+html.dark .storefront #nosotros { background: #111e31; color: #eef2f7; }
+html.dark .storefront #nosotros .store-about-panel { background-color: #1b2c45; border-radius: 18px; }
+html.dark .storefront #nosotros .store-about-glow { background-image: radial-gradient(ellipse at 75% 24%,rgba(189,152,88,.2),transparent 52%), radial-gradient(ellipse at 12% 92%,rgba(58,89,132,.3),transparent 58%); }
+html.dark .storefront #nosotros .store-about-panel [class~="text-white/60"],
+html.dark .storefront #nosotros .store-about-panel [class~="text-white/40"] { color: #b9c3d1; }
+html.dark .storefront #nosotros [class~="text-[#6f6c64]"],
+html.dark .storefront #nosotros [class~="text-[#77746c]"] { color: #b1bdcd; }
+html.dark .storefront #nosotros [class~="border-[#d2ccbf]"] { border-color: #35465f; }
+html.dark .storefront #contacto { background: #080f1b; color: #eef2f7; }
+html.dark .storefront #contacto [class~="text-white/70"] { color: #b5c0cf; }
+html.dark .storefront #contacto [class~="border-white/15"] { border-color: rgba(255,255,255,.16); }
+html.dark .storefront footer { background: #060c15; }
+
+/* Admin dashboard shares the same palette and a calmer, more legible surface. */
+.admin-shell { font-family: 'DM Sans', sans-serif; }
+html:not(.dark) .admin-shell,
+html:not(.dark) .admin-shell main { background: #f2f5f9 !important; color: #152238; }
+html:not(.dark) .admin-navbar { background: #101b2d; border-color: #263750; color: #f1f4f8; }
+html:not(.dark) .admin-navbar [class~="text-slate-100"],
+html:not(.dark) .admin-navbar [class~="text-slate-200"],
+html:not(.dark) .admin-navbar [class~="text-slate-300"],
+html:not(.dark) .admin-navbar [class~="text-white"] { color: #edf1f6; }
+html:not(.dark) .admin-navbar [class~="bg-slate-800"] { background: #1b2b43; }
+html:not(.dark) .admin-navbar [class~="border-slate-800"],
+html:not(.dark) .admin-navbar [class~="border-slate-700"] { border-color: #34465e; }
+html:not(.dark) .admin-sidebar { background: #fff; color: #506078; border-color: #e0e6ee; }
+html:not(.dark) .admin-sidebar [class~="text-slate-200"],
+html:not(.dark) .admin-sidebar [class~="text-slate-300"] { color: #506078; }
+html:not(.dark) .admin-sidebar [class~="text-slate-500"] { color: #7a8798; }
+html:not(.dark) .admin-sidebar [class~="bg-slate-900"],
+html:not(.dark) .admin-sidebar [class~="bg-slate-900/60"] { background: #f2f5f9; }
+html:not(.dark) .admin-sidebar [class~="bg-blue-600"],
+html:not(.dark) .admin-sidebar [class~="bg-emerald-600"] { background: #203858; }
+html:not(.dark) .admin-sidebar [class~="text-emerald-100"] { color: #fff; }
+html:not(.dark) .admin-sidebar [class~="text-blue-400"],
+html:not(.dark) .admin-sidebar [class~="text-emerald-400"] { color: #bd9858; }
+html:not(.dark) .admin-dashboard { color: #152238; }
+html:not(.dark) .admin-dashboard .bg-white { background: #fff; }
+html:not(.dark) .admin-dashboard [class~="border-slate-200"] { border-color: #e0e6ee; }
+html:not(.dark) .admin-dashboard [class~="bg-slate-50"] { background: #f5f7fa; }
+html:not(.dark) .admin-dashboard [class~="text-blue-600"],
+html:not(.dark) .admin-dashboard [class~="text-emerald-600"],
+html:not(.dark) .admin-dashboard [class~="text-amber-600"],
+html:not(.dark) .admin-dashboard [class~="text-blue-700"],
+html:not(.dark) .admin-dashboard [class~="text-emerald-700"],
+html:not(.dark) .admin-dashboard [class~="text-amber-700"] { color: #94713b; }
+html:not(.dark) .admin-dashboard .admin-dashboard-stat {
+  background: linear-gradient(145deg,#1b2c45,#101b2d);
+  border: 1px solid rgba(189,152,88,.36);
+  border-radius: 14px;
+  box-shadow: 0 10px 24px rgba(16,27,45,.12);
+}
+html:not(.dark) .admin-dashboard .admin-dashboard-stat button { background: rgba(189,152,88,.16); border-color: rgba(189,152,88,.25); }
+html:not(.dark) .admin-dashboard .admin-dashboard-database {
+  background: linear-gradient(110deg,#17263d,#101b2d 65%,#26354a);
+  border-color: rgba(189,152,88,.45);
+  border-radius: 14px;
+}
+html.dark .admin-shell,
+html.dark .admin-shell main { background: #0b1321 !important; color: #edf1f6; }
+html.dark .admin-navbar { background: #0b1321; border-color: #23334a; }
+html.dark .admin-sidebar { background: #101b2d; border-color: #263750; }
+html.dark .admin-sidebar [class~="bg-blue-600"],
+html.dark .admin-sidebar [class~="bg-emerald-600"] { background: #bd9858; color: #101b2d; }
+html.dark .admin-sidebar [class~="bg-slate-900"],
+html.dark .admin-sidebar [class~="bg-slate-900/60"] { background: #17263d; }
+html.dark .admin-dashboard .bg-white { background: #142138 !important; }
+html.dark .admin-dashboard .bg-slate-50 { background: #192941 !important; }
+html.dark .admin-dashboard .admin-dashboard-stat { background: linear-gradient(145deg,#1b2c45,#101b2d); border: 1px solid rgba(189,152,88,.34); border-radius: 14px; }
+html.dark .admin-dashboard .admin-dashboard-stat button { background: rgba(189,152,88,.17); border-color: rgba(189,152,88,.25); }
+html.dark .admin-dashboard .admin-dashboard-database { background: linear-gradient(110deg,#17263d,#0b1321 65%,#26354a); border-color: rgba(189,152,88,.42); }
+html.dark .admin-dashboard [class~="text-blue-600"],
+html.dark .admin-dashboard [class~="text-emerald-600"],
+html.dark .admin-dashboard [class~="text-amber-600"] { color: #dfc58f; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .storefront section[id] { scroll-margin-top: 6rem; }
+  .storefront a, .storefront button, .admin-shell button { transition-duration: 180ms; }
 }

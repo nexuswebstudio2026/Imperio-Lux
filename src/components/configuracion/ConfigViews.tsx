@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Breadcrumb } from '../layout/Breadcrumb';
 import { Empleado } from '../../types';
+import { buildRegisteredUsers, type RegisteredUser } from '../../lib/registeredUsers';
 import {
   Building2,
   Save,
@@ -14,6 +15,9 @@ import {
   ShieldCheck,
   Activity,
   User,
+  Users,
+  Search,
+  CloudUpload,
   Key,
 } from 'lucide-react';
 
@@ -465,6 +469,143 @@ export const EmpleadoListView: React.FC = () => {
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+/* ================= USUARIOS REGISTRADOS ================= */
+export const RegisteredUsersView: React.FC = () => {
+  const { users, empleados, clientes, uploadSingleTableToGoogleSheets } = useApp();
+  const [filter, setFilter] = useState<'Todos' | RegisteredUser['tipo_usuario']>('Todos');
+  const [search, setSearch] = useState('');
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
+  const registeredUsers = buildRegisteredUsers(users, empleados, clientes);
+  const normalizedSearch = search.trim().toLocaleLowerCase('es');
+  const filteredUsers = registeredUsers.filter((user) => {
+    const matchesType = filter === 'Todos' || user.tipo_usuario === filter;
+    const searchable = [user.nombre, user.email, user.cargo, user.rol]
+      .join(' ')
+      .toLocaleLowerCase('es');
+    return matchesType && (!normalizedSearch || searchable.includes(normalizedSearch));
+  });
+  const counts = {
+    Administrador: registeredUsers.filter((user) => user.tipo_usuario === 'Administrador').length,
+    Empleado: registeredUsers.filter((user) => user.tipo_usuario === 'Empleado').length,
+    Cliente: registeredUsers.filter((user) => user.tipo_usuario === 'Cliente').length,
+  };
+  const syncUsersSheet = async () => {
+    setIsSyncing(true);
+    setSyncMessage('');
+    try {
+      const result = await uploadSingleTableToGoogleSheets('Usuarios', registeredUsers);
+      setSyncMessage(`Google Sheets actualizado con ${result.count} registros.`);
+    } catch (error) {
+      setSyncMessage(error instanceof Error ? error.message : 'No se pudo actualizar Google Sheets.');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  return (
+    <div>
+      <Breadcrumb
+        title="Usuarios Registrados"
+        items={[{ label: 'Otros' }, { label: 'Usuarios Registrados' }]}
+        actions={
+          <button
+            type="button"
+            onClick={syncUsersSheet}
+            disabled={isSyncing}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#152238] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#233b5d] disabled:cursor-wait disabled:opacity-60 dark:bg-[#bd9858] dark:text-[#101b2d] dark:hover:bg-[#dfc58f]"
+          >
+            <CloudUpload className="h-4 w-4" />
+            {isSyncing ? 'Sincronizando…' : 'Actualizar hoja Usuarios'}
+          </button>
+        }
+      />
+      {syncMessage && (
+        <p role="status" className="mb-4 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+          {syncMessage}
+        </p>
+      )}
+
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {([
+          ['Todos', registeredUsers.length],
+          ['Administrador', counts.Administrador],
+          ['Empleado', counts.Empleado],
+          ['Cliente', counts.Cliente],
+        ] as const).map(([type, count]) => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => setFilter(type)}
+            className={`rounded-xl border p-4 text-left transition-colors ${filter === type
+              ? 'border-[#bd9858] bg-[#bd9858]/10 shadow-sm'
+              : 'border-slate-200 bg-white hover:border-[#bd9858]/60 dark:border-slate-700 dark:bg-slate-900'}`}
+          >
+            <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{type === 'Todos' ? 'Registros' : type === 'Administrador' ? 'Administradores' : type === 'Empleado' ? 'Empleados' : 'Clientes'}</span>
+            <span className="mt-1 block text-2xl font-bold text-slate-900 dark:text-white">{count}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700 dark:bg-slate-800">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+            <Users className="h-4 w-4 text-[#bd9858]" />
+            <span>Directorio de usuarios</span>
+            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-600 dark:bg-slate-700 dark:text-slate-300">{filteredUsers.length}</span>
+          </div>
+          <label className="relative block w-full sm:max-w-xs">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar por nombre, correo o documento"
+              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-xs text-slate-800 outline-none transition focus:border-[#bd9858] focus:ring-2 focus:ring-[#bd9858]/20 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+            />
+          </label>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-left text-xs text-slate-600 dark:text-slate-300">
+            <thead className="bg-slate-100 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              <tr>
+                <th className="px-4 py-3">Nombre</th>
+                <th className="px-4 py-3">Tipo de usuario</th>
+                <th className="px-4 py-3">Correo</th>
+                <th className="px-4 py-3">Cargo / rol</th>
+                <th className="px-4 py-3 text-center">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {filteredUsers.map((user) => (
+                <tr key={user.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60">
+                  <td className="px-4 py-3 font-semibold text-slate-900 dark:text-slate-100">{user.nombre || 'Sin nombre'}</td>
+                  <td className="px-4 py-3">
+                    <span className="rounded-full border border-[#bd9858]/30 bg-[#bd9858]/10 px-2.5 py-1 text-[10px] font-bold text-[#8b692e] dark:text-[#dfc58f]">{user.tipo_usuario}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="text-slate-700 dark:text-slate-200">{user.email || '—'}</div>
+                  </td>
+                  <td className="px-4 py-3">{user.cargo || user.rol || '—'}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${user.estado
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
+                      {user.estado ? 'Activo' : 'Inactivo'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {filteredUsers.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-500">No hay usuarios que coincidan con la búsqueda.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };

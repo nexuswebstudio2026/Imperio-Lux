@@ -69,6 +69,7 @@ import {
   validateSpreadsheetConnection,
   type ConnectionValidationResult,
 } from '../lib/sheets';
+import { buildRegisteredUsers } from '../lib/registeredUsers';
 import {
   exportAllTablesToExcel,
   exportSingleTableToExcel,
@@ -99,6 +100,7 @@ export type AppTab =
   | 'clientes'
   | 'proveedores'
   | 'empleados'
+  | 'usuarios_registrados'
   | 'empresa'
   | 'users'
   | 'roles'
@@ -703,6 +705,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         { name: 'clientes', data: clientes.length > 0 ? clientes : initialClientes },
         { name: 'proveedores', data: proveedores.length > 0 ? proveedores : initialProveedores },
         { name: 'empleados', data: empleados.length > 0 ? empleados : initialEmpleados },
+        { name: 'Usuarios', data: buildRegisteredUsers(
+          users.length > 0 ? users : initialUsers,
+          empleados.length > 0 ? empleados : initialEmpleados,
+          clientes.length > 0 ? clientes : initialClientes
+        ) },
         { name: 'ventas', data: ventas.length > 0 ? ventas : initialVentas },
         { name: 'compras', data: compras.length > 0 ? compras : initialCompras },
         { name: 'cajas', data: cajas.length > 0 ? cajas : initialCajas },
@@ -737,7 +744,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       setGoogleSheetsStatus('connected');
-      const msg = `¡Éxito! Se actualizaron las 21 tablas (${totalRecordsUploaded} registros) en Google Sheets.`;
+      const msg = `¡Éxito! Se actualizaron las 22 tablas (${totalRecordsUploaded} registros) en Google Sheets.`;
       setGoogleSheetsMessage(msg);
       onProgress?.(msg, 100);
       return { success: true, count: totalRecordsUploaded, message: msg };
@@ -923,7 +930,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         onProgress?.(`Se encontraron ${remoteRowsCount} productos en Google Sheets. Descargando catálogo...`, 30);
         return downloadAllFromGoogleSheets(onProgress);
       } else {
-        onProgress?.('La hoja de cálculo está lista. Sembrando todas las 21 tablas iniciales...', 30);
+        onProgress?.('La hoja de cálculo está lista. Sembrando las 22 pestañas iniciales...', 30);
         return uploadAllToGoogleSheets(onProgress);
       }
     },
@@ -963,6 +970,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return [empresa || initialEmpresa];
         case 'users':
           return users.length > 0 ? users : initialUsers;
+        case 'Usuarios':
+          return buildRegisteredUsers(
+            users.length > 0 ? users : initialUsers,
+            empleados.length > 0 ? empleados : initialEmpleados,
+            clientes.length > 0 ? clientes : initialClientes
+          );
         case 'roles':
           return roles.length > 0 ? roles : initialRoles;
         case 'monedas':
@@ -1044,6 +1057,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       { name: 'clientes', label: 'Clientes Registrados', data: clientes.length > 0 ? clientes : initialClientes },
       { name: 'proveedores', label: 'Proveedores Comerciales', data: proveedores.length > 0 ? proveedores : initialProveedores },
       { name: 'empleados', label: 'Personal y Empleados', data: empleados.length > 0 ? empleados : initialEmpleados },
+      { name: 'Usuarios', label: 'Directorio de Usuarios Registrados', data: buildRegisteredUsers(
+        users.length > 0 ? users : initialUsers,
+        empleados.length > 0 ? empleados : initialEmpleados,
+        clientes.length > 0 ? clientes : initialClientes
+      ) },
       { name: 'ventas', label: 'Ventas y Facturación', data: ventas.length > 0 ? ventas : initialVentas },
       { name: 'compras', label: 'Compras a Proveedores', data: compras.length > 0 ? compras : initialCompras },
       { name: 'cajas', label: 'Sesiones de Caja', data: cajas.length > 0 ? cajas : initialCajas },

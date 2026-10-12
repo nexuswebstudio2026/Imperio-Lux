@@ -222,8 +222,8 @@ export const WeeklySalesChart: React.FC<WeeklySalesChartProps> = ({
               >
                 <defs>
                   <linearGradient id="colorWeeklySales" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0} />
+                    <stop offset="5%" stopColor="#b89652" stopOpacity={0.35} />
+                    <stop offset="95%" stopColor="#b89652" stopOpacity={0.0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -245,12 +245,12 @@ export const WeeklySalesChart: React.FC<WeeklySalesChartProps> = ({
                 <Area
                   type="monotone"
                   dataKey="total"
-                  stroke="#2563eb"
+                  stroke="#b89652"
                   strokeWidth={2.5}
                   fillOpacity={1}
                   fill="url(#colorWeeklySales)"
-                  dot={{ r: 3.5, fill: '#2563eb', strokeWidth: 1.5, stroke: '#fff' }}
-                  activeDot={{ r: 5.5, fill: '#1d4ed8', stroke: '#fff', strokeWidth: 2 }}
+                  dot={{ r: 3.5, fill: '#b89652', strokeWidth: 1.5, stroke: '#fff' }}
+                  activeDot={{ r: 5.5, fill: '#9b7b3e', stroke: '#fff', strokeWidth: 2 }}
                 />
               </AreaChart>
             ) : (
@@ -276,7 +276,7 @@ export const WeeklySalesChart: React.FC<WeeklySalesChartProps> = ({
                 <Tooltip content={<CustomWeeklyTooltip simboloMoneda={simboloMoneda} />} />
                 <Bar
                   dataKey="total"
-                  fill="#2563eb"
+                  fill="#b89652"
                   radius={[4, 4, 0, 0]}
                   maxBarSize={40}
                 />
@@ -424,7 +424,7 @@ export const DashboardView: React.FC = () => {
   }, [productos]);
 
   return (
-    <div>
+    <div className="admin-dashboard">
       <Breadcrumb
         title="Panel Principal"
         items={[{ label: 'Panel' }]}
@@ -687,7 +687,7 @@ export const DashboardView: React.FC = () => {
       )}
 
       {/* Módulo de Base de Datos en Google Sheets */}
-      <div className="mb-5 bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 border border-emerald-800/60 rounded-xl p-4 shadow-sm text-white flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="admin-dashboard-database mb-5 bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 border border-emerald-800/60 rounded-xl p-4 shadow-sm text-white flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-start sm:items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center shrink-0">
             <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
@@ -699,10 +699,10 @@ export const DashboardView: React.FC = () => {
               </h3>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                21 Tablas Sincronizadas
+                22 Hojas Sincronizadas
               </span>
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-500/30">
-                21 Hojas
+                22 Hojas
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-0.5">
@@ -735,7 +735,7 @@ export const DashboardView: React.FC = () => {
       {/* 4 SB Admin Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {/* Clientes */}
-        <div className="bg-blue-600 text-white rounded-lg shadow-sm overflow-hidden flex flex-col justify-between">
+        <div className="admin-dashboard-stat bg-blue-600 text-white rounded-lg shadow-sm overflow-hidden flex flex-col justify-between">
           <div className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold opacity-90">
@@ -756,7 +756,7 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Compras */}
-        <div className="bg-slate-700 text-white rounded-lg shadow-sm overflow-hidden flex flex-col justify-between">
+        <div className="admin-dashboard-stat bg-slate-700 text-white rounded-lg shadow-sm overflow-hidden flex flex-col justify-between">
           <div className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold opacity-90">
@@ -777,7 +777,7 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Productos */}
-        <div className="bg-emerald-600 text-white rounded-lg shadow-sm overflow-hidden flex flex-col justify-between">
+        <div className="admin-dashboard-stat bg-emerald-600 text-white rounded-lg shadow-sm overflow-hidden flex flex-col justify-between">
           <div className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold opacity-90">
@@ -798,7 +798,7 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Usuarios */}
-        <div className="bg-cyan-600 text-white rounded-lg shadow-sm overflow-hidden flex flex-col justify-between">
+        <div className="admin-dashboard-stat bg-cyan-600 text-white rounded-lg shadow-sm overflow-hidden flex flex-col justify-between">
           <div className="p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm font-semibold opacity-90">
