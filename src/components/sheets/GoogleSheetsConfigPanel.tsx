@@ -561,7 +561,7 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
           </div>
 
           <div className="shrink-0 flex items-center gap-3 bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
-            <GoogleSignInButton />
+            <GoogleSignInButton onClick={signInWithGoogleSheets} loading={googleSheetsStatus === 'connecting'} />
           </div>
         </div>
       </div>

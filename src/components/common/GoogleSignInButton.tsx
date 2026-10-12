@@ -12,13 +12,13 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
   onClick,
   disabled = false,
   loading = false,
-  label = 'Iniciar sesión con Google',
+  label = 'Verificar conexión del servidor',
   className = '',
 }) => {
   return (
     <button
       type="button"
-      id="btn-google-sign-in"
+      id="btn-check-sheets-connection"
       onClick={onClick}
       disabled={disabled || loading}
       className={`relative inline-flex items-center justify-center gap-3 px-4 py-2.5 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 shadow-xs hover:shadow-sm transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
@@ -75,7 +75,7 @@ export const GoogleSignInButton: React.FC<GoogleSignInButtonProps> = ({
         )}
       </div>
       <span className="font-medium tracking-normal text-slate-800 dark:text-slate-800">
-        {loading ? 'Conectando...' : label}
+        {loading ? 'Verificando cuenta de servicio...' : label}
       </span>
     </button>
   );

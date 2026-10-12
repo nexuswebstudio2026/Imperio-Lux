@@ -439,10 +439,10 @@ export const DatabaseView: React.FC = () => {
   const handleSheetsSyncBidirectional = async () => {
     if (!googleAccessToken && !googleUser) {
       try {
-        setSheetsStatusMsg('Solicitando inicio de sesión con Google...');
+        setSheetsStatusMsg('Verificando la cuenta de servicio del servidor...');
         const authRes = await signInWithGoogleSheets();
         if (!authRes?.accessToken) {
-          setSheetsStatusMsg('Se requiere iniciar sesión con Google para sincronizar con la hoja de cálculo.');
+          setSheetsStatusMsg('No se pudo verificar la cuenta de servicio de Google en el servidor.');
           setSheetsToast(true);
           return;
         }
@@ -473,10 +473,10 @@ export const DatabaseView: React.FC = () => {
     setShowConfirmSheetsUpload(false);
     if (!googleAccessToken && !googleUser) {
       try {
-        setSheetsStatusMsg('Solicitando inicio de sesión con Google...');
+        setSheetsStatusMsg('Verificando la cuenta de servicio del servidor...');
         const authRes = await signInWithGoogleSheets();
         if (!authRes?.accessToken) {
-          setSheetsStatusMsg('Se requiere iniciar sesión con Google para escribir en la hoja de cálculo.');
+          setSheetsStatusMsg('No se pudo verificar la cuenta de servicio de Google en el servidor.');
           setSheetsToast(true);
           return;
         }
@@ -549,7 +549,7 @@ export const DatabaseView: React.FC = () => {
       try {
         const authRes = await signInWithGoogleSheets();
         if (!authRes?.accessToken) {
-          setSheetsStatusMsg('Se requiere iniciar sesión con Google.');
+          setSheetsStatusMsg('No se pudo verificar la cuenta de servicio de Google en el servidor.');
           setSheetsToast(true);
           return;
         }

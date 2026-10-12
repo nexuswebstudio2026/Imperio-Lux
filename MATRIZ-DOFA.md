@@ -12,7 +12,7 @@ Evaluación basada en el código disponible el 9 de octubre de 2026.
 | Debilidades | Amenazas |
 | --- | --- |
 | La lógica actual guarda gran parte del estado en `localStorage`; esto no coordina usuarios ni equipos y depende del navegador/dispositivo. | Google Sheets tiene límites de cuota, concurrencia y consistencia; no reemplaza una base relacional para alto volumen ni transacciones de caja. |
-| La credencial de servicio no existía como integración de servidor y el código previo dependía de Firebase/OAuth en el cliente. | Exponer la clave privada, compartir la hoja incorrectamente o dejar la API abierta puede filtrar/modificar toda la información comercial. |
+| La cuenta de servicio y el proxy de Google Sheets ahora se ejecutan en el servidor; la clave privada no se entrega al navegador. | Exponer la clave privada, compartir la hoja incorrectamente o dejar la API abierta puede filtrar/modificar toda la información comercial. |
 | Las operaciones de sincronización completas sobrescriben pestañas y pueden causar pérdida de cambios concurrentes. | Pérdida de conexión, cambios manuales en encabezados/filas o eliminación accidental pueden dejar datos inconsistentes. |
 | No había manifiesto PWA ni estrategia offline instalable en la aplicación web. | Datos personales y contables requieren controles de acceso, copias verificadas, políticas de retención y revisión normativa local. |
 

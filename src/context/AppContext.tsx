@@ -319,7 +319,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setGoogleUser(null);
         setGoogleAccessToken(null);
         setGoogleSheetsStatus('idle');
-        setGoogleSheetsMessage('Inicia sesión con Google para sincronizar con Google Sheets');
+        setGoogleSheetsMessage('Configura la cuenta de servicio de Google en el servidor para conectar Google Sheets');
       }
     );
     return () => unsub();
@@ -327,7 +327,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const signInWithGoogleSheets = useCallback(async () => {
     setGoogleSheetsStatus('connecting');
-    setGoogleSheetsMessage('Iniciando sesión con Google...');
+    setGoogleSheetsMessage('Verificando la cuenta de servicio del servidor...');
     try {
       const res = await libGoogleSignIn();
       if (res) {
@@ -340,7 +340,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return null;
     } catch (err: any) {
       setGoogleSheetsStatus('error');
-      setGoogleSheetsMessage(`Error de autenticación: ${err?.message || 'Cancelado'}`);
+      setGoogleSheetsMessage(`No se pudo verificar la cuenta de servicio: ${err?.message || 'Error desconocido'}`);
       throw err;
     }
   }, []);
@@ -350,7 +350,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGoogleUser(null);
     setGoogleAccessToken(null);
     setGoogleSheetsStatus('idle');
-    setGoogleSheetsMessage('Sesión cerrada de Google');
+    setGoogleSheetsMessage('Conexión con la cuenta de servicio desconectada en esta sesión');
   }, []);
 
   const validateSheetsConnection = useCallback(
@@ -372,7 +372,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const failedResult: ConnectionValidationResult = {
           success: false,
           spreadsheetId: targetId,
-          error: 'No se pudo obtener la sesión de Google. Por favor, inicia sesión con tu cuenta de Google para validar el acceso a la hoja de cálculo.',
+          error: 'El servidor no pudo validar la cuenta de servicio de Google para acceder a la hoja de cálculo.',
         };
         setSheetsValidationData(failedResult);
         setIsValidatingSheets(false);
@@ -686,7 +686,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         token = res?.accessToken || null;
       }
       if (!token) {
-        throw new Error('Se requiere iniciar sesión con Google para acceder a Google Sheets');
+        throw new Error('El servidor no tiene una cuenta de servicio configurada para acceder a Google Sheets.');
       }
 
       setGoogleSheetsStatus('syncing');
@@ -780,7 +780,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         token = res?.accessToken || null;
       }
       if (!token) {
-        throw new Error('Se requiere iniciar sesión con Google para descargar datos de Google Sheets');
+        throw new Error('El servidor no tiene una cuenta de servicio configurada para descargar datos de Google Sheets.');
       }
 
       setGoogleSheetsStatus('syncing');
@@ -906,7 +906,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         token = res?.accessToken || null;
       }
       if (!token) {
-        throw new Error('Se requiere iniciar sesión con Google para sincronizar');
+        throw new Error('El servidor no tiene una cuenta de servicio configurada para sincronizar con Google Sheets.');
       }
 
       onProgress?.('Analizando contenido de la hoja de cálculo...', 15);
@@ -1016,7 +1016,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         token = res?.accessToken || null;
       }
       if (!token) {
-        throw new Error('Se requiere iniciar sesión con Google para acceder a Google Sheets');
+        throw new Error('El servidor no tiene una cuenta de servicio configurada para acceder a Google Sheets.');
       }
 
       onProgress?.(`Verificando pestaña "${tableName}" en Google Sheets...`, 20);

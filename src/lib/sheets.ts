@@ -233,7 +233,6 @@ export async function fetchSpreadsheetMetadata(
   const url = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}?fields=properties.title,sheets.properties`;
   const res = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
   });
@@ -288,7 +287,6 @@ export async function ensureSheetTabsExist(
   const res = await fetch(url, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ requests }),
@@ -442,7 +440,6 @@ export async function writeTableToSheet(
   await fetch(clearUrl, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({}),
@@ -453,7 +450,6 @@ export async function writeTableToSheet(
   const res = await fetch(writeUrl, {
     method: 'PUT',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ values }),
@@ -480,7 +476,6 @@ export async function readTableFromSheet<T = any>(
   const url = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`;
   const res = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
   });
@@ -509,7 +504,7 @@ export async function appendRowToSheet(
   // Read header row to match order
   const getHeaderUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!1:1`;
   const headerRes = await fetch(getHeaderUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: {},
   });
 
   let headers: string[] = [];
@@ -536,7 +531,6 @@ export async function appendRowToSheet(
   await fetch(appendUrl, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ values: [rowValues] }),
@@ -575,7 +569,6 @@ export async function createDriveBackupSpreadsheet(
   const createRes = await fetch(createUrl, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({

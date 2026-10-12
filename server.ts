@@ -150,6 +150,19 @@ app.get('/api/sheets/status', async (_req, res) => {
   catch (error) { res.status(503).json({ connected: false, error: error instanceof Error ? error.message : 'Configuración de Google incompleta' }); }
 });
 
+// Stable database health endpoint for the client. Credentials stay on this server;
+// the browser receives connection metadata only, never a Google access token.
+app.get('/api/database/status', async (_req, res) => {
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || await readFile(process.env.GOOGLE_SERVICE_ACCOUNT_FILE || path.join(root, 'service-account.json'), 'utf8'));
+    const spreadsheetId = String(_req.query.spreadsheetId || process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId);
+    const result = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=spreadsheetId,properties.title`);
+    res.json({ connected: true, provider: 'google-sheets', spreadsheetId, spreadsheetTitle: result.properties?.title || '', serviceAccount: credentials.client_email });
+  } catch (error) {
+    res.status(503).json({ connected: false, provider: 'google-sheets', error: error instanceof Error ? error.message : 'No se pudo conectar con Google Sheets.' });
+  }
+});
+
 app.get('/api/backups/config', (_req, res) => res.json(publicBackupConfig()));
 
 app.post('/api/backups/config', async (req, res) => {
