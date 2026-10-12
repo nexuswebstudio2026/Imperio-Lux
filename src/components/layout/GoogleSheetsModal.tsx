@@ -16,7 +16,6 @@ import {
   Sparkles,
   Layers,
   Lock,
-  LogOut,
   Info,
   HardDrive,
 } from 'lucide-react';
@@ -45,7 +44,6 @@ export const GoogleSheetsModal: React.FC = () => {
     activeDatabaseEngine,
     setActiveDatabaseEngine,
     signInWithGoogleSheets,
-    signOutGoogleSheets,
     uploadAllToGoogleSheets,
     downloadAllFromGoogleSheets,
     syncBidirectionalGoogleSheets,
@@ -393,16 +391,7 @@ export const GoogleSheetsModal: React.FC = () => {
                   </div>
 
                   <div>
-                    {googleUser ? (
-                      <button
-                        type="button"
-                        onClick={signOutGoogleSheets}
-                        className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-lg transition-colors cursor-pointer"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        <span>Desconectar en esta sesión</span>
-                      </button>
-                    ) : (
+                    {!googleUser && (
                       <GoogleSignInButton onClick={signInWithGoogleSheets} />
                     )}
                   </div>

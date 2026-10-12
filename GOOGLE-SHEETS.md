@@ -8,7 +8,7 @@ La aplicación usa una cuenta de servicio desde el servidor. La clave privada no
 4. Configura `GOOGLE_SERVICE_ACCOUNT_FILE` (ruta a la clave) o `GOOGLE_SERVICE_ACCOUNT_JSON` en el servidor. Opcionalmente, configura `GOOGLE_SHEETS_ID`.
 5. Inicia el servidor con `npm run dev` para desarrollo y `npm start` en producción (`NODE_ENV=production`).
 
-El endpoint `/api/sheets/status` indica si el servidor pudo autenticarse. La cuenta de servicio concede acceso a Google Sheets; no autentica a los usuarios del ERP. Añade autenticación de usuarios y control de roles en el servidor antes de exponer la aplicación públicamente.
+El endpoint `GET /api/database/status` valida el acceso del servidor a la hoja configurada y devuelve sus metadatos. El cliente usa `/api/google-sheets` como proxy a Google Sheets API; el servidor agrega el token de la cuenta de servicio y el navegador no recibe credenciales de Google. La cuenta de servicio concede acceso a Sheets; no autentica a los usuarios del ERP. Añade autenticación de usuarios y control de roles en el servidor antes de exponer la aplicación públicamente.
 
 La programación de copias requiere que el proceso Node del servidor permanezca ejecutándose y que el directorio de configuración (`.runtime/` por defecto) sea persistente. En despliegues serverless reemplaza el temporizador en memoria por un scheduler administrado antes de usar respaldos automáticos.
 

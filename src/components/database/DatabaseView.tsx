@@ -113,7 +113,6 @@ export const DatabaseView: React.FC = () => {
     googleSheetsStatus,
     googleSheetsMessage,
     signInWithGoogleSheets,
-    signOutGoogleSheets,
     uploadAllToGoogleSheets,
     uploadSingleTableToGoogleSheets,
     downloadAllFromGoogleSheets,
@@ -689,13 +688,6 @@ export const DatabaseView: React.FC = () => {
                 <span className="text-slate-200 font-medium truncate max-w-[140px]">
                   {googleUser.displayName || googleUser.email}
                 </span>
-                <button
-                  type="button"
-                  onClick={signOutGoogleSheets}
-                  className="text-[11px] text-rose-400 hover:underline ml-1 cursor-pointer"
-                >
-                  Salir
-                </button>
               </div>
             )}
 

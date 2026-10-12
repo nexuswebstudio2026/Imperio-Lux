@@ -145,11 +145,6 @@ async function accessToken() {
   return data.access_token;
 }
 
-app.get('/api/sheets/status', async (_req, res) => {
-  try { const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || await readFile(process.env.GOOGLE_SERVICE_ACCOUNT_FILE || path.join(root, 'service-account.json'), 'utf8')); await accessToken(); res.json({ connected: true, email: credentials.client_email }); }
-  catch (error) { res.status(503).json({ connected: false, error: error instanceof Error ? error.message : 'Configuración de Google incompleta' }); }
-});
-
 // Stable database health endpoint for the client. Credentials stay on this server;
 // the browser receives connection metadata only, never a Google access token.
 app.get('/api/database/status', async (_req, res) => {

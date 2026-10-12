@@ -2,6 +2,7 @@
  * Google Sheets Database Service for Imperio Lux
  * Manages Google Sheets as the cloud database engine using Google Sheets API v4.
  */
+import { requestGoogleSheetsApi } from './databaseApi';
 
 export const DEFAULT_SPREADSHEET_ID = '1CzufAtWYpkx5dYWjPiqdltMyiuIWeR7G4zTKy3_uxcg';
 const PREVIOUS_DEFAULT_SPREADSHEET_ID = '12hdlu9ph-YSU9IfwXh44cqJVHjaNxQD3MP3CXyrfwwk';
@@ -231,7 +232,7 @@ export async function fetchSpreadsheetMetadata(
   spreadsheetId: string = getStoredSpreadsheetId()
 ): Promise<SpreadsheetMetadata> {
   const url = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}?fields=properties.title,sheets.properties`;
-  const res = await fetch(url, {
+  const res = await requestGoogleSheetsApi(url.replace('/api/google-sheets', ''), {
     headers: {
       'Content-Type': 'application/json',
     },
@@ -284,7 +285,7 @@ export async function ensureSheetTabsExist(
   }));
 
   const url = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
-  const res = await fetch(url, {
+  const res = await requestGoogleSheetsApi(url.replace('/api/google-sheets', ''), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -437,7 +438,7 @@ export async function writeTableToSheet(
 
   // 1. Clear existing sheet content
   const clearUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:clear`;
-  await fetch(clearUrl, {
+  await requestGoogleSheetsApi(clearUrl.replace('/api/google-sheets', ''), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -447,7 +448,7 @@ export async function writeTableToSheet(
 
   // 2. Write new values
   const writeUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1?valueInputOption=USER_ENTERED`;
-  const res = await fetch(writeUrl, {
+  const res = await requestGoogleSheetsApi(writeUrl.replace('/api/google-sheets', ''), {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
@@ -474,7 +475,7 @@ export async function readTableFromSheet<T = any>(
   sheetName: string
 ): Promise<T[]> {
   const url = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`;
-  const res = await fetch(url, {
+  const res = await requestGoogleSheetsApi(url.replace('/api/google-sheets', ''), {
     headers: {
       'Content-Type': 'application/json',
     },
@@ -503,9 +504,7 @@ export async function appendRowToSheet(
 ): Promise<void> {
   // Read header row to match order
   const getHeaderUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!1:1`;
-  const headerRes = await fetch(getHeaderUrl, {
-    headers: {},
-  });
+  const headerRes = await requestGoogleSheetsApi(getHeaderUrl.replace('/api/google-sheets', ''));
 
   let headers: string[] = [];
   if (headerRes.ok) {
@@ -528,7 +527,7 @@ export async function appendRowToSheet(
   });
 
   const appendUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append?valueInputOption=USER_ENTERED`;
-  await fetch(appendUrl, {
+  await requestGoogleSheetsApi(appendUrl.replace('/api/google-sheets', ''), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -566,7 +565,7 @@ export async function createDriveBackupSpreadsheet(
 
   // 2. Crear el nuevo Spreadsheet en Google Drive
   const createUrl = '/api/google-sheets/v4/spreadsheets';
-  const createRes = await fetch(createUrl, {
+  const createRes = await requestGoogleSheetsApi(createUrl.replace('/api/google-sheets', ''), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -652,10 +651,9 @@ export async function createDriveBackupSpreadsheet(
 
   // 6. Escribir todos los datos en un solo batchUpdate
   const batchUrl = `/api/google-sheets/v4/spreadsheets/${newSpreadsheetId}/values:batchUpdate`;
-  const batchRes = await fetch(batchUrl, {
+  const batchRes = await requestGoogleSheetsApi(batchUrl.replace('/api/google-sheets', ''), {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({

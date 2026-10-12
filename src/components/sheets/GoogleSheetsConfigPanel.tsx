@@ -71,7 +71,6 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
     googleSheetsStatus,
     googleSheetsMessage,
     signInWithGoogleSheets,
-    signOutGoogleSheets,
     uploadAllToGoogleSheets,
     downloadAllFromGoogleSheets,
     syncBidirectionalGoogleSheets,
