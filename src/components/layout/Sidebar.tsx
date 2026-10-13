@@ -23,7 +23,6 @@ import {
   Database,
   Cloud,
   FileSpreadsheet,
-  Link2,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -32,7 +31,6 @@ export const Sidebar: React.FC = () => {
     setActiveTab,
     sidebarOpen,
     currentUser,
-    setShowGoogleSheetsModal,
     googleSheetsStatus,
     googleSheetsId,
   } = useApp();
@@ -46,6 +44,7 @@ export const Sidebar: React.FC = () => {
   );
 
   const isTabActive = (tab: AppTab) => activeTab === tab;
+  const isDatabaseModuleActive = activeTab === 'database' || activeTab === 'sheets_config';
 
   return (
     <aside
@@ -86,7 +85,7 @@ export const Sidebar: React.FC = () => {
               id="nav-database"
               onClick={() => setActiveTab('database')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors cursor-pointer text-left ${
-                isTabActive('database')
+                isDatabaseModuleActive
                   ? 'bg-emerald-600 text-white font-medium shadow-xs'
                   : 'text-slate-200 hover:bg-slate-900 hover:text-white bg-slate-900/60 border border-emerald-500/20'
               }`}
@@ -97,25 +96,6 @@ export const Sidebar: React.FC = () => {
               </div>
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-500/30">
                 22 Hojas
-              </span>
-            </button>
-
-            {/* Vincular Google Sheets (Panel de Configuración) */}
-            <button
-              id="nav-sheets-config"
-              onClick={() => setActiveTab('sheets_config')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors cursor-pointer text-left ${
-                isTabActive('sheets_config')
-                  ? 'bg-blue-600 text-white font-medium shadow-xs'
-                  : 'text-slate-300 hover:bg-slate-900 hover:text-white'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <Link2 className="w-4 h-4 text-sky-400" />
-                <span>Vincular Sheets</span>
-              </div>
-              <span className="text-[9px] bg-sky-500/20 text-sky-300 font-semibold px-1.5 py-0.5 rounded">
-                Validar
               </span>
             </button>
 
@@ -403,7 +383,7 @@ export const Sidebar: React.FC = () => {
       <div className="px-3 py-2">
         <div
           id="sidebar-sheets-card"
-          onClick={() => setShowGoogleSheetsModal(true)}
+          onClick={() => setActiveTab('database')}
           className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 hover:border-emerald-500/50 hover:bg-slate-850 cursor-pointer transition-all group"
         >
           <div className="flex items-center justify-between mb-1">

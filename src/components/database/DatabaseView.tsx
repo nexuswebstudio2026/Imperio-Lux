@@ -705,10 +705,10 @@ export const DatabaseView: React.FC = () => {
             <button
               onClick={() => setActiveTab('sheets_config')}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-              title="Abrir panel de configuración para vincular y validar nuevas hojas de cálculo"
+              title="Configurar y validar la conexión de Google Sheets"
             >
               <Settings2 className="w-4 h-4" />
-              <span>Vincular / Validar Hoja</span>
+              <span>Configurar conexión</span>
             </button>
 
             <button

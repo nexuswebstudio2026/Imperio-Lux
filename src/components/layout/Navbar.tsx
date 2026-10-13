@@ -36,7 +36,6 @@ export const Navbar: React.FC = () => {
     resetAllDataToDefaults,
     googleSheetsId,
     googleSheetsStatus,
-    setShowGoogleSheetsModal,
     currentMoneda,
     browserNotificationsStatus,
     setShowBrowserNotificationModal,
@@ -111,13 +110,13 @@ export const Navbar: React.FC = () => {
         {/* Google Sheets Primary Database Button */}
         <button
           id="btn-sheets-status"
-          onClick={() => setShowGoogleSheetsModal(true)}
+          onClick={() => setActiveTab('database')}
           className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full bg-emerald-950/80 hover:bg-emerald-900/80 text-emerald-200 border transition-all cursor-pointer shadow-xs ${
             googleSheetsStatus === 'connected'
               ? 'border-emerald-500/50 hover:border-emerald-400'
               : 'border-emerald-600/40 hover:border-emerald-400'
           }`}
-          title={`Base de datos en Google Sheets: ${googleSheetsId} • Haz clic para sincronizar o configurar`}
+          title={`Base de datos vinculada: ${googleSheetsId} • Abrir módulo de base de datos`}
         >
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-emerald-400"></span>
@@ -125,7 +124,7 @@ export const Navbar: React.FC = () => {
           </span>
           <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
           <span className="font-semibold text-[11px] text-emerald-300">
-            Google Sheets
+            Base de Datos
           </span>
           <span className="text-[10px] text-emerald-400/80 hidden lg:inline font-mono">
             ({googleSheetsId.slice(0, 6)}...)
