@@ -4,6 +4,18 @@ import { useApp } from '../../context/AppContext';
 
 type AuthUser = { id: number; name: string; email: string; role: string; type: 'admin' | 'employee' | 'client' };
 
+async function readApiResponse(response: Response): Promise<any> {
+  const body = await response.text();
+  try {
+    return JSON.parse(body);
+  } catch {
+    if (response.status === 404) {
+      throw new Error('La API de autenticación no está disponible en este despliegue. Actualiza el despliegue de Vercel y vuelve a intentarlo.');
+    }
+    throw new Error(`El servidor respondió con un formato inesperado (HTTP ${response.status}).`);
+  }
+}
+
 export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: () => void }> = ({ onLogin, onBack }) => {
   const { theme, toggleTheme } = useApp();
   const [mode, setMode] = useState<'login' | 'username' | 'password' | 'bootstrap'>('login');
@@ -26,7 +38,7 @@ export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: ()
     event.preventDefault(); setError(''); setBusy(true);
     try {
       const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password }) });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo iniciar sesión.');
       onLogin(data.user);
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión.'); }
@@ -37,7 +49,7 @@ export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: ()
     event.preventDefault(); setError(''); setBusy(true);
     try {
       const response = await fetch('/api/auth/recovery/request', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, identifier }) });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo solicitar la recuperación.');
       setRecoveryId(data.recoveryId); setMessage(data.message); setStage('confirm');
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo solicitar la recuperación.'); }
@@ -49,7 +61,7 @@ export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: ()
     const payload = mode === 'password' ? { newPassword: newValue } : { newUsername: newValue };
     try {
       const response = await fetch('/api/auth/recovery/confirm', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ recoveryId, code, ...payload }) });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo actualizar la cuenta.');
       setMode('login'); setStage('request'); setMessage(data.message); setUsername(mode === 'username' ? newValue : identifier); setPassword('');
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo actualizar la cuenta.'); }
@@ -60,7 +72,7 @@ export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: ()
     event.preventDefault(); setError(''); setBusy(true);
     try {
       const response = await fetch('/api/auth/bootstrap-admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ bootstrapSecret, email: bootstrapEmail, username, password }) });
-      const data = await response.json();
+      const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo configurar el administrador.');
       setMessage(`${data.message} Ya puedes iniciar sesión.`); setMode('login');
     } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo configurar el administrador.'); }
