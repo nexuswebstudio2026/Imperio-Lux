@@ -450,11 +450,11 @@ app.use('/api/google-sheets', requireAdmin, async (req, res) => {
   } catch (error) { res.status(502).json({ error: { message: error instanceof Error ? error.message : 'Error de conexión con Google Sheets' } }); }
 });
 
-if (process.env.NODE_ENV !== 'production') {
+if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production') {
   const { createServer: createViteServer } = await import('vite');
   const vite = await createViteServer({ server: { middlewareMode: true }, appType: 'spa' });
   app.use(vite.middlewares);
-} else {
+} else if (process.env.VERCEL !== '1') {
   app.use(express.static(path.join(root, 'dist')));
   app.get(['/admin', '/login', '/empleado', '/cliente'], (_req, res) => res.sendFile(path.join(root, 'dist', 'index.html')));
 }
