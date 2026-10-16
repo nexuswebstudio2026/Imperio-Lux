@@ -4,6 +4,46 @@
     {
       "source": "/api/:route*",
       "destination": "/api/handler?__vercel_path=:route*"
+    },
+    {
+      "source": "/admin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/empleado",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/empleado/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/cliente",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/cliente/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/login",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/catalogo",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/nosotros",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/contacto",
+      "destination": "/index.html"
     }
   ],
   "functions": {

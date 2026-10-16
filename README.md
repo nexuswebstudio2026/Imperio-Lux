@@ -22,3 +22,7 @@ La comprobación de conexión está disponible en `GET /api/database/status`. El
 Construye el frontend con `npm run build` y ejecuta el servidor con `NODE_ENV=production npm start`. En Vercel, configura además `GOOGLE_SHEETS_ID` y `GOOGLE_SERVICE_ACCOUNT_JSON` en **Project → Settings → Environment Variables**, y vuelve a desplegar después de guardarlas. El correo y el resto de secretos del servidor también deben configurarse ahí. Comparte la hoja con el `client_email` de la cuenta de servicio como editor. El proceso Node debe permanecer activo para servir la aplicación y ejecutar el programador de respaldos. Conserva `.runtime/` en almacenamiento persistente si usas respaldos programados.
 
 La cuenta de servicio solo autentica el servidor ante Google; no autentica a los operadores de la aplicación. Añade autenticación y autorización de usuarios en el servidor antes de exponer el sistema a Internet. Google Sheets es apropiado para un uso pequeño y de baja concurrencia, pero no ofrece transacciones para ventas concurrentes.
+
+## Rutas del sitio
+
+La tienda pública está disponible en `/`, `/catalogo`, `/nosotros` y `/contacto`. El inicio de sesión está en `/login`; el panel administrativo usa rutas bajo `/admin` (por ejemplo `/admin/productos`, `/admin/ventas/nueva` y `/admin/base-datos`). Las rutas `/empleado` y `/cliente` muestran sus paneles según el rol autenticado. Las rutas internas del administrador se conservan al recargar y admiten la navegación atrás/adelante del navegador.

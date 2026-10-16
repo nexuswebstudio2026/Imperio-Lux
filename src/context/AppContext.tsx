@@ -83,6 +83,7 @@ import {
   savePushPreferences,
   type PushPreferences,
 } from '../lib/browserNotificationsService';
+import { ADMIN_TAB_ROUTES } from '../lib/routes';
 
 export type AppTab =
   | 'panel'
@@ -407,6 +408,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeTab, setActiveTab] = useState<AppTab>(() =>
     loadStorage<AppTab>('activeTab', 'panel')
   );
+  const setActiveTabWithRoute = useCallback((tab: AppTab) => {
+    setActiveTab(tab);
+    if (typeof window === 'undefined') return;
+    const currentPath = window.location.pathname.replace(/\/+$/, '') || '/';
+    if ((currentPath === '/admin' || currentPath.startsWith('/admin/')) && currentPath !== ADMIN_TAB_ROUTES[tab]) {
+      window.history.pushState({}, '', ADMIN_TAB_ROUTES[tab]);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+  }, []);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
 
   // Theme state with localStorage persistence and DOM class synchronization
@@ -1853,7 +1863,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentUser,
         setCurrentUser,
         activeTab,
-        setActiveTab,
+        setActiveTab: setActiveTabWithRoute,
         sidebarOpen,
         setSidebarOpen,
 

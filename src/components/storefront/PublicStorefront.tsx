@@ -21,16 +21,16 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ onAdminLogin
 
       <header className="sticky top-0 z-40 border-b border-black/10 bg-[#f7f5f0]/95 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-4 sm:gap-4 sm:px-5 lg:px-8">
-          <a href="#inicio" className="flex shrink-0 items-center gap-2 sm:gap-3" aria-label="Imperio Lux, inicio">
+          <a href="/" className="flex shrink-0 items-center gap-2 sm:gap-3" aria-label="Imperio Lux, inicio">
             <img src="/assets/imperio-icon.svg" alt="" className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
             <span className="font-serif text-base tracking-[0.1em] sm:text-xl sm:tracking-[0.12em]">IMPERIO LUX</span>
           </a>
 
           <nav aria-label="Navegación principal" className="hidden items-center gap-8 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#55534c] md:flex">
-            <a className="store-nav-link" href="#inicio">Inicio</a>
-            <a className="store-nav-link" href="#catalogo">Catálogo</a>
-            <a className="store-nav-link" href="#nosotros">Sobre nosotros</a>
-            <a className="store-nav-link" href="#contacto">Contáctenos</a>
+            <a className="store-nav-link" href="/">Inicio</a>
+            <a className="store-nav-link" href="/catalogo">Catálogo</a>
+            <a className="store-nav-link" href="/nosotros">Sobre nosotros</a>
+            <a className="store-nav-link" href="/contacto">Contáctenos</a>
           </nav>
 
           <div className="flex shrink-0 items-center gap-1 sm:gap-3">
@@ -47,10 +47,10 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ onAdminLogin
           </div>
         </div>
         <nav aria-label="Navegación móvil" className="flex justify-center gap-6 overflow-x-auto border-t border-black/5 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#55534c] md:hidden">
-          <a className="store-nav-link" href="#inicio">Inicio</a>
-          <a className="store-nav-link" href="#catalogo">Catálogo</a>
-          <a className="store-nav-link" href="#nosotros">Nosotros</a>
-          <a className="store-nav-link" href="#contacto">Contacto</a>
+          <a className="store-nav-link" href="/">Inicio</a>
+          <a className="store-nav-link" href="/catalogo">Catálogo</a>
+          <a className="store-nav-link" href="/nosotros">Nosotros</a>
+          <a className="store-nav-link" href="/contacto">Contacto</a>
         </nav>
       </header>
 

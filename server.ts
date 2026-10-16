@@ -493,7 +493,7 @@ if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production') {
   app.use(vite.middlewares);
 } else if (process.env.VERCEL !== '1') {
   app.use(express.static(path.join(root, 'dist')));
-  app.get(['/admin', '/login', '/empleado', '/cliente'], (_req, res) => res.sendFile(path.join(root, 'dist', 'index.html')));
+  app.get(['/admin', '/admin/*', '/login', '/empleado', '/empleado/*', '/cliente', '/cliente/*', '/catalogo', '/nosotros', '/contacto'], (_req, res) => res.sendFile(path.join(root, 'dist', 'index.html')));
 }
 
 const server = createServer(app);
