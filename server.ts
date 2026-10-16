@@ -196,11 +196,48 @@ async function checkScheduledBackup() {
   catch (error) { console.error('Respaldo diario de Google Drive fallido:', error); }
 }
 
+async function serviceAccountCredentials(): Promise<{ client_email: string; private_key: string }> {
+  const configuredJson = process.env.GOOGLE_SERVICE_ACCOUNT_JSON?.trim();
+  let credentials: unknown;
+
+  if (configuredJson) {
+    try {
+      credentials = JSON.parse(configuredJson);
+    } catch {
+      throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON no contiene un JSON válido de cuenta de servicio.');
+    }
+  } else {
+    const credentialsPath = process.env.GOOGLE_SERVICE_ACCOUNT_FILE
+      || (process.env.VERCEL ? undefined : path.join(root, 'service-account.json'));
+    if (!credentialsPath) {
+      throw new Error('Falta GOOGLE_SERVICE_ACCOUNT_JSON en las variables de entorno de Vercel.');
+    }
+    try {
+      credentials = JSON.parse(await readFile(credentialsPath, 'utf8'));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(`No se encontró la cuenta de servicio en "${credentialsPath}". Configura GOOGLE_SERVICE_ACCOUNT_JSON en Vercel.`);
+      }
+      throw error;
+    }
+  }
+
+  if (
+    !credentials
+    || typeof credentials !== 'object'
+    || !('client_email' in credentials)
+    || typeof credentials.client_email !== 'string'
+    || !('private_key' in credentials)
+    || typeof credentials.private_key !== 'string'
+  ) {
+    throw new Error('La cuenta de servicio debe incluir client_email y private_key.');
+  }
+  return credentials as { client_email: string; private_key: string };
+}
+
 async function accessToken() {
   if (tokenCache && tokenCache.expires > Date.now() + 60_000) return tokenCache.token;
-  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
-    ? JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON)
-    : JSON.parse(await readFile(process.env.GOOGLE_SERVICE_ACCOUNT_FILE || path.join(root, 'service-account.json'), 'utf8'));
+  const raw = await serviceAccountCredentials();
   const now = Math.floor(Date.now() / 1000);
   const enc = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
   const unsigned = `${enc({ alg: 'RS256', typ: 'JWT' })}.${enc({ iss: raw.client_email, scope: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 })}`;
@@ -217,7 +254,7 @@ async function accessToken() {
 // the browser receives connection metadata only, never a Google access token.
 app.get('/api/database/status', async (_req, res) => {
   try {
-    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || await readFile(process.env.GOOGLE_SERVICE_ACCOUNT_FILE || path.join(root, 'service-account.json'), 'utf8'));
+    const credentials = await serviceAccountCredentials();
     const spreadsheetId = String(_req.query.spreadsheetId || process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId);
     const result = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=spreadsheetId,properties.title`);
     res.json({ connected: true, provider: 'google-sheets', spreadsheetId, spreadsheetTitle: result.properties?.title || '', serviceAccount: credentials.client_email });
