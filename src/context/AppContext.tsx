@@ -718,7 +718,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         { name: 'Usuarios', data: buildRegisteredUsers(
           users.length > 0 ? users : initialUsers,
           empleados.length > 0 ? empleados : initialEmpleados,
-          clientes.length > 0 ? clientes : initialClientes
+          clientes.length > 0 ? clientes : initialClientes,
+          proveedores.length > 0 ? proveedores : initialProveedores
         ) },
         { name: 'ventas', data: ventas.length > 0 ? ventas : initialVentas },
         { name: 'compras', data: compras.length > 0 ? compras : initialCompras },
@@ -988,7 +989,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return buildRegisteredUsers(
             users.length > 0 ? users : initialUsers,
             empleados.length > 0 ? empleados : initialEmpleados,
-            clientes.length > 0 ? clientes : initialClientes
+            clientes.length > 0 ? clientes : initialClientes,
+            proveedores.length > 0 ? proveedores : initialProveedores
           );
         case 'roles':
           return roles.length > 0 ? roles : initialRoles;
@@ -1078,7 +1080,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       { name: 'Usuarios', label: 'Directorio de Usuarios Registrados', data: buildRegisteredUsers(
         users.length > 0 ? users : initialUsers,
         empleados.length > 0 ? empleados : initialEmpleados,
-        clientes.length > 0 ? clientes : initialClientes
+        clientes.length > 0 ? clientes : initialClientes,
+        proveedores.length > 0 ? proveedores : initialProveedores
       ) },
       { name: 'ventas', label: 'Ventas y Facturación', data: ventas.length > 0 ? ventas : initialVentas },
       { name: 'compras', label: 'Compras a Proveedores', data: compras.length > 0 ? compras : initialCompras },
@@ -1151,6 +1154,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   useEffect(() => {
+    const isAdmin = currentUser?.user_type
+      ? currentUser.user_type === 'admin'
+      : /admin|administrador/i.test(currentUser?.role || '');
+    if (!isAdmin) return;
+
     const syncLastBackupActivity = async () => {
       try {
         const response = await fetch('/api/backups/config');
@@ -1167,7 +1175,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     void syncLastBackupActivity();
     const interval = window.setInterval(() => void syncLastBackupActivity(), 60_000);
     return () => window.clearInterval(interval);
-  }, [recordSystemActivity]);
+  }, [currentUser?.role, currentUser?.user_type, recordSystemActivity]);
 
   const updateEmpresa = (partial: Partial<Empresa>) => {
     const updated = { ...empresa, ...partial };

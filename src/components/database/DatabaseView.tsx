@@ -300,11 +300,11 @@ export const DatabaseView: React.FC = () => {
       id: 'Usuarios',
       name: 'Usuarios',
       label: 'Usuarios Registrados',
-      description: 'Directorio consolidado de administradores, empleados y clientes.',
+      description: 'Directorio consolidado de administradores, empleados, clientes y proveedores.',
       category: 'sistema',
       icon: Users,
       color: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-      data: buildRegisteredUsers(users, empleados, clientes),
+      data: buildRegisteredUsers(users, empleados, clientes, proveedores),
     },
     {
       id: 'roles',

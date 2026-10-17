@@ -475,7 +475,7 @@ export const EmpleadoListView: React.FC = () => {
 
 /* ================= USUARIOS REGISTRADOS ================= */
 export const RegisteredUsersView: React.FC = () => {
-  const { users, empleados, clientes, uploadSingleTableToGoogleSheets } = useApp();
+  const { users, empleados, clientes, proveedores, uploadSingleTableToGoogleSheets } = useApp();
   const [filter, setFilter] = useState<'Todos' | RegisteredUser['tipo_usuario']>('Todos');
   const [search, setSearch] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -485,7 +485,7 @@ export const RegisteredUsersView: React.FC = () => {
   const [credentialMessage, setCredentialMessage] = useState('');
   const [credentialError, setCredentialError] = useState('');
   const [savingAccount, setSavingAccount] = useState('');
-  const registeredUsers = buildRegisteredUsers(users, empleados, clientes);
+  const registeredUsers = buildRegisteredUsers(users, empleados, clientes, proveedores);
   const normalizedSearch = search.trim().toLocaleLowerCase('es');
   const filteredUsers = registeredUsers.filter((user) => {
     const matchesType = filter === 'Todos' || user.tipo_usuario === filter;
@@ -517,6 +517,7 @@ export const RegisteredUsersView: React.FC = () => {
     Administrador: registeredUsers.filter((user) => user.tipo_usuario === 'Administrador').length,
     Empleado: registeredUsers.filter((user) => user.tipo_usuario === 'Empleado').length,
     Cliente: registeredUsers.filter((user) => user.tipo_usuario === 'Cliente').length,
+    Proveedor: registeredUsers.filter((user) => user.tipo_usuario === 'Proveedor').length,
   };
   const syncUsersSheet = async () => {
     setIsSyncing(true);
@@ -554,12 +555,13 @@ export const RegisteredUsersView: React.FC = () => {
         </p>
       )}
 
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
         {([
           ['Todos', registeredUsers.length],
           ['Administrador', counts.Administrador],
           ['Empleado', counts.Empleado],
           ['Cliente', counts.Cliente],
+          ['Proveedor', counts.Proveedor],
         ] as const).map(([type, count]) => (
           <button
             key={type}
@@ -569,7 +571,7 @@ export const RegisteredUsersView: React.FC = () => {
               ? 'border-[#bd9858] bg-[#bd9858]/10 shadow-sm'
               : 'border-slate-200 bg-white hover:border-[#bd9858]/60 dark:border-slate-700 dark:bg-slate-900'}`}
           >
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{type === 'Todos' ? 'Registros' : type === 'Administrador' ? 'Administradores' : type === 'Empleado' ? 'Empleados' : 'Clientes'}</span>
+            <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{type === 'Todos' ? 'Registros' : type === 'Administrador' ? 'Administradores' : type === 'Empleado' ? 'Empleados' : type === 'Proveedor' ? 'Proveedores' : 'Clientes'}</span>
             <span className="mt-1 block text-2xl font-bold text-slate-900 dark:text-white">{count}</span>
           </button>
         ))}
@@ -642,7 +644,7 @@ export const RegisteredUsersView: React.FC = () => {
           {authAccounts.map((account) => {
             const draft = credentialDrafts[account.id] || { username: account.username, password: '' };
             return <div key={account.id} className="grid gap-3 px-4 py-4 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
-              <div><p className="text-xs font-semibold text-slate-900 dark:text-white">{account.name || 'Cuenta'}</p><p className="mt-1 text-[11px] text-slate-500">{account.email} · {account.type === 'admin' ? 'Administrador' : account.type === 'employee' ? 'Empleado' : 'Cliente'}</p><p className="mt-1 text-[10px] text-slate-400">{account.configured ? 'Credenciales configuradas' : 'Sin credenciales'}</p></div>
+              <div><p className="text-xs font-semibold text-slate-900 dark:text-white">{account.name || 'Cuenta'}</p><p className="mt-1 text-[11px] text-slate-500">{account.email} · {account.type === 'admin' ? 'Administrador' : account.type === 'employee' ? 'Empleado' : account.type === 'supplier' ? 'Proveedor' : 'Cliente'}</p><p className="mt-1 text-[10px] text-slate-400">{account.configured ? 'Credenciales configuradas' : 'Sin credenciales'}</p></div>
               <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Usuario<input value={draft.username} onChange={(event) => setCredentialDrafts((previous) => ({ ...previous, [account.id]: { ...draft, username: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 dark:border-slate-600 dark:bg-slate-950 dark:text-white" /></label>
               <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{account.configured ? 'Nueva contraseña' : 'Contraseña inicial'}<input type="password" autoComplete="new-password" placeholder="Mínimo 10 caracteres" value={draft.password} onChange={(event) => setCredentialDrafts((previous) => ({ ...previous, [account.id]: { ...draft, password: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 dark:border-slate-600 dark:bg-slate-950 dark:text-white" /></label>
               <button disabled={savingAccount === account.id} onClick={() => void saveCredentials(account.id)} className="rounded-lg bg-[#152238] px-4 py-2 text-xs font-semibold text-white hover:bg-[#233b5d] disabled:opacity-50 dark:bg-[#bd9858] dark:text-[#101b2d]">{savingAccount === account.id ? 'Guardando…' : 'Guardar'}</button>

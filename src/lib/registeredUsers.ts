@@ -1,4 +1,4 @@
-import type { Cliente, Empleado, User } from '../types';
+import type { Cliente, Empleado, Proveedor, User } from '../types';
 
 export const REGISTERED_USERS_HEADERS = [
   'id',
@@ -15,7 +15,7 @@ export const REGISTERED_USERS_HEADERS = [
 
 export interface RegisteredUser {
   id: string;
-  tipo_usuario: 'Administrador' | 'Empleado' | 'Cliente';
+  tipo_usuario: 'Administrador' | 'Empleado' | 'Cliente' | 'Proveedor';
   nombre: string;
   email: string;
   cargo: string;
@@ -26,7 +26,8 @@ export interface RegisteredUser {
 export function buildRegisteredUsers(
   users: User[],
   empleados: Empleado[],
-  clientes: Cliente[]
+  clientes: Cliente[],
+  proveedores: Proveedor[] = []
 ): RegisteredUser[] {
   const employeeById = new Map(empleados.map((employee) => [employee.id, employee]));
   const linkedEmployeeIds = new Set<number>();
@@ -70,5 +71,15 @@ export function buildRegisteredUsers(
     estado: client.estado,
   }));
 
-  return [...accounts, ...standaloneEmployees, ...customerRows];
+  const supplierRows = proveedores.map((supplier) => ({
+    id: `PROV-${supplier.id}`,
+    tipo_usuario: 'Proveedor' as const,
+    nombre: supplier.razon_social,
+    email: supplier.email,
+    cargo: '',
+    rol: '',
+    estado: supplier.estado,
+  }));
+
+  return [...accounts, ...standaloneEmployees, ...customerRows, ...supplierRows];
 }

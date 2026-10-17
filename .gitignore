@@ -9,3 +9,4 @@ coverage/
 service-account.json
 *service-account*.json
 .runtime/
+.vercel

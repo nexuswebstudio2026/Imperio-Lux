@@ -30,7 +30,23 @@
       "destination": "/index.html"
     },
     {
+      "source": "/acceso",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/acceso/:path*",
+      "destination": "/index.html"
+    },
+    {
       "source": "/login",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/proveedor",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/proveedor/:path*",
       "destination": "/index.html"
     },
     {

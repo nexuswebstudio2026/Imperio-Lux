@@ -224,7 +224,8 @@ export interface User {
   email: string;
   role: string;
   empleado_id?: number;
-  user_type?: 'admin' | 'employee' | 'client';
+  user_type?: 'admin' | 'employee' | 'client' | 'supplier';
+  entity_id?: number;
 }
 
 export interface ActivityLog {
@@ -260,4 +261,3 @@ export interface CitaCliente {
   lugar?: string;
   telefono?: string;
 }
-

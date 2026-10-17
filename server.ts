@@ -13,7 +13,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 const backupConfigPath = process.env.BACKUP_CONFIG_FILE || path.join(root, '.runtime', 'backup-scheduler.json');
 let tokenCache: { token: string; expires: number } | null = null;
 
-type AuthUser = { id: string; name: string; email: string; role: string; type: 'admin' | 'employee' | 'client' };
+type AuthUser = { id: string; name: string; email: string; role: string; type: 'admin' | 'employee' | 'client' | 'supplier' };
 const sessions = new Map<string, { user: AuthUser; expires: number }>();
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const recoveryCodes = new Map<string, { codeHash: string; expires: number; attempts: number; row: Record<string, string>; headers: string[]; mode: 'username' | 'password' }>();
@@ -51,6 +51,15 @@ async function writeUserRow(spreadsheetId: string, headers: string[], rowNumber:
 }
 
 function normalizeUsername(value: unknown) { return String(value || '').trim().toLocaleLowerCase('es'); }
+async function readSheetRecords(sheetName: string): Promise<Record<string, unknown>[]> {
+  const spreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;
+  if (!spreadsheetId) throw new Error('No hay una hoja de cálculo configurada.');
+  const range = encodeURIComponent(`${sheetName}!A:Z`);
+  const result = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueRenderOption=UNFORMATTED_VALUE`);
+  const values: unknown[][] = result.values || [];
+  const headers = (values[0] || []).map((value) => String(value || '').trim());
+  return values.slice(1).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])));
+}
 function verifyPassword(password: string, salt: string, hash: string) {
   if (!salt || !hash) return false;
   const actual = scryptSync(password, salt, 64);
@@ -60,6 +69,7 @@ function verifyPassword(password: string, salt: string, hash: string) {
 function classifyUser(row: Record<string, string>): AuthUser['type'] {
   const type = `${row.tipo_usuario || ''} ${row.rol || ''} ${row.role || ''}`.toLocaleLowerCase('es');
   if (/admin|administrador/.test(type)) return 'admin';
+  if (/proveedor|supplier/.test(type)) return 'supplier';
   if (/empleado|employee|cajero|vendedor/.test(type)) return 'employee';
   return 'client';
 }
@@ -284,12 +294,67 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
     }
     loginAttempts.delete(ip);
-    const token = randomBytes(32).toString('base64url');
     const user = safeUser(found.data);
+    const expectedType = String(req.body?.expectedType || '');
+    if (expectedType && expectedType !== user.type) {
+      return res.status(403).json({ error: 'Esta cuenta no tiene acceso al portal seleccionado.' });
+    }
+    const token = randomBytes(32).toString('base64url');
     sessions.set(token, { user, expires: Date.now() + 12 * 60 * 60_000 });
     res.setHeader('Set-Cookie', `imperio_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=43200${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
     res.json({ user });
   } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo validar la cuenta en Google Sheets.' }); }
+});
+
+app.get('/api/portal/data', async (req, res) => {
+  const session = currentSession(req);
+  if (!session) return res.status(401).json({ error: 'Inicia sesión para consultar tu portal.' });
+  const { user } = session;
+  if (user.type !== 'client' && user.type !== 'supplier') return res.status(403).json({ error: 'Esta cuenta no tiene acceso a un portal de cliente o proveedor.' });
+
+  try {
+    const entityPrefix = user.type === 'supplier' ? 'PROV' : 'CLI';
+    const sheetName = user.type === 'supplier' ? 'proveedores' : 'clientes';
+    const transactionSheet = user.type === 'supplier' ? 'compras' : 'ventas';
+    const transactionIdField = user.type === 'supplier' ? 'proveedor_id' : 'cliente_id';
+    const [entities, transactions] = await Promise.all([
+      readSheetRecords(sheetName),
+      readSheetRecords(transactionSheet),
+    ]);
+    const linkedId = user.id.match(new RegExp(`^${entityPrefix}-(\\d+)$`, 'i'))?.[1];
+    const matches = linkedId
+      ? entities.filter((record) => String(record.id) === linkedId)
+      : entities.filter((record) => normalizeUsername(record.email) === normalizeUsername(user.email));
+    if (matches.length !== 1) {
+      return res.status(matches.length ? 409 : 404).json({ error: 'No se pudo identificar un único registro asociado a esta cuenta. Contacta al administrador.' });
+    }
+    const entity = matches[0];
+    const entityId = String(entity.id);
+    const ownTransactions = transactions
+      .filter((record) => String(record[transactionIdField]) === entityId)
+      .sort((first, second) => String(second.fecha_hora || '').localeCompare(String(first.fecha_hora || '')))
+      .slice(0, 200)
+      .map((record) => ({
+        number: String(record.numero_comprobante || record.numero || record.id || ''),
+        date: String(record.fecha_hora || record.fecha_compra || record.fecha || ''),
+        total: Number(record.total) || 0,
+        status: String(record.estado || ''),
+        ...(user.type === 'supplier' ? { paymentStatus: String(record.estado_pago || '') } : {}),
+      }));
+    res.json({
+      type: user.type,
+      profile: {
+        name: String(entity.razon_social || ''),
+        email: String(entity.email || ''),
+        phone: String(entity.telefono || ''),
+        address: String(entity.direccion || ''),
+        document: String(entity.numero_documento || ''),
+      },
+      transactions: ownTransactions,
+    });
+  } catch (error) {
+    res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo cargar la información del portal.' });
+  }
 });
 
 app.post('/api/auth/logout', (req, res) => {
@@ -493,7 +558,7 @@ if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production') {
   app.use(vite.middlewares);
 } else if (process.env.VERCEL !== '1') {
   app.use(express.static(path.join(root, 'dist')));
-  app.get(['/admin', '/admin/*', '/login', '/empleado', '/empleado/*', '/cliente', '/cliente/*', '/catalogo', '/nosotros', '/contacto'], (_req, res) => res.sendFile(path.join(root, 'dist', 'index.html')));
+  app.get(['/admin', '/admin/*', '/login', '/acceso', '/acceso/*', '/empleado', '/empleado/*', '/cliente', '/cliente/*', '/proveedor', '/proveedor/*', '/catalogo', '/nosotros', '/contacto'], (_req, res) => res.sendFile(path.join(root, 'dist', 'index.html')));
 }
 
 const server = createServer(app);

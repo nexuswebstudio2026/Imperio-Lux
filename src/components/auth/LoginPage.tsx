@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { ArrowLeft, Eye, EyeOff, LockKeyhole, Mail, Moon, Sun } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
-type AuthUser = { id: number; name: string; email: string; role: string; type: 'admin' | 'employee' | 'client' };
+type AuthUser = { id: number; name: string; email: string; role: string; type: 'admin' | 'employee' | 'client' | 'supplier' };
+type PortalType = 'admin' | 'client' | 'supplier';
 
 async function readApiResponse(response: Response): Promise<any> {
   const body = await response.text();
@@ -16,7 +17,7 @@ async function readApiResponse(response: Response): Promise<any> {
   }
 }
 
-export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: () => void }> = ({ onLogin, onBack }) => {
+export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: () => void; portalType?: PortalType }> = ({ onLogin, onBack, portalType }) => {
   const { theme, toggleTheme } = useApp();
   const [mode, setMode] = useState<'login' | 'username' | 'password' | 'bootstrap'>('login');
   const [stage, setStage] = useState<'request' | 'confirm'>('request');
@@ -37,7 +38,7 @@ export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: ()
   async function submitLogin(event: React.FormEvent) {
     event.preventDefault(); setError(''); setBusy(true);
     try {
-      const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password }) });
+      const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username, password, expectedType: portalType }) });
       const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo iniciar sesión.');
       onLogin(data.user);
@@ -79,7 +80,8 @@ export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: ()
     finally { setBusy(false); }
   }
 
-  const title = mode === 'login' ? 'Bienvenido de nuevo' : mode === 'username' ? 'Recupera tu usuario' : mode === 'password' ? 'Restablece tu contraseña' : 'Configura el administrador';
+  const portalName = portalType === 'admin' ? 'administrador' : portalType === 'supplier' ? 'proveedor' : portalType === 'client' ? 'cliente' : '';
+  const title = mode === 'login' ? portalType ? `Acceso de ${portalName}` : 'Bienvenido de nuevo' : mode === 'username' ? 'Recupera tu usuario' : mode === 'password' ? 'Restablece tu contraseña' : 'Configura el administrador';
   const inputClass = 'w-full border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#b89652] focus:ring-2 focus:ring-[#b89652]/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white';
 
   return <main className="min-h-screen bg-[#f7f5f0] px-4 py-10 text-slate-900 dark:bg-slate-950 dark:text-white">

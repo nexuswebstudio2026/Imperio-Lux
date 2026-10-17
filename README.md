@@ -10,7 +10,7 @@ Punto de venta y gestión comercial construido con React, TypeScript, Vite y Exp
 
 ## Configuración local
 
-1. Copia `.env.example` a `.env` y configura `GOOGLE_SERVICE_ACCOUNT_FILE` con la ruta de la clave JSON fuera del repositorio. En Vercel configura `GOOGLE_SERVICE_ACCOUNT_JSON` con el contenido completo del JSON de la cuenta de servicio como variable de entorno (no subas la clave al repositorio).
+1. Copia `.env.example` a `.env` y configura `GOOGLE_SERVICE_ACCOUNT_FILE` con la ruta de la clave JSON fuera del repositorio. En Vercel configura `GOOGLE_SERVICE_ACCOUNT_JSON` con el contenido completo del JSON de la cuenta de servicio como variable de entorno (no subas la clave al repositorio). El servidor local también admite `GOOGLE_SERVICE_ACCOUNT_JSON`, por lo que puede usarse el mismo nombre y valor en ambos entornos.
 2. Configura `GOOGLE_SHEETS_ID` con el identificador de la hoja y compártela con `client_email` de la cuenta de servicio.
 3. Instala dependencias con `npm install` o `bun install`.
 4. Inicia la aplicación con `npm run dev` o `bun run dev`.
@@ -25,4 +25,4 @@ La cuenta de servicio solo autentica el servidor ante Google; no autentica a los
 
 ## Rutas del sitio
 
-La tienda pública está disponible en `/`, `/catalogo`, `/nosotros` y `/contacto`. El inicio de sesión está en `/login`; el panel administrativo usa rutas bajo `/admin` (por ejemplo `/admin/productos`, `/admin/ventas/nueva` y `/admin/base-datos`). Las rutas `/empleado` y `/cliente` muestran sus paneles según el rol autenticado. Las rutas internas del administrador se conservan al recargar y admiten la navegación atrás/adelante del navegador.
+La tienda pública está disponible en `/`, `/catalogo`, `/nosotros` y `/contacto`; la navegación usa rutas limpias y no agrega fragmentos `#...`. El selector de acceso está en `/acceso`, con entradas separadas en `/acceso/admin`, `/acceso/clientes` y `/acceso/proveedores`. El panel administrativo usa rutas bajo `/admin`; los portales de cliente y proveedor están en `/cliente` y `/proveedor`. Las rutas internas conservan la sesión y admiten recarga y navegación atrás/adelante. Las cuentas de clientes y proveedores se vinculan a su registro por el identificador `CLI-<id>` o `PROV-<id>` generado al sincronizar la hoja `Usuarios`.

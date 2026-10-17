@@ -1,17 +1,25 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ArrowDown, ArrowRight, ArrowUpRight, Clock3, Mail, MapPin, Moon, ShieldCheck, Sparkles, Sun, Truck } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { PUBLIC_SECTION_ROUTES } from '../../lib/routes';
 
 interface PublicStorefrontProps {
+  currentPath: string;
   onAdminLogin: () => void;
 }
 
-export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ onAdminLogin }) => {
+export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath, onAdminLogin }) => {
   const { empresa, productos, categorias, marcas, formatCurrency, theme, toggleTheme } = useApp();
   const featuredProducts = productos.filter((product) => product.estado).slice(0, 4);
   const featuredCategories = categorias.filter((category) => category.estado).slice(0, 4);
   const phone = (empresa.telefono || '').replace(/\D/g, '');
   const whatsapp = phone ? `https://wa.me/${phone}` : `mailto:${empresa.correo}`;
+
+  useEffect(() => {
+    const sectionId = PUBLIC_SECTION_ROUTES[currentPath];
+    if (!sectionId) return;
+    document.getElementById(sectionId)?.scrollIntoView({ block: 'start' });
+  }, [currentPath]);
 
   return (
     <div className="storefront min-h-screen bg-[#f7f5f0] text-[#171714]" data-theme={theme}>
@@ -42,7 +50,7 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ onAdminLogin
               onClick={onAdminLogin}
               className="inline-flex shrink-0 items-center gap-1.5 bg-[#b89652] px-3 py-3 text-[9px] font-bold uppercase tracking-[0.12em] text-white transition hover:bg-[#9c7838] sm:gap-2 sm:px-5 sm:text-[10px] sm:tracking-[0.16em]"
             >
-              Iniciar sesión <ArrowUpRight className="h-3.5 w-3.5" />
+              Accesos <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
@@ -71,10 +79,10 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ onAdminLogin
                 Piezas que cuentan historias. Descubre relojería, joyería, fragancias y accesorios elegidos para acompañarte siempre.
               </p>
               <div className="mt-10 flex flex-wrap items-center gap-4">
-                <a href="#catalogo" className="store-hero-primary inline-flex items-center gap-3 bg-[#b89652] px-6 py-4 text-[10px] font-bold uppercase tracking-[0.2em] text-white transition hover:bg-[#c9a968]">
+                <a href="/catalogo" className="store-hero-primary inline-flex items-center gap-3 bg-[#b89652] px-6 py-4 text-[10px] font-bold uppercase tracking-[0.2em] text-white transition hover:bg-[#c9a968]">
                   Explorar catálogo <ArrowRight className="h-4 w-4" />
                 </a>
-                <a href="#nosotros" className="px-4 py-4 text-[10px] font-bold uppercase tracking-[0.2em] text-white/75 transition hover:text-white">Nuestra historia</a>
+                <a href="/nosotros" className="px-4 py-4 text-[10px] font-bold uppercase tracking-[0.2em] text-white/75 transition hover:text-white">Nuestra historia</a>
               </div>
               <div className="mt-16 flex flex-wrap gap-x-8 gap-y-4 border-t border-white/15 pt-6 text-[10px] uppercase tracking-[0.16em] text-white/55">
                 <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[#d8c38c]" /> Selección de confianza</span>
@@ -99,7 +107,7 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ onAdminLogin
               <div className="hero-location-badge absolute right-0 top-7 hidden rounded-full border border-[#d8c38c]/40 px-5 py-3 text-[9px] uppercase tracking-[0.22em] text-[#e4d4ad] sm:block">Bogotá · Colombia</div>
             </div>
           </div>
-          <a href="#catalogo" aria-label="Desplazarse al catálogo" className="absolute bottom-7 left-1/2 hidden -translate-x-1/2 items-center gap-2 text-[9px] uppercase tracking-[0.22em] text-white/50 lg:flex">
+          <a href="/catalogo" aria-label="Desplazarse al catálogo" className="absolute bottom-7 left-1/2 hidden -translate-x-1/2 items-center gap-2 text-[9px] uppercase tracking-[0.22em] text-white/50 lg:flex">
             Descubrir <ArrowDown className="h-3.5 w-3.5" />
           </a>
         </section>
