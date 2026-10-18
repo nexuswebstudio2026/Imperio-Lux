@@ -24,6 +24,12 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Imperio Lux necesita acceso a la cámara cuando quieras tomar o adjuntar una imagen.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Imperio Lux necesita acceso al micrófono cuando uses una función que grabe audio.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Imperio Lux necesita tu ubicación mientras usas la aplicación para ofrecer funciones basadas en tu ubicación.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

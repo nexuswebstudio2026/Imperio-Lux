@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, session, shell } = require('electron');
 
 const siteUrl = process.env.IMPERIO_WEB_URL || 'https://imperiolux.vercel.app';
 const siteOrigin = new URL(siteUrl).origin;
@@ -34,6 +34,25 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  const permittedOrigins = new Set([siteOrigin]);
+  const allowedPermissions = new Set(['media', 'geolocation']);
+
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const requestingUrl = details.requestingUrl || webContents.getURL();
+    let requestingOrigin;
+    try {
+      requestingOrigin = new URL(requestingUrl).origin;
+    } catch {
+      callback(false);
+      return;
+    }
+
+    callback(permittedOrigins.has(requestingOrigin) && allowedPermissions.has(permission));
+  });
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
+    return permittedOrigins.has(requestingOrigin) && allowedPermissions.has(permission);
+  });
+
   createWindow();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

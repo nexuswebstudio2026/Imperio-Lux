@@ -27,10 +27,10 @@ La cuenta de servicio solo autentica el servidor ante Google; la autenticación 
 
 El proyecto no usa PWA. La app móvil se empaqueta con Capacitor para Android/iOS y la app de escritorio se empaqueta con Electron para Windows/macOS/Linux. La web publicada sigue siendo la misma experiencia en el navegador.
 
-- Android/iOS: instala dependencias, ejecuta `npm run cap:sync` y abre la plataforma con `npm run cap:android` o `npm run cap:ios`. Android requiere Android Studio y SDK; iOS requiere macOS y Xcode. `cap:sync` genera el frontend empaquetado con la URL API estable de Vercel de `.env.native`.
-- Escritorio: `npm run desktop:dev` abre el sitio publicado en una ventana nativa. `npm run desktop:build` genera el instalador correspondiente al sistema operativo en `release/desktop-app`.
+- Android/iOS: `CAPACITOR_SERVER_URL` define el sitio que se abrirá dentro de la app y por defecto apunta a `https://imperiolux.vercel.app/`. Puede cambiarse a una URL localhost/LAN al desarrollar; en dispositivos físicos se debe usar la IP LAN del equipo, no `localhost`. `npm run cap:sync` sincroniza Android e iOS; `npm run android:apk` genera el APK de desarrollo en `release/android`. Android requiere Android Studio y SDK. Para iOS, usa `npm run cap:ios` en macOS con Xcode, crea un Archive y expórtalo como `.ipa` con la firma y el perfil de distribución correspondientes.
+- Escritorio: `npm run desktop:dev` abre el sitio publicado en una ventana nativa; `IMPERIO_WEB_URL` permite cambiar la URL. `npm run desktop:build` genera un instalador Windows `.exe` (NSIS) en Windows o un `.dmg` en macOS, dentro de `release/desktop-app`.
 
-Las sesiones móviles usan cookies entre el origen nativo local y la API de Vercel. El servidor solo habilita CORS con credenciales para los orígenes de Capacitor incluidos en `server.ts`.
+La cámara y el micrófono se solicitan cuando la web los usa; la ubicación está declarada para uso mientras la app está abierta. Android y iOS mostrarán sus solicitudes de permiso del sistema. El uso en segundo plano no está activado.
 
 ## Rutas del sitio
 

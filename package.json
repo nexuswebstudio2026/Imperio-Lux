@@ -1,8 +1,11 @@
 {
   "name": "imperio-lux",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "main": "desktop/main.cjs",
+  "description": "Aplicación de escritorio de Imperio Lux",
+  "author": "Nexus Web Studio",
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
@@ -14,6 +17,7 @@
     "cap:sync": "npm run build:native && cap sync",
     "cap:android": "npm run cap:sync && cap open android",
     "cap:ios": "npm run cap:sync && cap open ios",
+    "android:apk": "npm run cap:sync && node scripts/build-android-apk.cjs",
     "desktop:dev": "electron desktop/main.cjs",
     "desktop:build": "npm run build && electron-builder"
   },
@@ -58,19 +62,27 @@
   "build": {
     "appId": "com.nexuswebstudio.imperiolux",
     "productName": "Imperio Lux",
+    "icon": "public/assets/imperio-icon.ico",
     "directories": {
       "output": "release/desktop-app"
     },
-    "files": [
-      "desktop/**/*",
-      "package.json"
-    ],
+    "files": ["desktop/**/*", "package.json", "!node_modules/**/*"],
     "win": {
       "target": "nsis",
-      "artifactName": "Imperio-Lux-Setup-${version}.${ext}"
+      "icon": "public/assets/imperio-icon.ico",
+      "artifactName": "Imperio-Lux-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png"
     },
     "linux": {
       "target": "AppImage"
