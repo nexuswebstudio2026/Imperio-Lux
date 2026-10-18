@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar } from './components/layout/Sidebar';
-import { GoogleSheetsModal } from './components/layout/GoogleSheetsModal';
 import { PushNotificationToast } from './components/notifications/PushNotificationToast';
 import { NotificationConfigModal } from './components/notifications/NotificationConfigModal';
 
@@ -28,8 +27,7 @@ import {
   UsuariosRolesView,
   ActivityLogView,
 } from './components/configuracion/ConfigViews';
-import { DatabaseView } from './components/database/DatabaseView';
-import { GoogleSheetsConfigPanel } from './components/sheets/GoogleSheetsConfigPanel';
+import { SheetsDatabaseView } from './components/database/SheetsDatabaseView';
 import { PublicStorefront } from './components/storefront/PublicStorefront';
 import { LoginPage } from './components/auth/LoginPage';
 import { AccessChooser } from './components/auth/AccessChooser';
@@ -161,9 +159,8 @@ const MainContent: React.FC = () => {
       case 'activity_log':
         return <ActivityLogView />;
       case 'database':
-        return <DatabaseView />;
       case 'sheets_config':
-        return <GoogleSheetsConfigPanel />;
+        return <SheetsDatabaseView />;
       default:
         return <DashboardView />;
     }
@@ -172,7 +169,6 @@ const MainContent: React.FC = () => {
   return (
     <div className="admin-shell min-h-screen bg-slate-100 dark:bg-slate-950 flex flex-col font-sans text-slate-800 dark:text-slate-100 transition-colors duration-200">
       <Navbar />
-      <GoogleSheetsModal />
       <NotificationConfigModal />
       <PushNotificationToast />
       <div className="flex-1 flex overflow-hidden">

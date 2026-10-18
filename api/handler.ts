@@ -10,6 +10,7 @@ export default function handler(req: Request, res: Response) {
 
   const query = new URL(req.url || '/', 'http://vercel.local').searchParams;
   query.delete('__vercel_path');
+  query.delete('route');
   const remainingQuery = query.toString();
   req.url = `/api/${route}${remainingQuery ? `?${remainingQuery}` : ''}`;
   return app(req, res);

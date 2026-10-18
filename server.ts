@@ -325,6 +325,54 @@ app.get('/api/database/status', async (_req, res) => {
   }
 });
 
+app.get('/api/database/sheets', requireAdmin, async (_req, res) => {
+  try {
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;
+    if (!spreadsheetId) throw new Error('No hay una hoja de cálculo configurada en el servidor.');
+
+    const metadata = await googleApi(
+      `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=spreadsheetId,properties.title,sheets.properties`
+    );
+    const sheets = (metadata.sheets || []).map((sheet: any) => sheet.properties);
+    const ranges = new URLSearchParams({ valueRenderOption: 'UNFORMATTED_VALUE' });
+    sheets.forEach((sheet: any) => {
+      const escapedTitle = String(sheet.title).replace(/'/g, "''");
+      ranges.append('ranges', `'${escapedTitle}'!A:ZZ`);
+    });
+
+    const values = sheets.length
+      ? await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchGet?${ranges.toString()}`)
+      : { valueRanges: [] };
+    const resultSheets = sheets.map((sheet: any, index: number) => {
+      const valuesInSheet: unknown[][] = values.valueRanges?.[index]?.values || [];
+      const headers = (valuesInSheet[0] || []).map((value) => String(value ?? '').trim());
+      const visibleColumns = headers
+        .map((header, columnIndex) => ({ header, columnIndex }))
+        .filter(({ header }) => !/password|contrasena|contraseña|secret|access_token|refresh_token/i.test(header));
+      const rows = valuesInSheet.slice(1)
+        .filter((row) => row.some((cell) => cell !== '' && cell !== null && cell !== undefined))
+        .map((row) => Object.fromEntries(visibleColumns.map(({ header, columnIndex }) => [header, row[columnIndex] ?? ''])));
+      return {
+        title: sheet.title,
+        sheetId: sheet.sheetId,
+        index: sheet.index,
+        headers: visibleColumns.map(({ header }) => header),
+        rows,
+        recordCount: rows.length,
+      };
+    });
+
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({
+      spreadsheetId,
+      title: metadata.properties?.title || 'Google Sheets',
+      sheets: resultSheets,
+    });
+  } catch (error) {
+    res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudieron leer las hojas de Google Sheets.' });
+  }
+});
+
 app.get('/api/storefront/catalog', async (_req, res) => {
   try {
     const [products, categories, brands] = await Promise.all([
@@ -642,7 +690,10 @@ app.use('/api/google-sheets', requireAdmin, async (req, res) => {
     // Express strips the mounted /api/google-sheets prefix from req.url.
     // req.originalUrl can still contain Vercel's internal rewrite query and
     // must not be forwarded to the Google API.
-    const upstreamPath = req.url;
+    const requestUrl = new URL(req.url, 'https://sheets.googleapis.com');
+    requestUrl.searchParams.delete('__vercel_path');
+    requestUrl.searchParams.delete('route');
+    const upstreamPath = `${requestUrl.pathname}${requestUrl.search}`;
     if (!upstreamPath.startsWith('/v4/') || upstreamPath.includes('..')) {
       return res.status(400).json({ error: { message: 'Ruta de Google Sheets inválida.' } });
     }

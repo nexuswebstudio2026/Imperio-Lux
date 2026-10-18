@@ -322,7 +322,6 @@ export const DashboardView: React.FC = () => {
     setActiveComprobanteVenta,
     googleSheetsId,
     googleSheetsStatus,
-    setShowGoogleSheetsModal,
   } = useApp();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -699,7 +698,7 @@ export const DashboardView: React.FC = () => {
               </h3>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                22 Hojas Sincronizadas
+                Conectado con cuenta de servicio
               </span>
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded border border-emerald-500/30">
                 22 Hojas
@@ -712,14 +711,6 @@ export const DashboardView: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            id="btn-dashboard-sheets"
-            onClick={() => setShowGoogleSheetsModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Sincronizar Sheets</span>
-          </button>
           <button
             id="btn-dashboard-database"
             onClick={() => setActiveTab('database')}
