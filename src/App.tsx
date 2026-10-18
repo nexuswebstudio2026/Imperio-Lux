@@ -32,6 +32,7 @@ import { PublicStorefront } from './components/storefront/PublicStorefront';
 import { LoginPage } from './components/auth/LoginPage';
 import { AccessChooser } from './components/auth/AccessChooser';
 import { RolePortal } from './components/portal/RolePortal';
+import { SystemUpdateNotice } from './components/common/SystemUpdateNotice';
 import { ADMIN_TAB_ROUTES, adminTabFromPath, isAdminPath, normalizePathname, PUBLIC_SECTION_ROUTES } from './lib/routes';
 
 const MainContent: React.FC = () => {
@@ -185,6 +186,7 @@ export default function App() {
   return (
     <AppProvider>
       <MainContent />
+      <SystemUpdateNotice />
     </AppProvider>
   );
 }

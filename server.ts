@@ -1,6 +1,7 @@
 import express from 'express';
 import 'dotenv/config';
 import { createServer } from 'node:http';
+import { execFileSync } from 'node:child_process';
 import { createHmac, createSign, randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -11,6 +12,20 @@ import { jsPDF } from 'jspdf';
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 const root = path.dirname(fileURLToPath(import.meta.url));
+const deployedCommitSha = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || (() => {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return '';
+  }
+})();
+const deployedCommitMessage = process.env.VERCEL_GIT_COMMIT_MESSAGE || (() => {
+  try {
+    return execFileSync('git', ['log', '-1', '--format=%s'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return '';
+  }
+})();
 const backupConfigPath = process.env.BACKUP_CONFIG_FILE || path.join(root, '.runtime', 'backup-scheduler.json');
 let tokenCache: { token: string; expires: number } | null = null;
 
@@ -24,6 +39,17 @@ const registrationConfirmAttempts = new Map<string, { count: number; resetAt: nu
 const USERS_SHEET = 'Usuarios';
 const AUTH_HEADERS = ['usuario', 'contrasena_salt', 'contrasena_hash'];
 const USER_PROFILE_HEADERS = ['id', 'tipo_usuario', 'nombre', 'email', 'numero_documento', 'telefono', 'documento_id', 'tipo_persona', 'direccion', 'cargo', 'rol', 'estado'];
+
+app.get('/api/system/version', (_req, res) => {
+  const commit = deployedCommitSha;
+  const releaseVersion = deployedCommitMessage.match(/update\s+app\s+v\.?\s*([\d]+(?:\.[\d]+)+)/i)?.[1];
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  res.json({
+    commit,
+    version: commit ? commit.slice(0, 12) : 'local',
+    displayVersion: releaseVersion ? `Update App V. ${releaseVersion}` : deployedCommitMessage || 'Versión local',
+  });
+});
 
 function normalizeUsersHeader(value: unknown) {
   const header = String(value || '').trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
