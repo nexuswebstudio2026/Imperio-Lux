@@ -65,6 +65,7 @@ import {
   ensureSheetTabsExist,
   writeTableToSheet,
   readTableFromSheet,
+  readTablesFromSheets,
   appendRowToSheet,
   validateSpreadsheetConnection,
   type ConnectionValidationResult,
@@ -259,11 +260,36 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 function loadStorage<T>(key: string, defaultVal: T): T {
   try {
     const item = localStorage.getItem(`pv_${key}`);
-    return item ? JSON.parse(item) : defaultVal;
+    if (!item) return defaultVal;
+    return normalizeStoredDates(JSON.parse(item)) as T;
   } catch (e) {
     console.error(`Error loading storage for ${key}`, e);
     return defaultVal;
   }
+}
+
+function normalizeStoredDates(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeStoredDates);
+  if (!value || typeof value !== 'object') return value;
+
+  const normalized: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (/fecha|date/i.test(key) && (typeof entry === 'number' || (typeof entry === 'string' && /^-?\d+(\.\d+)?$/.test(entry)))) {
+      const serial = Number(entry);
+      if (Number.isFinite(serial)) {
+        const date = new Date(Date.UTC(1899, 11, 30) + Math.round(serial * 86_400_000));
+        const datePart = [date.getUTCFullYear(), String(date.getUTCMonth() + 1).padStart(2, '0'), String(date.getUTCDate()).padStart(2, '0')].join('-');
+        if (/hora|time/i.test(key)) {
+          normalized[key] = `${datePart} ${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}:${String(date.getUTCSeconds()).padStart(2, '0')}`;
+        } else {
+          normalized[key] = datePart;
+        }
+        continue;
+      }
+    }
+    normalized[key] = normalizeStoredDates(entry);
+  }
+  return normalized;
 }
 
 function saveStorage<T>(key: string, val: T): void {
@@ -815,99 +841,105 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       onProgress?.('Consultando estructura de Google Sheets...', 10);
       const meta = await fetchSpreadsheetMetadata(token, googleSheetsId);
       const existingTabs = new Set(meta.sheets.map((s) => s.title));
+      const tablesToRead = [
+        'productos', 'categorias', 'marcas', 'presentaciones', 'clientes', 'proveedores', 'empleados',
+        'ventas', 'compras', 'cajas', 'movimientos_caja', 'inventario_ajustes', 'kardex', 'empresas',
+        'users', 'roles', 'monedas', 'documentos', 'comprobantes', 'activity_logs', 'notificaciones',
+      ].filter((name) => existingTabs.has(name));
+      const sheetData = await readTablesFromSheets(token, googleSheetsId, tablesToRead);
 
       let totalRecords = 0;
 
       if (existingTabs.has('productos')) {
         onProgress?.('Descargando productos...', 15);
-        const list = await readTableFromSheet<Producto>(token, googleSheetsId, 'productos');
+        const list = (sheetData.get('productos') || []) as Producto[];
         setProductos(list);
         saveStorage('productos', list);
         totalRecords += list.length;
       }
       if (existingTabs.has('categorias')) {
         onProgress?.('Descargando categorías...', 25);
-        const list = await readTableFromSheet<Categoria>(token, googleSheetsId, 'categorias');
+        const list = (sheetData.get('categorias') || []) as Categoria[];
         setCategorias(list);
         saveStorage('categorias', list);
         totalRecords += list.length;
       }
       if (existingTabs.has('marcas')) {
-        const list = await readTableFromSheet<Marca>(token, googleSheetsId, 'marcas');
+        const list = (sheetData.get('marcas') || []) as Marca[];
         setMarcas(list); saveStorage('marcas', list); totalRecords += list.length;
       }
       if (existingTabs.has('presentaciones')) {
-        const list = await readTableFromSheet<Presentacion>(token, googleSheetsId, 'presentaciones');
+        const list = (sheetData.get('presentaciones') || []) as Presentacion[];
         setPresentaciones(list); saveStorage('presentaciones', list); totalRecords += list.length;
       }
       if (existingTabs.has('clientes')) {
         onProgress?.('Descargando clientes...', 40);
-        const list = await readTableFromSheet<Cliente>(token, googleSheetsId, 'clientes');
+        const list = (sheetData.get('clientes') || []) as Cliente[];
         setClientes(list); saveStorage('clientes', list); totalRecords += list.length;
       }
       if (existingTabs.has('proveedores')) {
-        const list = await readTableFromSheet<Proveedor>(token, googleSheetsId, 'proveedores');
+        const list = (sheetData.get('proveedores') || []) as Proveedor[];
         setProveedores(list); saveStorage('proveedores', list); totalRecords += list.length;
       }
       if (existingTabs.has('empleados')) {
-        const list = await readTableFromSheet<Empleado>(token, googleSheetsId, 'empleados');
+        const list = (sheetData.get('empleados') || []) as Empleado[];
         setEmpleados(list); saveStorage('empleados', list); totalRecords += list.length;
       }
       if (existingTabs.has('ventas')) {
         onProgress?.('Descargando ventas...', 60);
-        const list = await readTableFromSheet<Venta>(token, googleSheetsId, 'ventas');
+        const list = (sheetData.get('ventas') || []) as Venta[];
         setVentas(list); saveStorage('ventas', list); totalRecords += list.length;
       }
       if (existingTabs.has('compras')) {
-        const list = await readTableFromSheet<Compra>(token, googleSheetsId, 'compras');
+        const list = (sheetData.get('compras') || []) as Compra[];
         setCompras(list); saveStorage('compras', list); totalRecords += list.length;
       }
       if (existingTabs.has('cajas')) {
-        const list = await readTableFromSheet<Caja>(token, googleSheetsId, 'cajas');
+        const list = (sheetData.get('cajas') || []) as Caja[];
         setCajas(list); saveStorage('cajas', list); totalRecords += list.length;
       }
       if (existingTabs.has('movimientos_caja')) {
-        const list = await readTableFromSheet<MovimientoCaja>(token, googleSheetsId, 'movimientos_caja');
+        const list = (sheetData.get('movimientos_caja') || []) as MovimientoCaja[];
         setMovimientosCaja(list); saveStorage('movimientosCaja', list); totalRecords += list.length;
       }
       if (existingTabs.has('inventario_ajustes')) {
-        const list = await readTableFromSheet<InventarioAjuste>(token, googleSheetsId, 'inventario_ajustes');
+        const list = (sheetData.get('inventario_ajustes') || []) as InventarioAjuste[];
         setInventarioAjustes(list); saveStorage('inventarioAjustes', list); totalRecords += list.length;
       }
       if (existingTabs.has('kardex')) {
-        const list = await readTableFromSheet<KardexItem>(token, googleSheetsId, 'kardex');
+        const list = (sheetData.get('kardex') || []) as KardexItem[];
         setKardex(list); saveStorage('kardex', list); totalRecords += list.length;
       }
       if (existingTabs.has('empresas')) {
-        const list = await readTableFromSheet<Empresa>(token, googleSheetsId, 'empresas');
+        const list = (sheetData.get('empresas') || []) as Empresa[];
         if (list.length > 0 && list[0]) { setEmpresa(list[0]); saveStorage('empresa', list[0]); totalRecords += 1; }
       }
       if (existingTabs.has('users')) {
-        const list = await readTableFromSheet<User>(token, googleSheetsId, 'users');
+        const list = (sheetData.get('users') || []) as User[];
         setUsers(list); saveStorage('users', list); totalRecords += list.length;
       }
       if (existingTabs.has('roles')) {
-        const list = await readTableFromSheet<Role>(token, googleSheetsId, 'roles');
+        const list = (sheetData.get('roles') || []) as Role[];
         setRoles(list); saveStorage('roles', list); totalRecords += list.length;
       }
       if (existingTabs.has('monedas')) {
-        const list = await readTableFromSheet<Moneda>(token, googleSheetsId, 'monedas');
+        const list = (sheetData.get('monedas') || []) as Moneda[];
         setMonedas(list); saveStorage('monedas', list); totalRecords += list.length;
       }
       if (existingTabs.has('documentos')) {
-        const list = await readTableFromSheet<DocumentoTipo>(token, googleSheetsId, 'documentos');
+        const list = (sheetData.get('documentos') || []) as DocumentoTipo[];
         setDocumentos(list); saveStorage('documentos', list); totalRecords += list.length;
       }
       if (existingTabs.has('comprobantes')) {
-        const list = await readTableFromSheet<ComprobanteTipo>(token, googleSheetsId, 'comprobantes');
+        const list = (sheetData.get('comprobantes') || []) as ComprobanteTipo[];
         setComprobantes(list); saveStorage('comprobantes', list); totalRecords += list.length;
       }
       if (existingTabs.has('activity_logs')) {
-        const list = await readTableFromSheet<ActivityLog>(token, googleSheetsId, 'activity_logs');
+        const list = (sheetData.get('activity_logs') || []) as ActivityLog[];
         setActivityLogs(list); saveStorage('activityLogs', list); totalRecords += list.length;
       }
       if (existingTabs.has('notificaciones')) {
-        const list = await readTableFromSheet<Notificacion>(token, googleSheetsId, 'notificaciones');
+        const list = (sheetData.get('notificaciones') || []) as Notificacion[];
         setNotificaciones(list); saveStorage('notificaciones', list); totalRecords += list.length;
       }
 

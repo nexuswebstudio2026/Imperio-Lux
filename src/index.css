@@ -361,6 +361,18 @@ html.dark .storefront footer { background: #060c15; }
 
 /* Admin dashboard shares the same palette and a calmer, more legible surface. */
 .admin-shell { font-family: 'DM Sans', sans-serif; }
+.admin-sidebar-menu-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #bd9858 rgba(148, 163, 184, .16);
+}
+.admin-sidebar-menu-scroll::-webkit-scrollbar { width: 8px; }
+.admin-sidebar-menu-scroll::-webkit-scrollbar-track { background: rgba(148, 163, 184, .12); }
+.admin-sidebar-menu-scroll::-webkit-scrollbar-thumb {
+  background: #bd9858;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
 html:not(.dark) .admin-shell,
 html:not(.dark) .admin-shell main { background: #f2f5f9 !important; color: #152238; }
 html:not(.dark) .admin-navbar { background: #101b2d; border-color: #263750; color: #f1f4f8; }

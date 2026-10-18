@@ -48,12 +48,12 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside
-      className={`admin-sidebar bg-slate-950 text-slate-300 w-60 shrink-0 border-r border-slate-800 transition-all duration-200 flex flex-col justify-between select-none ${
+      className={`admin-sidebar bg-slate-950 text-slate-300 w-60 h-full min-h-0 shrink-0 overflow-hidden border-r border-slate-800 transition-all duration-200 flex flex-col justify-between select-none ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:hidden w-0'
       }`}
-      style={{ minHeight: 'calc(100vh - 3.5rem)' }}
+      style={{ height: 'calc(100vh - 3.5rem)' }}
     >
-      <div className="overflow-y-auto py-3 px-2 flex-1 space-y-4 text-xs font-normal">
+      <div className="admin-sidebar-menu-scroll min-h-0 overflow-y-auto overscroll-contain py-3 px-2 flex-1 space-y-4 text-xs font-normal">
         {/* INICIO */}
         <div>
           <div className="px-3 pb-1 text-[11px] font-bold text-slate-500 uppercase tracking-wider">

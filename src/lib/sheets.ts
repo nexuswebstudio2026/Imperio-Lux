@@ -410,6 +410,25 @@ export function sheetRowsToObjects(values: any[][]): any[] {
         hasData = true;
         const strVal = String(val).trim();
 
+        // Sheets returns dates as serial numbers when UNFORMATTED_VALUE is used.
+        // Keep date fields as strings because the UI formats and slices them.
+        if (/fecha|date/i.test(header) && /^-?\d+(\.\d+)?$/.test(strVal)) {
+          const serial = Number(strVal);
+          if (Number.isFinite(serial)) {
+            const date = new Date(Date.UTC(1899, 11, 30) + Math.round(serial * 86_400_000));
+            const datePart = [
+              date.getUTCFullYear(),
+              String(date.getUTCMonth() + 1).padStart(2, '0'),
+              String(date.getUTCDate()).padStart(2, '0'),
+            ].join('-');
+            const dateTime = /hora|time/i.test(header);
+            obj[header] = dateTime
+              ? `${datePart} ${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}:${String(date.getUTCSeconds()).padStart(2, '0')}`
+              : datePart;
+            return;
+          }
+        }
+
         // Convert booleans
         if (strVal.toUpperCase() === 'TRUE') {
           obj[header] = true;
@@ -500,6 +519,34 @@ export async function readTableFromSheet<T = any>(
 
   const data = await res.json();
   return sheetRowsToObjects(data.values || []) as T[];
+}
+
+/** Read several tabs in a single Sheets API request to stay within API quotas. */
+export async function readTablesFromSheets(
+  accessToken: string,
+  spreadsheetId: string,
+  sheetNames: string[]
+): Promise<Map<string, any[]>> {
+  void accessToken;
+  if (!sheetNames.length) return new Map();
+
+  const ranges = new URLSearchParams({ valueRenderOption: 'UNFORMATTED_VALUE' });
+  sheetNames.forEach((sheetName) => {
+    ranges.append('ranges', `'${sheetName.replace(/'/g, "''")}'!A:ZZ`);
+  });
+
+  const url = `/api/google-sheets/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchGet?${ranges.toString()}`;
+  const response = await requestGoogleSheetsApi(url.replace('/api/google-sheets', ''));
+  if (!response.ok) {
+    throw new Error(await apiErrorMessage(response, 'No se pudieron descargar las hojas de Google Sheets.'));
+  }
+
+  const data = await response.json();
+  const valueRanges = data.valueRanges || [];
+  return new Map(sheetNames.map((sheetName, index) => [
+    sheetName,
+    sheetRowsToObjects(valueRanges[index]?.values || []),
+  ]));
 }
 
 /**

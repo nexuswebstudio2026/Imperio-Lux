@@ -387,6 +387,7 @@ app.get('/api/storefront/catalog', async (_req, res) => {
         nombre: String(record.nombre || ''),
         descripcion: String(record.descripcion || ''),
         imagen: String(record.imagen || ''),
+        categoria_id: Number.isFinite(Number(record.categoria_id)) ? Number(record.categoria_id) : 0,
         marca_id: Number(record.marca_id) || 0,
         precio_venta: Number(record.precio_venta) || 0,
         estado: true,

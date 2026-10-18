@@ -2,9 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { ArrowDown, ArrowRight, ArrowUpRight, Clock3, Mail, MapPin, Moon, ShieldCheck, Sparkles, Sun, Truck } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PUBLIC_SECTION_ROUTES } from '../../lib/routes';
+import { WhatsAppQuoteWidget } from './WhatsAppQuoteWidget';
+
+const OWNER_WHATSAPP_NUMBER = '573118444853';
 
 interface StorefrontCatalogData {
-  products: Array<Pick<ReturnType<typeof useApp>['productos'][number], 'id' | 'nombre' | 'descripcion' | 'imagen' | 'marca_id' | 'precio_venta' | 'estado'>>;
+  products: Array<Pick<ReturnType<typeof useApp>['productos'][number], 'id' | 'nombre' | 'descripcion' | 'imagen' | 'categoria_id' | 'marca_id' | 'precio_venta' | 'estado'>>;
   categories: Array<Pick<ReturnType<typeof useApp>['categorias'][number], 'id' | 'nombre' | 'descripcion' | 'estado'>>;
   brands: Array<Pick<ReturnType<typeof useApp>['marcas'][number], 'id' | 'nombre' | 'descripcion' | 'estado'>>;
 }
@@ -24,8 +27,8 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
   const activeProducts = visibleProducts.filter((product) => product.estado);
   const featuredProducts = currentPath === '/catalogo' ? activeProducts : activeProducts.slice(0, 4);
   const featuredCategories = visibleCategories.filter((category) => category.estado).slice(0, 4);
-  const phone = (empresa.telefono || '').replace(/\D/g, '');
-  const whatsapp = phone ? `https://wa.me/${phone}` : `mailto:${empresa.correo}`;
+  const phone = OWNER_WHATSAPP_NUMBER;
+  const whatsapp = `https://wa.me/${phone}`;
 
   useEffect(() => {
     let active = true;
@@ -243,6 +246,14 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
           <span>Elegancia que permanece</span>
         </div>
       </footer>
+      <WhatsAppQuoteWidget
+        businessName={empresa.nombre || 'Imperio Lux'}
+        businessPhone={phone}
+        products={activeProducts}
+        categories={visibleCategories.filter((category) => category.estado)}
+        loading={!catalogData && !catalogError}
+        formatCurrency={formatCurrency}
+      />
     </div>
   );
 };
