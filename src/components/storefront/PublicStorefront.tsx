@@ -73,7 +73,9 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
       <header className="z-40 border-b border-black/10 bg-[#f7f5f0]/95 backdrop-blur-md md:sticky md:top-0">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-4 sm:gap-4 sm:px-5 lg:px-8">
           <a href="/" className="flex shrink-0 items-center gap-2 sm:gap-3" aria-label="Imperio Lux, inicio">
-            <img src="/assets/imperio-icon.svg" alt="" className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
+            <span className="storefront-brand-mark h-10 w-10 shrink-0 overflow-hidden rounded-full sm:h-11 sm:w-11">
+              <img src="/assets/imperio-icon.svg" alt="" className="block h-full w-full rounded-full object-cover" />
+            </span>
             <span className="font-serif text-base tracking-[0.1em] sm:text-xl sm:tracking-[0.12em]">IMPERIO LUX</span>
           </a>
 
