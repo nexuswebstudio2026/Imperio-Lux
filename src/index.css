@@ -69,6 +69,101 @@ html.dark .store-mobile-nav {
 html.dark .store-mobile-nav-link { color: #aab6c5; }
 html.dark .store-mobile-nav-link.is-active { color: #e0c78f; }
 
+/* Annual, date-aware decorative layer shared by storefront, login and admin. */
+.seasonal-effects {
+  position: fixed;
+  z-index: 24;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+.seasonal-effects::before {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 3px;
+  content: '';
+}
+.seasonal-effects--halloween::before {
+  background: linear-gradient(90deg, #54206f, #ed7b18 35%, #25113e 68%, #b45309);
+  box-shadow: 0 0 18px rgba(237,123,24,.3);
+}
+.seasonal-effects--christmas::before {
+  background: linear-gradient(90deg, #1b6a49, #d2ae61 25%, #a63030 50%, #d2ae61 75%, #1b6a49);
+  box-shadow: 0 0 18px rgba(28,112,74,.28);
+}
+.seasonal-effects__halloween-item {
+  position: absolute;
+  opacity: .42;
+  filter: drop-shadow(0 2px 8px rgba(226,111,27,.4));
+  animation: seasonal-haunt-drift 9s ease-in-out infinite alternate;
+}
+.seasonal-effects__ghost {
+  opacity: .48;
+  filter: drop-shadow(0 0 12px rgba(190,166,255,.55));
+  animation-name: seasonal-ghost-float;
+  animation-duration: 12s;
+}
+.seasonal-effects__halloween-mist {
+  position: absolute;
+  bottom: -8vh;
+  width: min(58vw, 48rem);
+  height: 30vh;
+  border-radius: 50%;
+  opacity: .16;
+  filter: blur(42px);
+  animation: seasonal-mist-drift 16s ease-in-out infinite alternate;
+}
+.seasonal-effects__halloween-mist--left {
+  left: -18vw;
+  background: radial-gradient(ellipse, #8b5cf6 0%, rgba(95,35,153,.55) 38%, transparent 72%);
+}
+.seasonal-effects__halloween-mist--right {
+  right: -18vw;
+  background: radial-gradient(ellipse, #d97706 0%, rgba(164,78,23,.5) 38%, transparent 72%);
+  animation-delay: -8s;
+}
+.seasonal-effects__snowflake {
+  position: absolute;
+  top: -8vh;
+  color: #a8d2ee;
+  opacity: .33;
+  text-shadow: 0 0 8px rgba(210,235,255,.55);
+  animation-name: seasonal-snowfall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+html[data-season="halloween"] .storefront header,
+html[data-season="halloween"] .admin-navbar { border-bottom-color: rgba(217,119,6,.55); }
+html[data-season="halloween"] .store-nav-link:hover { color: #a44e17; }
+html[data-season="christmas"] .storefront header,
+html[data-season="christmas"] .admin-navbar { border-bottom-color: rgba(34,117,76,.5); }
+html[data-season="christmas"] .store-nav-link:hover { color: #26794e; }
+@keyframes seasonal-haunt-drift {
+  from { transform: translate3d(-6px, 4px, 0) rotate(-8deg); }
+  to { transform: translate3d(9px, -10px, 0) rotate(8deg); }
+}
+@keyframes seasonal-ghost-float {
+  from { transform: translate3d(0, 10px, 0) rotate(-5deg) scale(.94); }
+  to { transform: translate3d(8px, -18px, 0) rotate(6deg) scale(1.06); }
+}
+@keyframes seasonal-mist-drift {
+  from { transform: translate3d(-3vw, 0, 0) scale(.9); }
+  to { transform: translate3d(5vw, -3vh, 0) scale(1.12); }
+}
+@keyframes seasonal-snowfall {
+  0% { transform: translate3d(-8px, -8vh, 0) rotate(0deg); }
+  100% { transform: translate3d(18px, 110vh, 0) rotate(250deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .seasonal-effects__halloween-item,
+  .seasonal-effects__snowflake,
+  .seasonal-effects__halloween-mist { animation: none; }
+  .seasonal-effects__snowflake { top: 15vh; }
+}
+
 /* Day theme: keep the admin shell bright as well as the dashboard content. */
 html:not(.dark) .admin-navbar { background-color: #fff; color: #334155; border-color: #e2e8f0; }
 html:not(.dark) .admin-shell,
