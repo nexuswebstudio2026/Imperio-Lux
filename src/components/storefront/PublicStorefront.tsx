@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowDown, ArrowRight, ArrowUpRight, Clock3, Mail, MapPin, Moon, ShieldCheck, Sparkles, Sun, Truck } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUpRight, Clock3, House, LogIn, Mail, MapPin, MessageCircle, Moon, ShieldCheck, ShoppingBag, Sparkles, Sun, Truck, UsersRound } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PUBLIC_SECTION_ROUTES } from '../../lib/routes';
 import { WhatsAppQuoteWidget } from './WhatsAppQuoteWidget';
@@ -29,6 +29,13 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
   const featuredCategories = visibleCategories.filter((category) => category.estado).slice(0, 4);
   const phone = OWNER_WHATSAPP_NUMBER;
   const whatsapp = `https://wa.me/${phone}`;
+  const mobileNavigation = [
+    { href: '/', label: 'Inicio', icon: House },
+    { href: '/catalogo', label: 'Catálogo', icon: ShoppingBag },
+    { href: '/nosotros', label: 'Nosotros', icon: UsersRound },
+    { href: '/contacto', label: 'Contacto', icon: MessageCircle },
+    { href: '/acceso', label: 'Acceder', icon: LogIn },
+  ];
 
   useEffect(() => {
     let active = true;
@@ -58,7 +65,7 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
   }, [currentPath]);
 
   return (
-    <div className="storefront min-h-screen bg-[#f7f5f0] text-[#171714]" data-theme={theme}>
+    <div className="storefront min-h-screen bg-[#f7f5f0] pb-[calc(4.5rem+env(safe-area-inset-bottom))] text-[#171714] md:pb-0" data-theme={theme}>
       <div className="bg-[#151512] px-4 py-2 text-center text-[10px] font-medium uppercase tracking-[0.22em] text-[#d8c38c] sm:text-[11px]">
         Una selección extraordinaria · Envíos a todo Colombia
       </div>
@@ -84,19 +91,25 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
             <button
               type="button"
               onClick={onAdminLogin}
-              className="inline-flex shrink-0 items-center gap-1.5 bg-[#b89652] px-3 py-3 text-[9px] font-bold uppercase tracking-[0.12em] text-white transition hover:bg-[#9c7838] sm:gap-2 sm:px-5 sm:text-[10px] sm:tracking-[0.16em]"
+              className="hidden shrink-0 items-center gap-1.5 bg-[#b89652] px-3 py-3 text-[9px] font-bold uppercase tracking-[0.12em] text-white transition hover:bg-[#9c7838] md:inline-flex sm:gap-2 sm:px-5 sm:text-[10px] sm:tracking-[0.16em]"
             >
               Accesos <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>
-        <nav aria-label="Navegación móvil" className="flex justify-center gap-6 overflow-x-auto border-t border-black/5 px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#55534c] md:hidden">
-          <a className="store-nav-link" href="/">Inicio</a>
-          <a className="store-nav-link" href="/catalogo">Catálogo</a>
-          <a className="store-nav-link" href="/nosotros">Nosotros</a>
-          <a className="store-nav-link" href="/contacto">Contacto</a>
-        </nav>
       </header>
+
+      <nav aria-label="Navegación móvil" className="store-mobile-nav md:hidden">
+        {mobileNavigation.map(({ href, label, icon: Icon }) => {
+          const isActive = currentPath === href || (href === '/' && currentPath === '/');
+          return (
+            <a key={href} href={href} aria-current={isActive ? 'page' : undefined} className={`store-mobile-nav-link${isActive ? ' is-active' : ''}`}>
+              <Icon aria-hidden="true" className="h-5 w-5" strokeWidth={isActive ? 2.2 : 1.8} />
+              <span>{label}</span>
+            </a>
+          );
+        })}
+      </nav>
 
       <main>
         <section id="inicio" className="relative isolate min-h-[620px] overflow-hidden bg-[#171714] text-white lg:min-h-[690px]">

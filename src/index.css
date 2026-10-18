@@ -21,6 +21,54 @@ html { scroll-behavior: smooth; }
 .store-nav-link::after { position: absolute; right: 0; bottom: -7px; left: 0; height: 1px; background: #b89652; content: ''; transform: scaleX(0); transform-origin: left; transition: transform 160ms ease; }
 .store-nav-link:hover::after { transform: scaleX(1); }
 
+/* Compact bottom navigation for public pages on phones. */
+.store-mobile-nav { display: none; }
+@media (max-width: 767px) {
+  .store-mobile-nav {
+    position: fixed;
+    z-index: 60;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    padding: 0.45rem 0.5rem calc(0.45rem + env(safe-area-inset-bottom));
+    border-top: 1px solid rgba(21, 27, 38, 0.12);
+    background: rgba(250, 249, 246, 0.96);
+    box-shadow: 0 -8px 28px rgba(16, 27, 45, 0.1);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+  .store-mobile-nav-link {
+    display: flex;
+    min-width: 0;
+    min-height: 3.45rem;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    border-radius: 0.75rem;
+    color: #657084;
+    font-size: 0.63rem;
+    font-weight: 600;
+    letter-spacing: 0.015em;
+    text-decoration: none;
+    transition: color 160ms ease, background-color 160ms ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .store-mobile-nav-link.is-active { color: #8c6b34; }
+  .store-mobile-nav-link:focus-visible { outline: 2px solid #bd9858; outline-offset: -2px; }
+  .storefront-whatsapp-trigger { bottom: calc(5.25rem + env(safe-area-inset-bottom)); right: 1rem; }
+  .storefront [id] { scroll-margin-top: 5rem; }
+}
+html.dark .store-mobile-nav {
+  border-color: rgba(255,255,255,.1);
+  background: rgba(13,22,37,.96);
+  box-shadow: 0 -8px 28px rgba(0,0,0,.28);
+}
+html.dark .store-mobile-nav-link { color: #aab6c5; }
+html.dark .store-mobile-nav-link.is-active { color: #e0c78f; }
+
 /* Day theme: keep the admin shell bright as well as the dashboard content. */
 html:not(.dark) .admin-navbar { background-color: #fff; color: #334155; border-color: #e2e8f0; }
 html:not(.dark) .admin-shell,

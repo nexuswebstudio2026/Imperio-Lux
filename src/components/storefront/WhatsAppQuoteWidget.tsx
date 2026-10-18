@@ -146,7 +146,7 @@ export const WhatsAppQuoteWidget: React.FC<WhatsAppQuoteWidgetProps> = ({
         type="button"
         onClick={() => { setOpen(true); setError(''); }}
         aria-label="Solicitar cotización por WhatsApp"
-        className="fixed bottom-5 right-5 z-[70] inline-flex min-h-14 items-center gap-3 rounded-full bg-[#168c57] px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_36px_rgba(15,67,43,.32)] transition hover:-translate-y-0.5 hover:bg-[#117749] focus:outline-none focus:ring-4 focus:ring-emerald-300/60"
+        className="storefront-whatsapp-trigger fixed bottom-5 right-5 z-[70] inline-flex min-h-14 items-center gap-3 rounded-full bg-[#168c57] px-5 py-3 text-sm font-semibold text-white shadow-[0_14px_36px_rgba(15,67,43,.32)] transition hover:-translate-y-0.5 hover:bg-[#117749] focus:outline-none focus:ring-4 focus:ring-emerald-300/60"
       >
         <MessageCircle className="h-6 w-6" aria-hidden="true" />
         <span>Cotizar por WhatsApp</span>

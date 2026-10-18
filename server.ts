@@ -23,7 +23,7 @@ const registrationAttempts = new Map<string, { count: number; resetAt: number }>
 const registrationConfirmAttempts = new Map<string, { count: number; resetAt: number }>();
 const USERS_SHEET = 'Usuarios';
 const AUTH_HEADERS = ['usuario', 'contrasena_salt', 'contrasena_hash'];
-const USER_PROFILE_HEADERS = ['id', 'tipo_usuario', 'nombre', 'email', 'numero_documento', 'telefono', 'cargo', 'rol', 'estado'];
+const USER_PROFILE_HEADERS = ['id', 'tipo_usuario', 'nombre', 'email', 'numero_documento', 'telefono', 'documento_id', 'tipo_persona', 'direccion', 'cargo', 'rol', 'estado'];
 
 function normalizeUsersHeader(value: unknown) {
   const header = String(value || '').trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
@@ -74,6 +74,24 @@ async function readSheetRecords(sheetName: string): Promise<Record<string, unkno
   const values: unknown[][] = result.values || [];
   const headers = (values[0] || []).map((value) => String(value || '').trim());
   return values.slice(1).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])));
+}
+async function readSheetGrid(sheetName: string) {
+  const spreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;
+  if (!spreadsheetId) throw new Error('No hay una hoja de cálculo configurada.');
+  const range = encodeURIComponent(`${sheetName}!A:Z`);
+  const result = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueRenderOption=UNFORMATTED_VALUE`);
+  const values: unknown[][] = result.values || [];
+  const headers = (values[0] || []).map((value) => String(value || '').trim());
+  if (!headers.length) throw new Error(`La hoja ${sheetName} no tiene encabezados.`);
+  return { spreadsheetId, headers, rows: values.slice(1).map((row, index) => ({ rowNumber: index + 2, data: Object.fromEntries(headers.map((header, column) => [normalizeUsersHeader(header), String(row[column] ?? '').trim()])) })) };
+}
+async function writeSheetGridRow(spreadsheetId: string, sheetName: string, headers: string[], rowNumber: number, data: Record<string, string>) {
+  const values = headers.map((header) => data[normalizeUsersHeader(header)] ?? '');
+  await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${sheetName}!A${rowNumber}`)}?valueInputOption=RAW`, { method: 'PUT', body: JSON.stringify({ values: [values] }) });
+}
+async function appendSheetGridRow(spreadsheetId: string, sheetName: string, headers: string[], data: Record<string, string>) {
+  const values = headers.map((header) => data[normalizeUsersHeader(header)] ?? '');
+  await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${sheetName}!A:Z`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { method: 'POST', body: JSON.stringify({ values: [values] }) });
 }
 function isPublicRecordActive(value: unknown) {
   return value === true || value === 1 || ['true', 'activo', 'active'].includes(String(value || '').trim().toLocaleLowerCase('es'));
@@ -618,12 +636,13 @@ app.post('/api/auth/login', async (req, res) => {
     const password = String(req.body?.password || '');
     if (!username || !password || password.length > 256) return res.status(400).json({ error: 'Escribe tu usuario y contraseña.' });
     const { rows } = await readUsersSheet();
-    const found = rows.find(({ data }) => normalizeUsername(data.usuario) === username && data.estado.toLowerCase() !== 'false' && data.estado.toLowerCase() !== 'inactivo');
+    const found = rows.find(({ data }) => normalizeUsername(data.usuario) === username);
     if (!found || !verifyPassword(password, found.data.contrasena_salt, found.data.contrasena_hash)) {
       const current = loginAttempts.get(ip);
       loginAttempts.set(ip, { count: current?.resetAt && current.resetAt > Date.now() ? (current.count + 1) : 1, resetAt: current?.resetAt && current.resetAt > Date.now() ? current.resetAt : Date.now() + 15 * 60_000 });
       return res.status(401).json({ error: 'Usuario o contraseña incorrectos.' });
     }
+    if (!isPublicRecordActive(found.data.estado)) return res.status(403).json({ error: /^pendiente|pending$/i.test(found.data.estado) ? 'Tu solicitud de acceso está pendiente de aprobación por el administrador.' : 'Esta cuenta está inactiva. Contacta al administrador.' });
     loginAttempts.delete(ip);
     const user = safeUser(found.data);
     const expectedType = String(req.body?.expectedType || '');
@@ -749,32 +768,32 @@ app.post('/api/auth/register', async (req, res) => {
   if (currentLimit && currentLimit.resetAt > Date.now() && currentLimit.count >= 5) return res.status(429).json({ error: 'Demasiados intentos de registro. Espera 15 minutos e inténtalo de nuevo.' });
   registrationAttempts.set(ip, { count: currentLimit?.resetAt && currentLimit.resetAt > Date.now() ? currentLimit.count + 1 : 1, resetAt: currentLimit?.resetAt && currentLimit.resetAt > Date.now() ? currentLimit.resetAt : Date.now() + 15 * 60_000 });
   try {
-    const type = String(req.body?.type || '') as 'client' | 'supplier';
+    const type = String(req.body?.type || '') as 'client' | 'supplier' | 'employee';
     const name = String(req.body?.name || '').trim();
     const email = String(req.body?.email || '').trim().toLocaleLowerCase('es');
     const username = String(req.body?.username || '').trim();
     const password = String(req.body?.password || '');
-    if (!['client', 'supplier'].includes(type)) return res.status(403).json({ error: 'El acceso de empleados debe ser creado por un administrador.' });
+    const document = String(req.body?.document || '').trim();
+    const phone = String(req.body?.phone || '').trim();
+    const address = String(req.body?.address || '').trim();
+    const cargo = String(req.body?.cargo || '').trim();
+    const documentTypeId = String(req.body?.documentTypeId || '1').trim();
+    const personType = String(req.body?.personType || 'Natural').trim();
+    if (!['client', 'supplier', 'employee'].includes(type)) return res.status(400).json({ error: 'El tipo de usuario no es válido.' });
     if (name.length < 2 || name.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || username.length < 4 || username.length > 64 || password.length < 10 || password.length > 256) {
       return res.status(400).json({ error: 'Completa el nombre, correo válido, usuario (4–64 caracteres) y contraseña (mínimo 10 caracteres).' });
     }
+    if (!document || document.length > 32 || !/^[1-4]$/.test(documentTypeId) || phone.length > 32 || address.length > 240 || cargo.length > 120 || !['Natural', 'Juridica'].includes(personType)) return res.status(400).json({ error: 'Revisa el documento, teléfono y los datos del registro.' });
 
     const { rows } = await readUsersSheet();
     if (rows.some(({ data }) => normalizeUsername(data.usuario) === normalizeUsername(username))) return res.status(409).json({ error: 'Ese nombre de usuario ya está ocupado.' });
     if (rows.some(({ data }) => data.email.toLocaleLowerCase('es') === email)) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo. Intenta iniciar sesión o restablecer tu contraseña.' });
 
-    const entitySheet = type === 'supplier' ? 'proveedores' : 'clientes';
-    const entityRows = await readSheetRecords(entitySheet);
-    const linkedEntity = entityRows.find((row) => String(row.email || '').trim().toLocaleLowerCase('es') === email && isPublicRecordActive(row.estado));
-    if (type === 'supplier' && !linkedEntity) {
-      return res.status(403).json({ error: `El correo debe coincidir con un registro activo en la hoja ${entitySheet}. Contacta al administrador si aún no apareces allí.` });
-    }
     const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASSWORD && process.env.SMTP_FROM);
     if (!smtpConfigured) return res.status(503).json({ error: 'El registro requiere correo de verificación. Configura SMTP en el servidor.' });
-    const label = type === 'supplier' ? 'Proveedor' : 'Cliente';
-    const prefix = type === 'supplier' ? 'PROV' : 'CLI';
-    const linkedId = linkedEntity?.id ? String(linkedEntity.id) : randomBytes(8).toString('hex');
-    const id = `${prefix}-${linkedId}`;
+    const label = type === 'supplier' ? 'Proveedor' : type === 'employee' ? 'Empleado' : 'Cliente';
+    const prefix = type === 'supplier' ? 'PROV' : type === 'employee' ? 'EMP' : 'CLI';
+    const id = `${prefix}-PEND-${randomBytes(8).toString('hex').toUpperCase()}`;
     if (rows.some(({ data }) => data.id === id)) return res.status(409).json({ error: 'Ya hay una cuenta asociada a este registro. Intenta iniciar sesión o contacta al administrador.' });
     const salt = randomBytes(16).toString('hex');
     const row: Record<string, string> = {
@@ -782,9 +801,14 @@ app.post('/api/auth/register', async (req, res) => {
       tipo_usuario: label,
       nombre: name,
       email,
-      cargo: '',
+      numero_documento: document,
+      telefono: phone,
+      documento_id: documentTypeId,
+      tipo_persona: personType,
+      direccion: address,
+      cargo,
       rol: label,
-      estado: 'Activo',
+      estado: 'Pendiente',
       usuario: username,
       contrasena_salt: salt,
       contrasena_hash: scryptSync(password, salt, 64).toString('hex'),
@@ -799,9 +823,9 @@ app.post('/api/auth/register', async (req, res) => {
       from: process.env.SMTP_FROM,
       to: email,
       subject: 'Verifica tu correo · Imperio Lux',
-      text: `Tu código para crear la cuenta de ${label} en Imperio Lux es: ${code}. Vence en 10 minutos. Si no solicitaste esta cuenta, ignora este mensaje.`,
+      text: `Tu código para solicitar acceso de ${label} en Imperio Lux es: ${code}. Vence en 10 minutos. La cuenta quedará pendiente de aprobación del administrador. Si no solicitaste esta cuenta, ignora este mensaje.`,
     });
-    return res.status(200).json({ message: 'Enviamos un código de verificación al correo indicado. Ingrésalo para guardar tu cuenta.', registrationToken });
+    return res.status(200).json({ message: 'Enviamos un código de verificación al correo indicado. Al verificarlo, tu solicitud quedará pendiente de aprobación.', registrationToken });
   } catch (error) {
     return res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo registrar la cuenta en Google Sheets.' });
   }
@@ -828,16 +852,7 @@ app.post('/api/auth/register/confirm', async (req, res) => {
       return res.status(400).json({ error: 'El código no es válido o venció.' });
     }
     const row = pending.row;
-    if (row.tipo_usuario === 'Empleado') return res.status(403).json({ error: 'El acceso de empleados debe ser creado por un administrador.' });
     const { spreadsheetId, headers, rows } = await readUsersSheet();
-    if (row.tipo_usuario === 'Empleado' || row.tipo_usuario === 'Proveedor') {
-      const entitySheet = row.tipo_usuario === 'Empleado' ? 'empleados' : 'proveedores';
-      const linkedEntities = await readSheetRecords(entitySheet);
-      const entityId = row.id.replace(/^(EMP|PROV)-/i, '');
-      if (!linkedEntities.some((entity) => String(entity.id) === entityId && String(entity.email || '').trim().toLocaleLowerCase('es') === row.email.toLocaleLowerCase('es') && isPublicRecordActive(entity.estado))) {
-        return res.status(403).json({ error: 'El registro asociado ya no está activo. Contacta al administrador.' });
-      }
-    }
     if (rows.some(({ data }) => normalizeUsername(data.usuario) === normalizeUsername(row.usuario))) return res.status(409).json({ error: 'Ese nombre de usuario ya está ocupado. Inicia el registro nuevamente con otro.' });
     if (rows.some(({ data }) => data.email.toLocaleLowerCase('es') === row.email.toLocaleLowerCase('es'))) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
     if (rows.some(({ data }) => data.id === row.id)) return res.status(409).json({ error: 'Ya existe una cuenta para ese registro asociado.' });
@@ -846,7 +861,7 @@ app.post('/api/auth/register/confirm', async (req, res) => {
       method: 'POST', body: JSON.stringify({ values: [values] }),
     });
     registrationConfirmAttempts.delete(ip);
-    return res.status(201).json({ message: 'Correo verificado y cuenta registrada en Usuarios. Ya puedes iniciar sesión.' });
+    return res.status(201).json({ message: 'Correo verificado. Tu solicitud quedó registrada en Usuarios y está pendiente de aprobación del administrador.' });
   } catch (error) {
     return res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo confirmar el registro.' });
   }
@@ -917,8 +932,51 @@ app.post('/api/auth/bootstrap-admin', async (req, res) => {
 app.get('/api/auth/admin/users', requireAdmin, async (_req, res) => {
   try {
     const { rows } = await readUsersSheet();
-    res.json({ users: rows.filter(({ data }) => data.id).map(({ data }) => ({ id: data.id, name: data.nombre || data.name || '', email: data.email || '', document: data.numero_documento || data.documento || '', phone: data.telefono || data.celular || '', type: classifyUser(data), username: data.usuario || '', configured: Boolean(data.contrasena_hash), cargo: data.cargo || '', rol: data.rol || '', estado: !/^(inactivo|inactive|false|0)$/i.test(data.estado || '') })) });
+    res.json({ users: rows.filter(({ data }) => data.id).map(({ data }) => ({ id: data.id, name: data.nombre || data.name || '', email: data.email || '', document: data.numero_documento || data.documento || '', phone: data.telefono || data.celular || '', type: classifyUser(data), username: data.usuario || '', configured: Boolean(data.contrasena_hash), cargo: data.cargo || '', rol: data.rol || '', pending: /^pendiente|pending$/i.test(data.estado || ''), estado: isPublicRecordActive(data.estado) })) });
   } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo leer la hoja Usuarios.' }); }
+});
+
+app.post('/api/auth/admin/users/:id/approve', requireAdmin, async (req, res) => {
+  try {
+    const { spreadsheetId, headers, rows } = await readUsersSheet();
+    const target = rows.find(({ data }) => data.id === String(req.params.id || ''));
+    if (!target) return res.status(404).json({ error: 'No se encontró la solicitud.' });
+    if (!/^pendiente|pending$/i.test(target.data.estado || '')) return res.status(409).json({ error: 'La solicitud ya fue procesada o no está pendiente.' });
+    const type = classifyUser(target.data);
+    const sheetName = type === 'employee' ? 'empleados' : type === 'supplier' ? 'proveedores' : type === 'client' ? 'clientes' : '';
+    if (!sheetName) return res.status(400).json({ error: 'No se puede aprobar este tipo de cuenta.' });
+    if (!target.data.email || !target.data.numero_documento) return res.status(400).json({ error: 'La solicitud no tiene correo y documento. Completa esos datos antes de aprobar.' });
+    const entity = await readSheetGrid(sheetName);
+    const existing = entity.rows.find(({ data }) => data.email.toLocaleLowerCase('es') === target.data.email.toLocaleLowerCase('es'));
+    const duplicateDocument = entity.rows.find(({ data }) => data.numero_documento && data.numero_documento === target.data.numero_documento && data.email.toLocaleLowerCase('es') !== target.data.email.toLocaleLowerCase('es'));
+    if (duplicateDocument) return res.status(409).json({ error: `El documento ya está asociado a otro registro en ${sheetName}.` });
+    const numericIds = entity.rows.map(({ data }) => Number(data.id)).filter((value) => Number.isInteger(value) && value > 0);
+    const entityId = existing?.data.id || String(Math.max(0, ...numericIds) + 1);
+    const fullName = target.data.nombre || '';
+    const nameParts = fullName.trim().split(/\s+/);
+    const entityRecord: Record<string, string> = {
+      ...(existing?.data || {}),
+      id: entityId,
+      numero_documento: target.data.numero_documento,
+      documento_id: target.data.documento_id || '1',
+      telefono: target.data.telefono || '',
+      email: target.data.email,
+      estado: 'true',
+      tipo_persona: target.data.tipo_persona || 'Natural',
+      direccion: target.data.direccion || '',
+      razon_social: fullName,
+      nombre: nameParts[0] || fullName,
+      apellido: nameParts.slice(1).join(' '),
+      cargo: target.data.cargo || (type === 'employee' ? 'Por asignar' : ''),
+    };
+    if (existing) await writeSheetGridRow(entity.spreadsheetId, sheetName, entity.headers, existing.rowNumber, entityRecord);
+    else await appendSheetGridRow(entity.spreadsheetId, sheetName, entity.headers, entityRecord);
+    target.data.id = `${type === 'employee' ? 'EMP' : type === 'supplier' ? 'PROV' : 'CLI'}-${entityId}`;
+    target.data.estado = 'Activo';
+    if (type === 'employee' && !target.data.cargo) target.data.cargo = 'Por asignar';
+    await writeUserRow(spreadsheetId, headers, target.rowNumber, target.data);
+    res.json({ message: `Solicitud aprobada y registro creado en ${sheetName}.`, entity: sheetName, id: target.data.id });
+  } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo aprobar la solicitud.' }); }
 });
 
 app.post('/api/auth/admin/users/sync-employee-details', requireAdmin, async (_req, res) => {
