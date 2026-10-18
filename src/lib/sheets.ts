@@ -4,6 +4,22 @@
  */
 import { requestGoogleSheetsApi } from './databaseApi';
 
+async function apiErrorMessage(response: Response, fallback: string): Promise<string> {
+  const body = await response.json().catch(() => ({})) as {
+    error?: string | { message?: string };
+    message?: string;
+  };
+  const message = typeof body.error === 'string'
+    ? body.error
+    : body.error?.message || body.message;
+
+  if (response.status === 401 && message?.toLowerCase().includes('inicia sesión')) {
+    return 'La sesión de administrador no está activa. Vuelve a iniciar sesión en el panel y repite la sincronización.';
+  }
+
+  return message || `${fallback} (HTTP ${response.status})`;
+}
+
 export const DEFAULT_SPREADSHEET_ID = '1CzufAtWYpkx5dYWjPiqdltMyiuIWeR7G4zTKy3_uxcg';
 const PREVIOUS_DEFAULT_SPREADSHEET_ID = '12hdlu9ph-YSU9IfwXh44cqJVHjaNxQD3MP3CXyrfwwk';
 const SPREADSHEET_ID_STORAGE_KEY = 'pv_sheets_spreadsheet_id';
@@ -239,11 +255,7 @@ export async function fetchSpreadsheetMetadata(
   });
 
   if (!res.ok) {
-    const errBody = await res.json().catch(() => ({}));
-    throw new Error(
-      errBody?.error?.message ||
-        `Error HTTP ${res.status} al consultar Google Sheets (${res.statusText})`
-    );
+    throw new Error(await apiErrorMessage(res, 'No se pudo consultar Google Sheets.'));
   }
 
   const data = await res.json();
@@ -294,10 +306,7 @@ export async function ensureSheetTabsExist(
   });
 
   if (!res.ok) {
-    const errBody = await res.json().catch(() => ({}));
-    throw new Error(
-      errBody?.error?.message || 'No se pudieron crear las pestañas faltantes en Google Sheets.'
-    );
+    throw new Error(await apiErrorMessage(res, 'No se pudieron crear las pestañas faltantes en Google Sheets.'));
   }
 }
 
@@ -449,10 +458,7 @@ export async function writeTableToSheet(
     body: JSON.stringify({}),
   });
   if (!clearResponse.ok) {
-    const errBody = await clearResponse.json().catch(() => ({}));
-    throw new Error(
-      errBody?.error?.message || `No se pudo limpiar la pestaña ${sheetName} de Google Sheets`
-    );
+    throw new Error(await apiErrorMessage(clearResponse, `No se pudo limpiar la pestaña ${sheetName} de Google Sheets.`));
   }
 
   // 2. Write new values
@@ -466,10 +472,7 @@ export async function writeTableToSheet(
   });
 
   if (!res.ok) {
-    const errBody = await res.json().catch(() => ({}));
-    throw new Error(
-      errBody?.error?.message || `Error al escribir en pestaña ${sheetName} de Google Sheets`
-    );
+    throw new Error(await apiErrorMessage(res, `No se pudo escribir en la pestaña ${sheetName} de Google Sheets.`));
   }
 
   return records.length;
@@ -492,10 +495,7 @@ export async function readTableFromSheet<T = any>(
 
   if (!res.ok) {
     if (res.status === 404) return [];
-    const errBody = await res.json().catch(() => ({}));
-    throw new Error(
-      errBody?.error?.message || `Error al leer pestaña ${sheetName} de Google Sheets`
-    );
+    throw new Error(await apiErrorMessage(res, `No se pudo leer la pestaña ${sheetName} de Google Sheets.`));
   }
 
   const data = await res.json();

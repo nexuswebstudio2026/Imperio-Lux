@@ -1,7 +1,7 @@
 import express from 'express';
 import 'dotenv/config';
 import { createServer } from 'node:http';
-import { createSign, randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
+import { createHmac, createSign, randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -80,11 +80,60 @@ function safeUser(row: Record<string, string>): AuthUser {
   const type = classifyUser(row);
   return { id: row.id, name: row.nombre || row.name || 'Usuario', email: row.email || '', role: row.rol || row.role || row.tipo_usuario || type, type };
 }
+function sessionSigningKey(): Buffer | null {
+  const configuredSecret = process.env.AUTH_SESSION_SECRET;
+  if (configuredSecret && configuredSecret.length >= 32) {
+    return createHash('sha256').update(configuredSecret).digest();
+  }
+
+  try {
+    const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '') as { private_key?: string };
+    if (typeof credentials.private_key === 'string' && credentials.private_key.length > 0) {
+      return createHash('sha256').update(`imperio-auth-session:${credentials.private_key}`).digest();
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+function createSessionToken(user: AuthUser, expires: number): string {
+  const key = sessionSigningKey();
+  if (process.env.VERCEL === '1') {
+    if (!key) throw new Error('Configura GOOGLE_SERVICE_ACCOUNT_JSON o AUTH_SESSION_SECRET para mantener la sesión en Vercel.');
+    const payload = Buffer.from(JSON.stringify({ user, expires })).toString('base64url');
+    const signature = createHmac('sha256', key).update(payload).digest('base64url');
+    return `${payload}.${signature}`;
+  }
+  return randomBytes(32).toString('base64url');
+}
 function currentSession(req: express.Request) {
   const token = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith('imperio_session='))?.slice('imperio_session='.length);
-  const session = token ? sessions.get(token) : undefined;
-  if (!session || session.expires < Date.now()) { if (token) sessions.delete(token); return null; }
-  return { token: token!, ...session };
+  if (!token) return null;
+
+  const localSession = sessions.get(token);
+  if (localSession) {
+    if (localSession.expires >= Date.now()) return { token, ...localSession };
+    sessions.delete(token);
+  }
+
+  const key = sessionSigningKey();
+  if (!key) return null;
+  const [payload, signature, extra] = token.split('.');
+  if (!payload || !signature || extra) return null;
+
+  const expectedSignature = createHmac('sha256', key).update(payload).digest();
+  const actualSignature = Buffer.from(signature, 'base64url');
+  if (actualSignature.length !== expectedSignature.length || !timingSafeEqual(actualSignature, expectedSignature)) return null;
+
+  try {
+    const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { user?: AuthUser; expires?: number };
+    if (!session.user || typeof session.user.id !== 'string' || typeof session.user.type !== 'string' || typeof session.expires !== 'number' || session.expires < Date.now()) {
+      return null;
+    }
+    return { token, user: session.user, expires: session.expires };
+  } catch {
+    return null;
+  }
 }
 function requireAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
   const session = currentSession(req);
@@ -338,8 +387,9 @@ app.post('/api/auth/login', async (req, res) => {
     if (expectedType && expectedType !== user.type) {
       return res.status(403).json({ error: 'Esta cuenta no tiene acceso al portal seleccionado.' });
     }
-    const token = randomBytes(32).toString('base64url');
-    sessions.set(token, { user, expires: Date.now() + 12 * 60 * 60_000 });
+    const expires = Date.now() + 12 * 60 * 60_000;
+    const token = createSessionToken(user, expires);
+    if (process.env.VERCEL !== '1') sessions.set(token, { user, expires });
     res.setHeader('Set-Cookie', `imperio_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=43200${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
     res.json({ user });
   } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo validar la cuenta en Google Sheets.' }); }
@@ -589,8 +639,13 @@ app.post('/api/backups/run', requireAdmin, async (_req, res) => {
 
 app.use('/api/google-sheets', requireAdmin, async (req, res) => {
   try {
-    const upstreamPath = req.originalUrl.replace(/^\/api\/google-sheets/, '');
-    if (upstreamPath.includes('..')) return res.status(400).json({ error: { message: 'Ruta inválida' } });
+    // Express strips the mounted /api/google-sheets prefix from req.url.
+    // req.originalUrl can still contain Vercel's internal rewrite query and
+    // must not be forwarded to the Google API.
+    const upstreamPath = req.url;
+    if (!upstreamPath.startsWith('/v4/') || upstreamPath.includes('..')) {
+      return res.status(400).json({ error: { message: 'Ruta de Google Sheets inválida.' } });
+    }
     const token = await accessToken();
     const upstream = await fetch(`https://sheets.googleapis.com${upstreamPath}`, { method: req.method, headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: ['GET', 'HEAD'].includes(req.method) ? undefined : JSON.stringify(req.body) });
     res.status(upstream.status);

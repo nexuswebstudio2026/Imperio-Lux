@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Breadcrumb } from '../layout/Breadcrumb';
 import { BackupSchedulerPanel } from './BackupSchedulerPanel';
@@ -108,6 +108,7 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
 
   // Local input state for typing/pasting new IDs or URLs
   const [inputSpreadsheetId, setInputSpreadsheetId] = useState<string>(googleSheetsId);
+  const autoValidationAttemptedFor = useRef<string | null>(null);
   const [historyList, setHistoryList] = useState<LinkedSpreadsheet[]>(() =>
     getLinkedSpreadsheetsHistory()
   );
@@ -296,6 +297,18 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
     setGoogleSheetsId(cleanId);
     await validateSheetsConnection(cleanId);
   };
+
+  useEffect(() => {
+    if (
+      !googleSheetsId
+      || isValidatingSheets
+      || autoValidationAttemptedFor.current === googleSheetsId
+      || (isSheetsValidated && sheetsValidationData?.spreadsheetId === googleSheetsId)
+    ) return;
+
+    autoValidationAttemptedFor.current = googleSheetsId;
+    void validateSheetsConnection(googleSheetsId);
+  }, [googleSheetsId, isSheetsValidated, isValidatingSheets, sheetsValidationData?.spreadsheetId, validateSheetsConnection]);
 
   const handleRemoveHistoryItem = (idToRemove: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -944,7 +957,11 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
             <p className="text-xs text-slate-200 max-w-md mt-1 mb-4 leading-relaxed">
               Para garantizar que los datos no se envíen a un destino incorrecto o inaccesible,
               debes <strong>validar la conexión</strong> con la hoja de cálculo seleccionada antes de sincronizar.
+              {isValidatingSheets && ' Validando la hoja seleccionada...'}
             </p>
+            {sheetsValidationData && !sheetsValidationData.success && (
+              <p role="alert" className="text-xs text-red-200 max-w-md mb-3">{sheetsValidationData.error}</p>
+            )}
             <button
               type="button"
               onClick={handleValidateConnection}
