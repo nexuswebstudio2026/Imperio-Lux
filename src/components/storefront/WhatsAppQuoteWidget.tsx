@@ -49,6 +49,7 @@ export const WhatsAppQuoteWidget: React.FC<WhatsAppQuoteWidgetProps> = ({
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [error, setError] = useState('');
   const [fallbackUrl, setFallbackUrl] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const destinationNumber = useMemo(() => formatWhatsAppPhone(businessPhone), [businessPhone]);
   const selectedProducts = products.filter((product) => selectedIds.includes(product.id));
   const filteredProducts = products.filter((product) => {
@@ -70,8 +71,10 @@ export const WhatsAppQuoteWidget: React.FC<WhatsAppQuoteWidgetProps> = ({
     setQuantities((previous) => ({ ...previous, [id]: previous[id] || 1 }));
   };
 
-  const submitQuote = (event: FormEvent<HTMLFormElement>) => {
+  const submitQuote = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setError('');
+    setFallbackUrl('');
     if (!destinationNumber) {
       setError('El negocio todavía no tiene un número de WhatsApp válido configurado.');
       return;
@@ -81,35 +84,59 @@ export const WhatsAppQuoteWidget: React.FC<WhatsAppQuoteWidgetProps> = ({
       return;
     }
 
-    const lines = selectedProducts.map((product) => {
-      const quantity = quantities[product.id] || 1;
-      const lineTotal = (Number(product.precio_venta) || 0) * quantity;
-      return `• ${product.nombre} × ${quantity}\n  Precio de venta: ${formatCurrency(Number(product.precio_venta) || 0)} c/u — ${formatCurrency(lineTotal)}`;
-    });
-    const message = [
-      `Hola, ${businessName || 'Imperio Lux'}. Quisiera solicitar una cotización:`,
-      '',
-      `Nombre: ${name.trim()}`,
-      `WhatsApp de contacto: ${customerPhone.trim()}`,
-      email.trim() ? `Correo: ${email.trim()}` : '',
-      '',
-      'Productos seleccionados:',
-      ...lines,
-      '',
-      `Total estimado: ${formatCurrency(quoteTotal)}`,
-      '',
-      'Por favor, confirmen disponibilidad y condiciones. Gracias.',
-    ].filter(Boolean).join('\n');
+    const whatsappWindow = window.open('about:blank', '_blank');
+    setSubmitting(true);
+    try {
+      const response = await fetch('/api/storefront/quotes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          phone: customerPhone.trim(),
+          email: email.trim(),
+          items: selectedProducts.map((product) => ({ id: product.id, quantity: quantities[product.id] || 1 })),
+        }),
+      });
+      const result = await response.json() as {
+        error?: string;
+        id: string;
+        total: number;
+        items: Array<{ name: string; quantity: number; unitPrice: number; lineTotal: number }>;
+        pdfUrl: string;
+      };
+      if (!response.ok) throw new Error(result.error || 'No se pudo guardar la cotización. Intenta nuevamente.');
 
-    const url = `https://wa.me/${destinationNumber}?text=${encodeURIComponent(message)}`;
-    const opened = window.open(url, '_blank');
-    if (opened) {
-      opened.opener = null;
-      setOpen(false);
-      setFallbackUrl('');
-    } else {
-      setFallbackUrl(url);
-      setError('El navegador bloqueó la ventana emergente. Usa el enlace para continuar a WhatsApp.');
+      const lines = result.items.map((item) => `• ${item.name} × ${item.quantity}\n  Precio de venta: ${formatCurrency(item.unitPrice)} c/u — ${formatCurrency(item.lineTotal)}`);
+      const message = [
+        `Hola, ${businessName || 'Imperio Lux'}. Quisiera solicitar una cotización:`,
+        `Cotización: ${result.id}`,
+        '',
+        `Nombre: ${name.trim()}`,
+        `WhatsApp de contacto: ${customerPhone.trim()}`,
+        email.trim() ? `Correo: ${email.trim()}` : '',
+        '',
+        'Productos seleccionados:',
+        ...lines,
+        '',
+        `Total estimado: ${formatCurrency(result.total)}`,
+        `PDF de la cotización: ${result.pdfUrl}`,
+        '',
+        'Por favor, confirmen disponibilidad y condiciones. Gracias.',
+      ].filter(Boolean).join('\n');
+      const url = `https://wa.me/${destinationNumber}?text=${encodeURIComponent(message)}`;
+      if (whatsappWindow) {
+        whatsappWindow.opener = null;
+        whatsappWindow.location.href = url;
+        setOpen(false);
+      } else {
+        setFallbackUrl(url);
+        setError('La cotización se guardó, pero el navegador bloqueó WhatsApp. Usa el enlace para continuar.');
+      }
+    } catch (submitError) {
+      whatsappWindow?.close();
+      setError(submitError instanceof Error ? submitError.message : 'No se pudo guardar la cotización. Intenta nuevamente.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -203,10 +230,10 @@ export const WhatsAppQuoteWidget: React.FC<WhatsAppQuoteWidgetProps> = ({
               {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">{error}</p>}
               {fallbackUrl && <a href={fallbackUrl} target="_blank" rel="noopener noreferrer" className="block text-center text-sm font-semibold text-[#168c57] underline">Abrir cotización en WhatsApp</a>}
               {!destinationNumber && <p className="text-xs text-amber-700 dark:text-amber-300">WhatsApp del negocio pendiente de configurar en los datos de empresa.</p>}
-              <p className="text-[11px] leading-5 text-slate-400">La cotización incluirá los precios de venta publicados. WhatsApp abrirá un mensaje preparado; podrás revisarlo antes de enviarlo.</p>
+              <p className="text-[11px] leading-5 text-slate-400">Al continuar, guardaremos la cotización en Google Sheets, generaremos su PDF y abriremos WhatsApp con el enlace para revisarlo antes de enviarlo.</p>
 
-              <button type="submit" disabled={!products.length} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#168c57] px-5 py-3.5 text-sm font-bold text-white transition hover:bg-[#117749] disabled:cursor-not-allowed disabled:opacity-50">
-                <Send className="h-4 w-4" /> Continuar en WhatsApp
+              <button type="submit" disabled={!products.length || loading || submitting} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#168c57] px-5 py-3.5 text-sm font-bold text-white transition hover:bg-[#117749] disabled:cursor-not-allowed disabled:opacity-50">
+                <Send className="h-4 w-4" /> {submitting ? 'Guardando cotización…' : 'Continuar en WhatsApp'}
               </button>
             </form>
           </section>

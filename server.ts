@@ -6,6 +6,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import nodemailer from 'nodemailer';
+import { jsPDF } from 'jspdf';
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -18,8 +19,16 @@ const sessions = new Map<string, { user: AuthUser; expires: number }>();
 const loginAttempts = new Map<string, { count: number; resetAt: number }>();
 const recoveryCodes = new Map<string, { codeHash: string; expires: number; attempts: number; row: Record<string, string>; headers: string[]; mode: 'username' | 'password' }>();
 const recoveryRequestAttempts = new Map<string, { count: number; resetAt: number }>();
+const registrationAttempts = new Map<string, { count: number; resetAt: number }>();
+const registrationConfirmAttempts = new Map<string, { count: number; resetAt: number }>();
 const USERS_SHEET = 'Usuarios';
 const AUTH_HEADERS = ['usuario', 'contrasena_salt', 'contrasena_hash'];
+const USER_PROFILE_HEADERS = ['id', 'tipo_usuario', 'nombre', 'email', 'cargo', 'rol', 'estado'];
+
+function normalizeUsersHeader(value: unknown) {
+  const header = String(value || '').trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
+  return header === 'tipo_usuairo' ? 'tipo_usuario' : header;
+}
 
 async function readUsersSheet() {
   const spreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;
@@ -27,7 +36,8 @@ async function readUsersSheet() {
   const data = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueRenderOption=UNFORMATTED_VALUE`);
   const values: unknown[][] = data.values || [];
   const headers = (values[0] || []).map((v) => String(v || '').trim());
-  const missing = AUTH_HEADERS.filter((header) => !headers.includes(header));
+  const normalizedHeaders = headers.map(normalizeUsersHeader);
+  const missing = [...USER_PROFILE_HEADERS, ...AUTH_HEADERS].filter((header) => !normalizedHeaders.includes(header));
   if (missing.length) {
     const nextHeaders = [...headers, ...missing];
     await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${USERS_SHEET}!A1`)}?valueInputOption=RAW`, {
@@ -36,15 +46,20 @@ async function readUsersSheet() {
     headers.push(...missing);
   }
   if (!headers.length) throw new Error('La hoja Usuarios debe incluir sus encabezados y los datos de cada cuenta.');
-  const rows = values.slice(1).map((valuesRow, index) => ({
-    rowNumber: index + 2,
-    data: Object.fromEntries(headers.map((header, i) => [header, String(valuesRow[i] ?? '').trim()])),
-  }));
+  const rows = values.slice(1).map((valuesRow, index) => {
+    const data: Record<string, string> = {};
+    headers.forEach((header, i) => {
+      const key = normalizeUsersHeader(header);
+      const value = String(valuesRow[i] ?? '').trim();
+      if (value || !(key in data)) data[key] = value;
+    });
+    return { rowNumber: index + 2, data };
+  });
   return { spreadsheetId, headers, rows };
 }
 
 async function writeUserRow(spreadsheetId: string, headers: string[], rowNumber: number, row: Record<string, string>) {
-  const values = headers.map((header) => row[header] ?? '');
+  const values = headers.map((header) => row[normalizeUsersHeader(header)] ?? '');
   await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${USERS_SHEET}!A${rowNumber}`)}?valueInputOption=RAW`, {
     method: 'PUT', body: JSON.stringify({ values: [values] }),
   });
@@ -95,6 +110,17 @@ function sessionSigningKey(): Buffer | null {
     return null;
   }
   return null;
+}
+async function authSigningKey(): Promise<Buffer> {
+  const configuredKey = sessionSigningKey();
+  if (configuredKey) return configuredKey;
+  const credentials = await serviceAccountCredentials();
+  return createHash('sha256').update(`imperio-auth-session:${credentials.private_key}`).digest();
+}
+function signRegistrationPayload(payload: Record<string, unknown>, key: Buffer) {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = createHmac('sha256', key).update(encoded).digest('base64url');
+  return `${encoded}.${signature}`;
 }
 function createSessionToken(user: AuthUser, expires: number): string {
   const key = sessionSigningKey();
@@ -410,6 +436,174 @@ app.get('/api/storefront/catalog', async (_req, res) => {
   }
 });
 
+const QUOTES_SHEET = 'Cotizaciones';
+const QUOTES_HEADERS = ['id', 'fecha', 'cliente_nombre', 'cliente_whatsapp', 'cliente_correo', 'productos_json', 'total', 'pdf_token_hash'];
+
+async function ensureQuotesSheet(spreadsheetId: string) {
+  let metadata = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=sheets.properties`);
+  let sheet = (metadata.sheets || []).find((item: any) => item.properties?.title === QUOTES_SHEET);
+  if (!sheet) {
+    try {
+      await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`, {
+        method: 'POST', body: JSON.stringify({ requests: [{ addSheet: { properties: { title: QUOTES_SHEET } } }] }),
+      });
+    } catch (error) {
+      // Two first-time quote requests can race to create the same tab.
+      metadata = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=sheets.properties`);
+      if (!(metadata.sheets || []).some((item: any) => item.properties?.title === QUOTES_SHEET)) throw error;
+    }
+  }
+  const headerRange = encodeURIComponent(`${QUOTES_SHEET}!A1:H1`);
+  const headerResult = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${headerRange}?valueRenderOption=UNFORMATTED_VALUE`);
+  const currentHeaders: string[] = headerResult.values?.[0] || [];
+  if (!QUOTES_HEADERS.every((header, index) => currentHeaders[index] === header)) {
+    if (currentHeaders.length) throw new Error('La hoja Cotizaciones ya existe con encabezados diferentes. Renómbrala o corrige sus encabezados para continuar.');
+    await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${headerRange}?valueInputOption=RAW`, {
+      method: 'PUT', body: JSON.stringify({ values: [QUOTES_HEADERS] }),
+    });
+  }
+}
+
+function createQuotePdf(quote: { id: string; createdAt: string; name: string; phone: string; email: string; items: Array<{ name: string; quantity: number; unitPrice: number; lineTotal: number }>; total: number }) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 18;
+  const contentWidth = pageWidth - margin * 2;
+  let y = 24;
+  doc.setFillColor(17, 27, 45);
+  doc.rect(0, 0, pageWidth, 43, 'F');
+  doc.setTextColor(225, 201, 148);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('IMPERIO LUX', margin, y);
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(21);
+  doc.text('Cotización', margin, y + 11);
+  doc.setFontSize(10);
+  doc.text(quote.id, pageWidth - margin, y + 10, { align: 'right' });
+  y = 56;
+  doc.setTextColor(35, 43, 56);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('Datos del cliente', margin, y);
+  y += 7;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  const details = [`Nombre: ${quote.name}`, `WhatsApp: ${quote.phone}`, ...(quote.email ? [`Correo: ${quote.email}`] : []), `Fecha: ${new Date(quote.createdAt).toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`];
+  for (const line of details) { doc.text(line, margin, y); y += 6; }
+  y += 6;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Productos solicitados', margin, y);
+  y += 8;
+  for (const item of quote.items) {
+    const nameLines = doc.splitTextToSize(item.name, contentWidth - 56) as string[];
+    const rowHeight = Math.max(13, nameLines.length * 5 + 6);
+    if (y + rowHeight + 35 > doc.internal.pageSize.getHeight()) { doc.addPage(); y = 22; }
+    doc.setDrawColor(224, 228, 234);
+    doc.line(margin, y, pageWidth - margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(nameLines, margin, y + 6);
+    doc.text(`${item.quantity} × ${item.unitPrice.toLocaleString('es-CO')} COP`, pageWidth - margin, y + 6, { align: 'right' });
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${item.lineTotal.toLocaleString('es-CO')} COP`, pageWidth - margin, y + rowHeight - 2, { align: 'right' });
+    y += rowHeight;
+  }
+  if (y + 30 > doc.internal.pageSize.getHeight()) { doc.addPage(); y = 22; }
+  y += 4;
+  doc.setDrawColor(184, 150, 82);
+  doc.setLineWidth(0.6);
+  doc.line(margin, y, pageWidth - margin, y);
+  y += 10;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(125, 95, 43);
+  doc.text(`Total estimado: ${quote.total.toLocaleString('es-CO')} COP`, pageWidth - margin, y, { align: 'right' });
+  y += 12;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(100, 108, 119);
+  doc.text(doc.splitTextToSize('Cotización informativa, sujeta a disponibilidad y confirmación del negocio. Los precios pueden variar hasta confirmar el pedido.', contentWidth), margin, y);
+  return Buffer.from(doc.output('arraybuffer'));
+}
+
+app.post('/api/storefront/quotes', async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim().slice(0, 120);
+    const phone = String(req.body?.phone || '').trim().slice(0, 40);
+    const email = String(req.body?.email || '').trim().slice(0, 160);
+    const requestedItems = req.body?.items;
+    if (name.length < 2 || !phone || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) {
+      return res.status(400).json({ error: 'Revisa el nombre y los datos de contacto de la cotización.' });
+    }
+    if (!Array.isArray(requestedItems) || !requestedItems.length || requestedItems.length > 100) {
+      return res.status(400).json({ error: 'Selecciona al menos un producto para cotizar.' });
+    }
+    const products = await readSheetRecords('productos');
+    const items = requestedItems.map((requested: any) => {
+      const id = Number(requested?.id);
+      const quantity = Number(requested?.quantity);
+      const record = products.find((product) => Number(product.id) === id && isPublicRecordActive(product.estado));
+      if (!record || !Number.isInteger(quantity) || quantity < 1 || quantity > 99) throw new Error('Uno de los productos ya no está disponible o tiene una cantidad inválida. Actualiza el catálogo e inténtalo de nuevo.');
+      const unitPrice = Number(record.precio_venta);
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) throw new Error(`El producto ${String(record.nombre || '')} no tiene un precio de venta válido.`);
+      return { id, name: String(record.nombre || '').slice(0, 180), quantity, unitPrice, lineTotal: unitPrice * quantity };
+    });
+    if (new Set(items.map((item) => item.id)).size !== items.length) return res.status(400).json({ error: 'Hay productos repetidos en la solicitud.' });
+
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;
+    if (!spreadsheetId) throw new Error('No hay una hoja de cálculo configurada en el servidor.');
+    await ensureQuotesSheet(spreadsheetId);
+    const createdAt = new Date().toISOString();
+    const total = items.reduce((sum, item) => sum + item.lineTotal, 0);
+    const token = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(`${QUOTES_SHEET}!A:H`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+    const appended = await googleApi(appendUrl, {
+      method: 'POST', body: JSON.stringify({ values: [['', createdAt, name, phone, email, JSON.stringify(items), total, tokenHash]] }),
+    });
+    const rowNumber = Number(String(appended.updates?.updatedRange || '').match(/![A-Z]+(\d+)/)?.[1]);
+    if (!Number.isInteger(rowNumber) || rowNumber < 2) throw new Error('Google Sheets guardó la cotización, pero no devolvió la fila para generar el consecutivo.');
+    const quoteId = `COT-${String(rowNumber - 1).padStart(6, '0')}`;
+    await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(`${QUOTES_SHEET}!A${rowNumber}`)}?valueInputOption=RAW`, {
+      method: 'PUT', body: JSON.stringify({ values: [[quoteId]] }),
+    });
+    const baseUrl = process.env.APP_URL?.replace(/\/$/, '') || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `${req.get('x-forwarded-proto') || req.protocol}://${req.get('host')}`);
+    const pdfUrl = `${baseUrl}/api/quotes/${quoteId}/${token}.pdf`;
+    return res.status(201).json({ id: quoteId, createdAt, total, items, pdfUrl });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'No se pudo guardar la cotización.';
+    return res.status(502).json({ error: message });
+  }
+});
+
+app.get('/api/quotes/:quoteId/:token.pdf', async (req, res) => {
+  try {
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;
+    if (!spreadsheetId) return res.status(503).json({ error: 'No hay una hoja de cálculo configurada.' });
+    const range = encodeURIComponent(`${QUOTES_SHEET}!A:H`);
+    const result = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${range}?valueRenderOption=UNFORMATTED_VALUE`);
+    const headers: string[] = result.values?.[0] || [];
+    const row = (result.values || []).slice(1).find((values: unknown[]) => String(values[0]) === req.params.quoteId);
+    const tokenHashIndex = headers.indexOf('pdf_token_hash');
+    const expectedHash = String(row?.[tokenHashIndex] || '');
+    const actualHash = createHash('sha256').update(req.params.token).digest('hex');
+    if (!row || expectedHash.length !== actualHash.length || !timingSafeEqual(Buffer.from(expectedHash), Buffer.from(actualHash))) return res.status(404).send('Cotización no encontrada.');
+    const data = Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])) as Record<string, any>;
+    const quote = {
+      id: String(data.id), createdAt: String(data.fecha), name: String(data.cliente_nombre), phone: String(data.cliente_whatsapp), email: String(data.cliente_correo),
+      items: JSON.parse(String(data.productos_json || '[]')) as Array<{ name: string; quantity: number; unitPrice: number; lineTotal: number }>, total: Number(data.total) || 0,
+    };
+    const pdf = createQuotePdf(quote);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${quote.id}.pdf"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.send(pdf);
+  } catch (error) {
+    return res.status(503).send(error instanceof Error ? error.message : 'No se pudo generar el PDF de la cotización.');
+  }
+});
+
 app.get('/api/auth/session', (req, res) => {
   const session = currentSession(req);
   res.json({ user: session?.user || null });
@@ -463,11 +657,16 @@ app.get('/api/portal/data', async (req, res) => {
     const matches = linkedId
       ? entities.filter((record) => String(record.id) === linkedId)
       : entities.filter((record) => normalizeUsername(record.email) === normalizeUsername(user.email));
-    if (matches.length !== 1) {
-      return res.status(matches.length ? 409 : 404).json({ error: 'No se pudo identificar un único registro asociado a esta cuenta. Contacta al administrador.' });
+    let entity = matches[0];
+    if (!entity && matches.length === 0 && user.type === 'client') {
+      const accounts = await readUsersSheet();
+      const account = accounts.rows.find(({ data }) => data.id === user.id);
+      if (account) entity = { id: user.id, razon_social: account.data.nombre, email: account.data.email };
     }
-    const entity = matches[0];
-    const entityId = String(entity.id);
+    if (!entity || matches.length > 1) {
+      return res.status(matches.length > 1 ? 409 : 404).json({ error: 'No se pudo identificar un único registro asociado a esta cuenta. Contacta al administrador.' });
+    }
+    const entityId = String(entity.id || user.id);
     const ownTransactions = transactions
       .filter((record) => String(record[transactionIdField]) === entityId)
       .sort((first, second) => String(second.fecha_hora || '').localeCompare(String(first.fecha_hora || '')))
@@ -513,25 +712,144 @@ app.post('/api/auth/recovery/request', async (req, res) => {
   const identifier = String(req.body?.identifier || '').trim();
   if (!identifier || identifier.length > 254) return res.status(400).json({ error: 'Escribe tu usuario o correo registrado.' });
   try {
-    const { rows } = await readUsersSheet();
+    const { rows, headers } = await readUsersSheet();
     const normalized = normalizeUsername(identifier);
+    const expectedType = String(req.body?.portalType || '');
     const recoveryId = randomBytes(24).toString('base64url');
-    const found = mode === 'username'
-      ? rows.find(({ data }) => data.email.toLocaleLowerCase('es') === normalized)
-      : rows.find(({ data }) => normalizeUsername(data.usuario) === normalized);
-    if (found?.data.email) {
-      const code = String(randomBytes(4).readUInt32BE(0) % 1_000_000).padStart(6, '0');
-      const codeHash = createHash('sha256').update(code).digest('hex');
-      recoveryCodes.set(recoveryId, { codeHash, expires: Date.now() + 10 * 60_000, attempts: 0, row: found.data, headers: (await readUsersSheet()).headers, mode });
-      const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT), secure: Number(process.env.SMTP_PORT) === 465, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } });
-      const text = mode === 'username'
-        ? `Tu usuario de Imperio Lux es: ${found.data.usuario || '(sin usuario asignado)'}. Código de verificación: ${code}. Vence en 10 minutos.`
-        : `Tu código para restablecer la contraseña de Imperio Lux es: ${code}. Vence en 10 minutos.`;
-      await transporter.sendMail({ from: process.env.SMTP_FROM, to: found.data.email, subject: 'Recuperación de cuenta · Imperio Lux', text });
+    const matchesPortal = (data: Record<string, string>) => expectedType
+      ? classifyUser(data) === expectedType
+      : classifyUser(data) !== 'admin';
+    const match = rows.find(({ data }) => matchesPortal(data) && (mode === 'username'
+      ? data.email.toLocaleLowerCase('es') === normalized
+      : normalizeUsername(data.usuario) === normalized));
+    if (!match) return res.status(404).json({ error: mode === 'username'
+      ? 'No hay un usuario registrado con este correo electrónico en Google Sheets.'
+      : 'Este usuario no está registrado en Google Sheets.' });
+    if (!match.data.email) return res.status(409).json({ error: 'La cuenta no tiene un correo electrónico registrado. Contacta al administrador.' });
+
+    const code = String(randomBytes(4).readUInt32BE(0) % 1_000_000).padStart(6, '0');
+    const codeHash = createHash('sha256').update(code).digest('hex');
+    const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT), secure: Number(process.env.SMTP_PORT) === 465, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } });
+    const text = mode === 'username'
+      ? `Tu código para recuperar el usuario de Imperio Lux es: ${code}. Vence en 10 minutos.`
+      : `Tu código para restablecer la contraseña de Imperio Lux es: ${code}. Vence en 10 minutos.`;
+    const delivery = await transporter.sendMail({ from: process.env.SMTP_FROM, to: match.data.email, subject: 'Recuperación de cuenta · Imperio Lux', text });
+    const acceptedRecipients = (delivery.accepted || []).map((recipient) => recipient.toLocaleLowerCase('es'));
+    if (!acceptedRecipients.includes(match.data.email.toLocaleLowerCase('es'))) {
+      return res.status(502).json({ error: 'El servidor de correo no aceptó el destinatario. Revisa el correo registrado o contacta al administrador.' });
     }
-    // Generic response and opaque handle prevent revealing whether a username or email exists.
-    res.json({ message: 'Si los datos corresponden a una cuenta, recibirás instrucciones en el correo registrado.', recoveryId });
+    recoveryCodes.set(recoveryId, { codeHash, expires: Date.now() + 10 * 60_000, attempts: 0, row: match.data, headers, mode });
+    res.json({ message: `Enviamos el código al correo registrado en Google Sheets. Revisa tu bandeja de entrada y spam.`, recoveryId });
   } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo enviar el correo de recuperación.' }); }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  const ip = req.ip || 'unknown';
+  const currentLimit = registrationAttempts.get(ip);
+  if (currentLimit && currentLimit.resetAt > Date.now() && currentLimit.count >= 5) return res.status(429).json({ error: 'Demasiados intentos de registro. Espera 15 minutos e inténtalo de nuevo.' });
+  registrationAttempts.set(ip, { count: currentLimit?.resetAt && currentLimit.resetAt > Date.now() ? currentLimit.count + 1 : 1, resetAt: currentLimit?.resetAt && currentLimit.resetAt > Date.now() ? currentLimit.resetAt : Date.now() + 15 * 60_000 });
+  try {
+    const type = String(req.body?.type || '') as 'client' | 'supplier';
+    const name = String(req.body?.name || '').trim();
+    const email = String(req.body?.email || '').trim().toLocaleLowerCase('es');
+    const username = String(req.body?.username || '').trim();
+    const password = String(req.body?.password || '');
+    if (!['client', 'supplier'].includes(type)) return res.status(403).json({ error: 'El acceso de empleados debe ser creado por un administrador.' });
+    if (name.length < 2 || name.length > 120 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || username.length < 4 || username.length > 64 || password.length < 10 || password.length > 256) {
+      return res.status(400).json({ error: 'Completa el nombre, correo válido, usuario (4–64 caracteres) y contraseña (mínimo 10 caracteres).' });
+    }
+
+    const { rows } = await readUsersSheet();
+    if (rows.some(({ data }) => normalizeUsername(data.usuario) === normalizeUsername(username))) return res.status(409).json({ error: 'Ese nombre de usuario ya está ocupado.' });
+    if (rows.some(({ data }) => data.email.toLocaleLowerCase('es') === email)) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo. Intenta iniciar sesión o restablecer tu contraseña.' });
+
+    const entitySheet = type === 'supplier' ? 'proveedores' : 'clientes';
+    const entityRows = await readSheetRecords(entitySheet);
+    const linkedEntity = entityRows.find((row) => String(row.email || '').trim().toLocaleLowerCase('es') === email && isPublicRecordActive(row.estado));
+    if (type === 'supplier' && !linkedEntity) {
+      return res.status(403).json({ error: `El correo debe coincidir con un registro activo en la hoja ${entitySheet}. Contacta al administrador si aún no apareces allí.` });
+    }
+    const smtpConfigured = Boolean(process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASSWORD && process.env.SMTP_FROM);
+    if (!smtpConfigured) return res.status(503).json({ error: 'El registro requiere correo de verificación. Configura SMTP en el servidor.' });
+    const label = type === 'supplier' ? 'Proveedor' : 'Cliente';
+    const prefix = type === 'supplier' ? 'PROV' : 'CLI';
+    const linkedId = linkedEntity?.id ? String(linkedEntity.id) : randomBytes(8).toString('hex');
+    const id = `${prefix}-${linkedId}`;
+    if (rows.some(({ data }) => data.id === id)) return res.status(409).json({ error: 'Ya hay una cuenta asociada a este registro. Intenta iniciar sesión o contacta al administrador.' });
+    const salt = randomBytes(16).toString('hex');
+    const row: Record<string, string> = {
+      id,
+      tipo_usuario: label,
+      nombre: name,
+      email,
+      cargo: '',
+      rol: label,
+      estado: 'Activo',
+      usuario: username,
+      contrasena_salt: salt,
+      contrasena_hash: scryptSync(password, salt, 64).toString('hex'),
+    };
+    const key = await authSigningKey();
+    const nonce = randomBytes(16).toString('hex');
+    const code = String(randomBytes(4).readUInt32BE(0) % 1_000_000).padStart(6, '0');
+    const codeMac = createHmac('sha256', key).update(`registro:${nonce}:${code}`).digest('hex');
+    const registrationToken = signRegistrationPayload({ expiresAt: Date.now() + 10 * 60_000, nonce, codeMac, row }, key);
+    const transporter = nodemailer.createTransport({ host: process.env.SMTP_HOST, port: Number(process.env.SMTP_PORT), secure: Number(process.env.SMTP_PORT) === 465, auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD } });
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM,
+      to: email,
+      subject: 'Verifica tu correo · Imperio Lux',
+      text: `Tu código para crear la cuenta de ${label} en Imperio Lux es: ${code}. Vence en 10 minutos. Si no solicitaste esta cuenta, ignora este mensaje.`,
+    });
+    return res.status(200).json({ message: 'Enviamos un código de verificación al correo indicado. Ingrésalo para guardar tu cuenta.', registrationToken });
+  } catch (error) {
+    return res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo registrar la cuenta en Google Sheets.' });
+  }
+});
+
+app.post('/api/auth/register/confirm', async (req, res) => {
+  const ip = req.ip || 'unknown';
+  const currentLimit = registrationConfirmAttempts.get(ip);
+  if (currentLimit && currentLimit.resetAt > Date.now() && currentLimit.count >= 6) return res.status(429).json({ error: 'Se alcanzó el límite de códigos. Espera 15 minutos y solicita un código nuevo.' });
+  registrationConfirmAttempts.set(ip, { count: currentLimit?.resetAt && currentLimit.resetAt > Date.now() ? currentLimit.count + 1 : 1, resetAt: currentLimit?.resetAt && currentLimit.resetAt > Date.now() ? currentLimit.resetAt : Date.now() + 15 * 60_000 });
+  try {
+    const token = String(req.body?.registrationToken || '');
+    const code = String(req.body?.code || '');
+    const [encoded, signature, extra] = token.split('.');
+    if (!encoded || !signature || extra || token.length > 6000) return res.status(400).json({ error: 'El registro venció. Solicita un código nuevo.' });
+    const key = await authSigningKey();
+    const expectedSignature = createHmac('sha256', key).update(encoded).digest();
+    const actualSignature = Buffer.from(signature, 'base64url');
+    if (actualSignature.length !== expectedSignature.length || !timingSafeEqual(actualSignature, expectedSignature)) return res.status(400).json({ error: 'El código no es válido o venció.' });
+    const pending = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')) as { expiresAt: number; nonce: string; codeMac: string; row: Record<string, string> };
+    const suppliedMac = createHmac('sha256', key).update(`registro:${pending.nonce}:${code}`).digest();
+    const expectedMac = Buffer.from(pending.codeMac || '', 'hex');
+    if (!/^\d{6}$/.test(code) || pending.expiresAt < Date.now() || suppliedMac.length !== expectedMac.length || !timingSafeEqual(suppliedMac, expectedMac)) {
+      return res.status(400).json({ error: 'El código no es válido o venció.' });
+    }
+    const row = pending.row;
+    if (row.tipo_usuario === 'Empleado') return res.status(403).json({ error: 'El acceso de empleados debe ser creado por un administrador.' });
+    const { spreadsheetId, headers, rows } = await readUsersSheet();
+    if (row.tipo_usuario === 'Empleado' || row.tipo_usuario === 'Proveedor') {
+      const entitySheet = row.tipo_usuario === 'Empleado' ? 'empleados' : 'proveedores';
+      const linkedEntities = await readSheetRecords(entitySheet);
+      const entityId = row.id.replace(/^(EMP|PROV)-/i, '');
+      if (!linkedEntities.some((entity) => String(entity.id) === entityId && String(entity.email || '').trim().toLocaleLowerCase('es') === row.email.toLocaleLowerCase('es') && isPublicRecordActive(entity.estado))) {
+        return res.status(403).json({ error: 'El registro asociado ya no está activo. Contacta al administrador.' });
+      }
+    }
+    if (rows.some(({ data }) => normalizeUsername(data.usuario) === normalizeUsername(row.usuario))) return res.status(409).json({ error: 'Ese nombre de usuario ya está ocupado. Inicia el registro nuevamente con otro.' });
+    if (rows.some(({ data }) => data.email.toLocaleLowerCase('es') === row.email.toLocaleLowerCase('es'))) return res.status(409).json({ error: 'Ya existe una cuenta con ese correo.' });
+    if (rows.some(({ data }) => data.id === row.id)) return res.status(409).json({ error: 'Ya existe una cuenta para ese registro asociado.' });
+    const values = headers.map((header) => row[normalizeUsersHeader(header)] ?? '');
+    await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(`${USERS_SHEET}!A:Z`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+      method: 'POST', body: JSON.stringify({ values: [values] }),
+    });
+    registrationConfirmAttempts.delete(ip);
+    return res.status(201).json({ message: 'Correo verificado y cuenta registrada en Usuarios. Ya puedes iniciar sesión.' });
+  } catch (error) {
+    return res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo confirmar el registro.' });
+  }
 });
 
 app.post('/api/auth/recovery/confirm', async (req, res) => {
@@ -599,8 +917,67 @@ app.post('/api/auth/bootstrap-admin', async (req, res) => {
 app.get('/api/auth/admin/users', requireAdmin, async (_req, res) => {
   try {
     const { rows } = await readUsersSheet();
-    res.json({ users: rows.map(({ data }) => ({ id: data.id, name: data.nombre || data.name || '', email: data.email || '', type: classifyUser(data), username: data.usuario || '', configured: Boolean(data.contrasena_hash) })) });
+    res.json({ users: rows.filter(({ data }) => data.id).map(({ data }) => ({ id: data.id, name: data.nombre || data.name || '', email: data.email || '', type: classifyUser(data), username: data.usuario || '', configured: Boolean(data.contrasena_hash), cargo: data.cargo || '', rol: data.rol || '', estado: !/^(inactivo|inactive|false|0)$/i.test(data.estado || '') })) });
   } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo leer la hoja Usuarios.' }); }
+});
+
+app.post('/api/auth/admin/users', requireAdmin, async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    const email = String(req.body?.email || '').trim().toLocaleLowerCase('es');
+    const type = String(req.body?.type || '').trim();
+    const id = String(req.body?.id || '').trim() || `USR-${randomBytes(8).toString('hex').toUpperCase()}`;
+    if (!name || !email || !/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Indica nombre y correo electrónico válido.' });
+    if (!['admin', 'employee', 'customer', 'supplier'].includes(type)) return res.status(400).json({ error: 'El tipo de usuario no es válido.' });
+    const { spreadsheetId, headers, rows } = await readUsersSheet();
+    if (rows.some(({ data }) => data.id === id || data.email.toLocaleLowerCase('es') === email)) return res.status(409).json({ error: 'Ya existe una cuenta con ese ID o correo.' });
+    const record: Record<string, string> = { id, tipo_usuario: type, nombre: name, email, cargo: String(req.body?.cargo || '').trim(), rol: String(req.body?.rol || '').trim(), estado: req.body?.estado === false ? 'Inactivo' : 'Activo', usuario: '', contrasena_salt: '', contrasena_hash: '' };
+    await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(`${USERS_SHEET}!A:Z`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { method: 'POST', body: JSON.stringify({ values: [headers.map((header) => record[normalizeUsersHeader(header)] ?? '')] }) });
+    res.status(201).json({ message: 'Usuario creado en Google Sheets.', id });
+  } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo crear el usuario.' }); }
+});
+
+app.put('/api/auth/admin/users/:id', requireAdmin, async (req, res) => {
+  try {
+    const id = String(req.params.id || '');
+    const partial = req.body?.partial === true;
+    const name = String(req.body?.name || '').trim();
+    const email = String(req.body?.email || '').trim().toLocaleLowerCase('es');
+    const type = String(req.body?.type || '').trim();
+    if ((!partial || name) && !name) return res.status(400).json({ error: 'Indica el nombre del usuario.' });
+    if ((!partial || email) && (!email || !/^\S+@\S+\.\S+$/.test(email))) return res.status(400).json({ error: 'Indica correo electrónico válido.' });
+    if ((!partial || type) && !['admin', 'employee', 'customer', 'supplier'].includes(type)) return res.status(400).json({ error: 'El tipo de usuario no es válido.' });
+    const { spreadsheetId, headers, rows } = await readUsersSheet();
+    const target = rows.find(({ data }) => data.id === id);
+    if (!target) return res.status(404).json({ error: 'No se encontró el usuario.' });
+    if (email && rows.some(({ data }) => data.id !== id && data.email.toLocaleLowerCase('es') === email)) return res.status(409).json({ error: 'Ese correo ya pertenece a otro usuario.' });
+    if (name) target.data.nombre = name;
+    if (email) target.data.email = email;
+    if (type) target.data.tipo_usuario = type;
+    if (req.body?.cargo !== undefined && (!partial || String(req.body.cargo).trim())) target.data.cargo = String(req.body.cargo).trim();
+    if (req.body?.rol !== undefined && (!partial || String(req.body.rol).trim())) target.data.rol = String(req.body.rol).trim();
+    if (req.body?.estado !== undefined) target.data.estado = req.body.estado === false ? 'Inactivo' : 'Activo';
+    await writeUserRow(spreadsheetId, headers, target.rowNumber, target.data);
+    res.json({ message: 'Usuario actualizado en Google Sheets.' });
+  } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo actualizar el usuario.' }); }
+});
+
+app.post('/api/auth/admin/users/delete', requireAdmin, async (req, res) => {
+  try {
+    const ids = [...new Set((Array.isArray(req.body?.ids) ? req.body.ids : []).map((id: unknown) => String(id)))];
+    if (!ids.length || ids.length > 500) return res.status(400).json({ error: 'Selecciona entre 1 y 500 usuarios.' });
+    const activeSession = currentSession(req);
+    if (activeSession && ids.includes(activeSession.user.id)) return res.status(400).json({ error: 'No puedes eliminar la cuenta con la que tienes la sesión activa.' });
+    const { spreadsheetId, headers, rows } = await readUsersSheet();
+    const targets = rows.filter(({ data }) => ids.includes(data.id));
+    if (!targets.length) return res.status(404).json({ error: 'No se encontraron los usuarios seleccionados.' });
+    const keep = rows.filter(({ data }) => !ids.includes(data.id));
+    const values = [headers, ...keep.map(({ data }) => headers.map((header) => data[normalizeUsersHeader(header)] ?? ''))];
+    await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(`${USERS_SHEET}!A:Z`)}:clear`, { method: 'POST', body: JSON.stringify({}) });
+    await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(`${USERS_SHEET}!A1`)}?valueInputOption=RAW`, { method: 'PUT', body: JSON.stringify({ values }) });
+    for (const [token, session] of sessions) if (ids.includes(session.user.id)) sessions.delete(token);
+    res.json({ message: `Se eliminaron ${targets.length} usuario(s) de la hoja Usuarios.`, count: targets.length });
+  } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudieron eliminar los usuarios.' }); }
 });
 
 app.post('/api/auth/admin/credentials', requireAdmin, async (req, res) => {
@@ -625,7 +1002,7 @@ app.post('/api/auth/admin/sync-users', requireAdmin, async (req, res) => {
   try {
     const incoming = Array.isArray(req.body?.users) ? req.body.users : null;
     if (!incoming || incoming.length > 1000) return res.status(400).json({ error: 'La lista de usuarios no es válida.' });
-    const { spreadsheetId, headers, rows } = await readUsersSheet();
+    const { spreadsheetId, rows } = await readUsersSheet();
     const byId = new Map(rows.map(({ data }) => [data.id, data]));
     const claimedIds = new Set<string>();
     const merged: Record<string, string>[] = incoming.map((raw: Record<string, unknown>) => {
@@ -643,9 +1020,9 @@ app.post('/api/auth/admin/sync-users', requireAdmin, async (req, res) => {
     for (const { data } of rows) {
       if (!claimedIds.has(data.id) && !merged.some((record) => record.id === data.id)) merged.push(data);
     }
-    const mergedHeaders = [...new Set(merged.flatMap((row) => Object.keys(row)))];
-    const nextHeaders = [...headers, ...mergedHeaders.filter((header) => !headers.includes(header))];
-    const valueRows = [nextHeaders, ...merged.map((row) => nextHeaders.map((header) => row[header] || ''))];
+    const mergedHeaders = [...new Set(merged.flatMap((row) => Object.keys(row).map(normalizeUsersHeader)))];
+    const nextHeaders = [...new Set([...USER_PROFILE_HEADERS, ...AUTH_HEADERS, ...mergedHeaders])];
+    const valueRows = [nextHeaders, ...merged.map((row) => nextHeaders.map((header) => row[header] ?? ''))];
     await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${USERS_SHEET}!A:Z`)}:clear`, { method: 'POST', body: JSON.stringify({}) });
     await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${USERS_SHEET}!A1`)}?valueInputOption=RAW`, { method: 'PUT', body: JSON.stringify({ values: valueRows }) });
     res.json({ count: merged.length });
@@ -718,6 +1095,12 @@ if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production') {
 const server = createServer(app);
 await loadBackupConfig();
 void readUsersSheet().then(() => console.log('Columnas de autenticación listas en Google Sheets.')).catch((error) => console.error('No se pudieron preparar las columnas de autenticación en Google Sheets:', error instanceof Error ? error.message : 'Error desconocido'));
+if (process.env.VERCEL !== '1') {
+  const quoteSpreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;
+  if (quoteSpreadsheetId) void ensureQuotesSheet(quoteSpreadsheetId)
+    .then(() => console.log('Hoja Cotizaciones lista en Google Sheets.'))
+    .catch((error) => console.error('No se pudo preparar la hoja Cotizaciones:', error instanceof Error ? error.message : 'Error desconocido'));
+}
 if (process.env.VERCEL !== '1') {
   setInterval(() => { void checkScheduledBackup(); }, 30_000);
   void checkScheduledBackup();

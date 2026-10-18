@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ExternalLink, FileSpreadsheet, LoaderCircle, RefreshCw, Search } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { getSpreadsheetUrl } from '../../lib/sheets';
+import { UsersCrudPanel } from './UsersCrudPanel';
 
 interface SheetData {
   title: string;
@@ -176,6 +177,9 @@ export const SheetsDatabaseView: React.FC = () => {
                     Conectado
                   </span>
                 </div>
+                {currentSheet.title.trim().toLocaleLowerCase('es') === 'usuarios' ? (
+                  <div className="p-4"><UsersCrudPanel /></div>
+                ) : (
                 <div className="max-h-[70vh] overflow-auto">
                   {currentSheet.headers.length > 0 && currentSheet.rows.length > 0 ? (
                     <table className="min-w-full border-collapse text-left text-xs">
@@ -220,6 +224,7 @@ export const SheetsDatabaseView: React.FC = () => {
                     </div>
                   )}
                 </div>
+                )}
               </>
             ) : (
               <div className="p-10 text-center text-sm text-slate-500">Selecciona una hoja para consultar sus datos.</div>

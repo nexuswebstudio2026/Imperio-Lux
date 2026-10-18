@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Breadcrumb } from '../layout/Breadcrumb';
 import { Empleado } from '../../types';
-import { buildRegisteredUsers, type RegisteredUser } from '../../lib/registeredUsers';
+import { UsersCrudPanel } from '../database/UsersCrudPanel';
 import {
   Building2,
   Save,
@@ -475,188 +475,36 @@ export const EmpleadoListView: React.FC = () => {
 
 /* ================= USUARIOS REGISTRADOS ================= */
 export const RegisteredUsersView: React.FC = () => {
-  const { users, empleados, clientes, proveedores, uploadSingleTableToGoogleSheets } = useApp();
-  const [filter, setFilter] = useState<'Todos' | RegisteredUser['tipo_usuario']>('Todos');
-  const [search, setSearch] = useState('');
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState('');
   const [authAccounts, setAuthAccounts] = useState<Array<{ id: string; name: string; email: string; type: string; username: string; configured: boolean }>>([]);
+  const [authAccountsLoading, setAuthAccountsLoading] = useState(true);
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, { username: string; password: string }>>({});
   const [credentialMessage, setCredentialMessage] = useState('');
   const [credentialError, setCredentialError] = useState('');
   const [savingAccount, setSavingAccount] = useState('');
-  const registeredUsers = buildRegisteredUsers(users, empleados, clientes, proveedores);
-  const normalizedSearch = search.trim().toLocaleLowerCase('es');
-  const filteredUsers = registeredUsers.filter((user) => {
-    const matchesType = filter === 'Todos' || user.tipo_usuario === filter;
-    const searchable = [user.nombre, user.email, user.cargo, user.rol]
-      .join(' ')
-      .toLocaleLowerCase('es');
-    return matchesType && (!normalizedSearch || searchable.includes(normalizedSearch));
-  });
   const loadAuthAccounts = async () => {
-    const response = await fetch('/api/auth/admin/users');
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'No se pudieron leer las cuentas.');
-    setAuthAccounts(data.users || []);
+    setAuthAccountsLoading(true); setCredentialError('');
+    try { const response = await fetch('/api/auth/admin/users', { credentials: 'same-origin' }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'No se pudieron leer las cuentas.'); setAuthAccounts(data.users || []); }
+    catch (error) { setCredentialError(error instanceof Error ? error.message : 'No se pudieron leer las cuentas.'); }
+    finally { setAuthAccountsLoading(false); }
   };
-  useEffect(() => { void loadAuthAccounts().catch((error) => setCredentialError(error instanceof Error ? error.message : 'No se pudieron leer las cuentas.')); }, []);
+  useEffect(() => { void loadAuthAccounts(); }, []);
   const saveCredentials = async (id: string) => {
-    setSavingAccount(id); setCredentialError(''); setCredentialMessage('');
-    const draft = credentialDrafts[id];
-    try {
-      const response = await fetch('/api/auth/admin/credentials', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, username: draft?.username, password: draft?.password }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'No se pudieron guardar las credenciales.');
-      setCredentialMessage(data.message); setCredentialDrafts((previous) => ({ ...previous, [id]: { username: '', password: '' } }));
-      await loadAuthAccounts();
-    } catch (error) { setCredentialError(error instanceof Error ? error.message : 'No se pudieron guardar las credenciales.'); }
+    setSavingAccount(id); setCredentialError(''); setCredentialMessage(''); const draft = credentialDrafts[id];
+    try { const response = await fetch('/api/auth/admin/credentials', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, username: draft?.username, password: draft?.password }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'No se pudieron guardar las credenciales.'); setCredentialMessage(data.message); setCredentialDrafts((previous) => ({ ...previous, [id]: { username: '', password: '' } })); await loadAuthAccounts(); }
+    catch (error) { setCredentialError(error instanceof Error ? error.message : 'No se pudieron guardar las credenciales.'); }
     finally { setSavingAccount(''); }
   };
-  const counts = {
-    Administrador: registeredUsers.filter((user) => user.tipo_usuario === 'Administrador').length,
-    Empleado: registeredUsers.filter((user) => user.tipo_usuario === 'Empleado').length,
-    Cliente: registeredUsers.filter((user) => user.tipo_usuario === 'Cliente').length,
-    Proveedor: registeredUsers.filter((user) => user.tipo_usuario === 'Proveedor').length,
-  };
-  const syncUsersSheet = async () => {
-    setIsSyncing(true);
-    setSyncMessage('');
-    try {
-      const result = await uploadSingleTableToGoogleSheets('Usuarios', registeredUsers);
-      setSyncMessage(`Google Sheets actualizado con ${result.count} registros.`);
-    } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : 'No se pudo actualizar Google Sheets.');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  return (
-    <div>
-      <Breadcrumb
-        title="Usuarios Registrados"
-        items={[{ label: 'Otros' }, { label: 'Usuarios Registrados' }]}
-        actions={
-          <button
-            type="button"
-            onClick={syncUsersSheet}
-            disabled={isSyncing}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#152238] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#233b5d] disabled:cursor-wait disabled:opacity-60 dark:bg-[#bd9858] dark:text-[#101b2d] dark:hover:bg-[#dfc58f]"
-          >
-            <CloudUpload className="h-4 w-4" />
-            {isSyncing ? 'Sincronizando…' : 'Actualizar hoja Usuarios'}
-          </button>
-        }
-      />
-      {syncMessage && (
-        <p role="status" className="mb-4 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-          {syncMessage}
-        </p>
-      )}
-
-      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {([
-          ['Todos', registeredUsers.length],
-          ['Administrador', counts.Administrador],
-          ['Empleado', counts.Empleado],
-          ['Cliente', counts.Cliente],
-          ['Proveedor', counts.Proveedor],
-        ] as const).map(([type, count]) => (
-          <button
-            key={type}
-            type="button"
-            onClick={() => setFilter(type)}
-            className={`rounded-xl border p-4 text-left transition-colors ${filter === type
-              ? 'border-[#bd9858] bg-[#bd9858]/10 shadow-sm'
-              : 'border-slate-200 bg-white hover:border-[#bd9858]/60 dark:border-slate-700 dark:bg-slate-900'}`}
-          >
-            <span className="block text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{type === 'Todos' ? 'Registros' : type === 'Administrador' ? 'Administradores' : type === 'Empleado' ? 'Empleados' : type === 'Proveedor' ? 'Proveedores' : 'Clientes'}</span>
-            <span className="mt-1 block text-2xl font-bold text-slate-900 dark:text-white">{count}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-700 dark:bg-slate-800">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-            <Users className="h-4 w-4 text-[#bd9858]" />
-            <span>Directorio de usuarios</span>
-            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-600 dark:bg-slate-700 dark:text-slate-300">{filteredUsers.length}</span>
-          </div>
-          <label className="relative block w-full sm:max-w-xs">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar por nombre, correo o documento"
-              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-xs text-slate-800 outline-none transition focus:border-[#bd9858] focus:ring-2 focus:ring-[#bd9858]/20 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-            />
-          </label>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-xs text-slate-600 dark:text-slate-300">
-            <thead className="bg-slate-100 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              <tr>
-                <th className="px-4 py-3">Nombre</th>
-                <th className="px-4 py-3">Tipo de usuario</th>
-                <th className="px-4 py-3">Correo</th>
-                <th className="px-4 py-3">Cargo / rol</th>
-                <th className="px-4 py-3 text-center">Estado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60">
-                  <td className="px-4 py-3 font-semibold text-slate-900 dark:text-slate-100">{user.nombre || 'Sin nombre'}</td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-full border border-[#bd9858]/30 bg-[#bd9858]/10 px-2.5 py-1 text-[10px] font-bold text-[#8b692e] dark:text-[#dfc58f]">{user.tipo_usuario}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="text-slate-700 dark:text-slate-200">{user.email || '—'}</div>
-                  </td>
-                  <td className="px-4 py-3">{user.cargo || user.rol || '—'}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${user.estado
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
-                      : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}`}>
-                      {user.estado ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {filteredUsers.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-500">No hay usuarios que coincidan con la búsqueda.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <section className="mt-7 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        <div className="border-b border-slate-200 bg-slate-50 px-4 py-4 dark:border-slate-700 dark:bg-slate-800">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Acceso al sistema</h2>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Asigna usuario y contraseña a cada cuenta. Las contraseñas se guardan únicamente como hash.</p>
-        </div>
-        {credentialMessage && <p role="status" className="m-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">{credentialMessage}</p>}
-        {credentialError && <p role="alert" className="m-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-200">{credentialError}</p>}
-        <div className="divide-y divide-slate-100 dark:divide-slate-800">
-          {authAccounts.map((account) => {
-            const draft = credentialDrafts[account.id] || { username: account.username, password: '' };
-            return <div key={account.id} className="grid gap-3 px-4 py-4 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
-              <div><p className="text-xs font-semibold text-slate-900 dark:text-white">{account.name || 'Cuenta'}</p><p className="mt-1 text-[11px] text-slate-500">{account.email} · {account.type === 'admin' ? 'Administrador' : account.type === 'employee' ? 'Empleado' : account.type === 'supplier' ? 'Proveedor' : 'Cliente'}</p><p className="mt-1 text-[10px] text-slate-400">{account.configured ? 'Credenciales configuradas' : 'Sin credenciales'}</p></div>
-              <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Usuario<input value={draft.username} onChange={(event) => setCredentialDrafts((previous) => ({ ...previous, [account.id]: { ...draft, username: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 dark:border-slate-600 dark:bg-slate-950 dark:text-white" /></label>
-              <label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{account.configured ? 'Nueva contraseña' : 'Contraseña inicial'}<input type="password" autoComplete="new-password" placeholder="Mínimo 10 caracteres" value={draft.password} onChange={(event) => setCredentialDrafts((previous) => ({ ...previous, [account.id]: { ...draft, password: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 dark:border-slate-600 dark:bg-slate-950 dark:text-white" /></label>
-              <button disabled={savingAccount === account.id} onClick={() => void saveCredentials(account.id)} className="rounded-lg bg-[#152238] px-4 py-2 text-xs font-semibold text-white hover:bg-[#233b5d] disabled:opacity-50 dark:bg-[#bd9858] dark:text-[#101b2d]">{savingAccount === account.id ? 'Guardando…' : 'Guardar'}</button>
-            </div>;
-          })}
-          {authAccounts.length === 0 && <p className="px-4 py-8 text-center text-xs text-slate-500">No hay filas en la hoja Usuarios.</p>}
-        </div>
+  return <div>
+    <Breadcrumb title="Usuarios Registrados" items={[{ label: 'Otros' }, { label: 'Usuarios Registrados' }]} />
+    <div className="space-y-7"><UsersCrudPanel />
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="border-b border-slate-200 bg-slate-50 px-4 py-4 dark:border-slate-700 dark:bg-slate-800"><h2 className="text-sm font-semibold text-slate-900 dark:text-white">Acceso al sistema</h2><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Asigna usuario y contraseña a cada cuenta. Las contraseñas se guardan únicamente como hash.</p></div>
+        {credentialMessage && <p role="status" className="m-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">{credentialMessage}</p>}{credentialError && <p role="alert" className="m-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-200">{credentialError}</p>}
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">{authAccountsLoading && <p role="status" className="px-4 py-8 text-center text-xs text-slate-500">Cargando usuarios desde Google Sheets…</p>}{authAccounts.map((account) => { const draft = credentialDrafts[account.id] || { username: account.username, password: '' }; return <div key={account.id} className="grid gap-3 px-4 py-4 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end"><div><p className="text-xs font-semibold text-slate-900 dark:text-white">{account.name || 'Cuenta'}</p><p className="mt-1 text-[11px] text-slate-500">{account.email} · {account.type === 'admin' ? 'Administrador' : account.type === 'employee' ? 'Empleado' : account.type === 'supplier' ? 'Proveedor' : 'Cliente'}</p><p className="mt-1 text-[10px] text-slate-400">{account.configured ? 'Credenciales configuradas' : 'Sin credenciales'}</p></div><label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Usuario<input value={draft.username} onChange={(event) => setCredentialDrafts((previous) => ({ ...previous, [account.id]: { ...draft, username: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 dark:border-slate-600 dark:bg-slate-950 dark:text-white" /></label><label className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{account.configured ? 'Nueva contraseña' : 'Contraseña inicial'}<input type="password" autoComplete="new-password" placeholder="Mínimo 10 caracteres" value={draft.password} onChange={(event) => setCredentialDrafts((previous) => ({ ...previous, [account.id]: { ...draft, password: event.target.value } }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 dark:border-slate-600 dark:bg-slate-950 dark:text-white" /></label><button disabled={savingAccount === account.id} onClick={() => void saveCredentials(account.id)} className="rounded-lg bg-[#152238] px-4 py-2 text-xs font-semibold text-white hover:bg-[#233b5d] disabled:opacity-50 dark:bg-[#bd9858] dark:text-[#101b2d]">{savingAccount === account.id ? 'Guardando…' : 'Guardar'}</button></div>; })}{!authAccountsLoading && !credentialError && authAccounts.length === 0 && <p className="px-4 py-8 text-center text-xs text-slate-500">No hay filas en la hoja Usuarios.</p>}</div>
       </section>
     </div>
-  );
+  </div>;
 };
-
 /* ================= USUARIOS Y ROLES ================= */
 export const UsuariosRolesView: React.FC = () => {
   const { users, roles } = useApp();

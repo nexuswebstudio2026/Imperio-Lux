@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, ArrowRight, ShieldCheck, Truck, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BriefcaseBusiness, ShieldCheck, Truck, UserRound } from 'lucide-react';
 
 interface AccessChooserProps {
   onSelect: (path: string) => void;
@@ -14,16 +14,22 @@ const portals = [
     icon: ShieldCheck,
   },
   {
-    title: 'Cliente',
-    description: 'Consulta tu perfil, comprobantes e historial de compras.',
-    path: '/acceso/clientes',
-    icon: UserRound,
+    title: 'Empleado',
+    description: 'Accede a las herramientas y la información de tu trabajo.',
+    path: '/acceso/empleados',
+    icon: BriefcaseBusiness,
   },
   {
     title: 'Proveedor',
     description: 'Consulta tus datos, compras registradas y estado de pago.',
     path: '/acceso/proveedores',
     icon: Truck,
+  },
+  {
+    title: 'Cliente',
+    description: 'Consulta tu perfil, comprobantes e historial de compras.',
+    path: '/acceso/clientes',
+    icon: UserRound,
   },
 ];
 
@@ -39,7 +45,7 @@ export const AccessChooser: React.FC<AccessChooserProps> = ({ onSelect, onBack }
         <h1 className="mt-2 font-serif text-4xl">Elige tu portal de acceso</h1>
         <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Ingresa al espacio correspondiente a tu cuenta.</p>
       </header>
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {portals.map(({ title, description, path, icon: Icon }) => (
           <button
             key={path}

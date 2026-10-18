@@ -88,7 +88,7 @@ const MainContent: React.FC = () => {
 
   const targetRoute = isAdmin ? '/admin' : isEmployee ? '/empleado' : isSupplier ? '/proveedor' : '/cliente';
   const isProtectedRoute = isAdminPath(route) || route === '/empleado' || route.startsWith('/empleado/') || route === '/cliente' || route.startsWith('/cliente/') || route === '/proveedor' || route.startsWith('/proveedor/');
-  const isAccessRoute = route === '/acceso' || route === '/acceso/admin' || route === '/acceso/clientes' || route === '/acceso/proveedores';
+  const isAccessRoute = route === '/acceso' || route === '/acceso/admin' || route === '/acceso/empleados' || route === '/acceso/clientes' || route === '/acceso/proveedores';
   const isPublicRoute = route === '/' || route === '/login' || isAccessRoute || route in PUBLIC_SECTION_ROUTES;
 
   if (!authReady && isProtectedRoute) return <div className="grid min-h-screen place-items-center bg-[#f7f5f0] text-sm text-slate-500 dark:bg-slate-950 dark:text-slate-300">Verificando sesión…</div>;
@@ -98,8 +98,8 @@ const MainContent: React.FC = () => {
   if (route === '/login' && currentUser) { navigate(targetRoute); return null; }
   if (route === '/login') return <LoginPage onLogin={handleLogin} onBack={() => navigate('/')} />;
   if (route === '/acceso') return <AccessChooser onSelect={navigate} onBack={() => navigate('/')} />;
-  if (route === '/acceso/admin' || route === '/acceso/clientes' || route === '/acceso/proveedores') {
-    const portalType = route === '/acceso/admin' ? 'admin' : route === '/acceso/proveedores' ? 'supplier' : 'client';
+  if (route === '/acceso/admin' || route === '/acceso/empleados' || route === '/acceso/clientes' || route === '/acceso/proveedores') {
+    const portalType = route === '/acceso/admin' ? 'admin' : route === '/acceso/empleados' ? 'employee' : route === '/acceso/proveedores' ? 'supplier' : 'client';
     return <LoginPage portalType={portalType} onLogin={handleLogin} onBack={() => navigate('/acceso')} />;
   }
   if (!isProtectedRoute && isPublicRoute) return <PublicStorefront currentPath={route} onAdminLogin={() => navigate('/acceso')} />;

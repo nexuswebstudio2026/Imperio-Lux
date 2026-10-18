@@ -3,7 +3,7 @@ import { ArrowLeft, Eye, EyeOff, LockKeyhole, Mail, Moon, Sun } from 'lucide-rea
 import { useApp } from '../../context/AppContext';
 
 type AuthUser = { id: number; name: string; email: string; role: string; type: 'admin' | 'employee' | 'client' | 'supplier' };
-type PortalType = 'admin' | 'client' | 'supplier';
+type PortalType = 'admin' | 'employee' | 'client' | 'supplier';
 
 async function readApiResponse(response: Response): Promise<any> {
   const body = await response.text();
@@ -19,7 +19,7 @@ async function readApiResponse(response: Response): Promise<any> {
 
 export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: () => void; portalType?: PortalType }> = ({ onLogin, onBack, portalType }) => {
   const { theme, toggleTheme } = useApp();
-  const [mode, setMode] = useState<'login' | 'username' | 'password' | 'bootstrap'>('login');
+  const [mode, setMode] = useState<'login' | 'username' | 'password' | 'bootstrap' | 'register'>('login');
   const [stage, setStage] = useState<'request' | 'confirm'>('request');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -31,6 +31,14 @@ export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: ()
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [bootstrapSecret, setBootstrapSecret] = useState('');
   const [bootstrapEmail, setBootstrapEmail] = useState('');
+  const [registerName, setRegisterName] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
+  const [registerUsername, setRegisterUsername] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [registerStage, setRegisterStage] = useState<'request' | 'confirm'>('request');
+  const [registrationToken, setRegistrationToken] = useState('');
+  const [registrationCode, setRegistrationCode] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -49,7 +57,7 @@ export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: ()
   async function requestCode(event: React.FormEvent) {
     event.preventDefault(); setError(''); setBusy(true);
     try {
-      const response = await fetch('/api/auth/recovery/request', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, identifier }) });
+      const response = await fetch('/api/auth/recovery/request', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode, identifier, portalType }) });
       const data = await readApiResponse(response);
       if (!response.ok) throw new Error(data.error || 'No se pudo solicitar la recuperación.');
       setRecoveryId(data.recoveryId); setMessage(data.message); setStage('confirm');
@@ -80,8 +88,44 @@ export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: ()
     finally { setBusy(false); }
   }
 
-  const portalName = portalType === 'admin' ? 'administrador' : portalType === 'supplier' ? 'proveedor' : portalType === 'client' ? 'cliente' : '';
-  const title = mode === 'login' ? portalType ? `Acceso de ${portalName}` : 'Bienvenido de nuevo' : mode === 'username' ? 'Recupera tu usuario' : mode === 'password' ? 'Restablece tu contraseña' : 'Configura el administrador';
+  async function registerAccount(event: React.FormEvent) {
+    event.preventDefault(); setError(''); setMessage('');
+    if (!portalType || portalType === 'admin' || portalType === 'employee') return;
+    if (registerPassword !== confirmPassword) { setError('Las contraseñas no coinciden.'); return; }
+    setBusy(true);
+    try {
+      const response = await fetch('/api/auth/register', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ type: portalType, name: registerName, email: registerEmail, username: registerUsername, password: registerPassword }),
+      });
+      const data = await readApiResponse(response);
+      if (!response.ok) throw new Error(data.error || 'No se pudo registrar la cuenta.');
+      setRegistrationToken(data.registrationToken);
+      setRegisterStage('confirm');
+      setMessage(data.message || 'Ingresa el código que enviamos a tu correo.');
+      setRegisterPassword(''); setConfirmPassword('');
+    } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo registrar la cuenta.'); }
+    finally { setBusy(false); }
+  }
+
+  async function confirmRegistration(event: React.FormEvent) {
+    event.preventDefault(); setError(''); setBusy(true);
+    try {
+      const response = await fetch('/api/auth/register/confirm', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ registrationToken, code: registrationCode }),
+      });
+      const data = await readApiResponse(response);
+      if (!response.ok) throw new Error(data.error || 'No se pudo verificar el correo.');
+      setUsername(registerUsername); setPassword(''); setMode('login'); setRegisterStage('request');
+      setMessage(data.message || 'Correo verificado y cuenta registrada. Ya puedes iniciar sesión.');
+      setRegistrationToken(''); setRegistrationCode('');
+    } catch (err) { setError(err instanceof Error ? err.message : 'No se pudo verificar el correo.'); }
+    finally { setBusy(false); }
+  }
+
+  const portalName = portalType === 'admin' ? 'administrador' : portalType === 'employee' ? 'empleado' : portalType === 'supplier' ? 'proveedor' : portalType === 'client' ? 'cliente' : '';
+  const title = mode === 'login' ? portalType ? `Acceso de ${portalName}` : 'Bienvenido de nuevo' : mode === 'register' ? `Registro de ${portalName}` : mode === 'username' ? 'Recupera tu usuario' : mode === 'password' ? 'Restablece tu contraseña' : 'Configura el administrador';
   const inputClass = 'w-full border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#b89652] focus:ring-2 focus:ring-[#b89652]/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white';
 
   return <main className="min-h-screen bg-[#f7f5f0] px-4 py-10 text-slate-900 dark:bg-slate-950 dark:text-white">
@@ -95,14 +139,28 @@ export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: ()
           <img src="/assets/imperio-icon.svg" alt="" className="mx-auto mb-4 h-12 w-12 rounded-full" />
           <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[#9b7b3e]">Imperio Lux</p>
           <h1 className="mt-2 font-serif text-3xl">{title}</h1>
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Ingresa con las credenciales asociadas a tu cuenta.</p>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{mode === 'register' ? 'Completa tus datos para crear el acceso al portal.' : 'Ingresa con las credenciales asociadas a tu cuenta.'}</p>
         </div>
         {mode === 'login' ? <form onSubmit={submitLogin} className="space-y-4">
           <label className="block text-xs font-semibold">Usuario<input autoComplete="username" required value={username} onChange={(e) => setUsername(e.target.value)} className={`${inputClass} mt-2`} /></label>
           <label className="block text-xs font-semibold">Contraseña<span className="relative mt-2 block"><input autoComplete="current-password" required type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} className={`${inputClass} pr-12`} /><button type="button" aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} aria-pressed={showPassword} onClick={() => setShowPassword((visible) => !visible)} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-500 transition hover:text-[#9b7b3e] dark:text-slate-400">{showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}</button></span></label>
           <button disabled={busy} className="w-full bg-[#b89652] px-4 py-3 text-xs font-bold uppercase tracking-widest text-white transition hover:bg-[#9b7b3e] disabled:opacity-50">{busy ? 'Verificando…' : 'Iniciar sesión'}</button>
-          <div className="flex justify-between text-xs"><button type="button" onClick={() => { setMode('password'); setStage('request'); setError(''); setMessage(''); }} className="text-[#8b6d35] hover:underline">Olvidé mi contraseña</button><button type="button" onClick={() => { setMode('username'); setStage('request'); setError(''); setMessage(''); }} className="text-[#8b6d35] hover:underline">Olvidé mi usuario</button></div>
-          <button type="button" onClick={() => { setMode('bootstrap'); setError(''); setMessage(''); }} className="w-full pt-2 text-center text-[11px] text-slate-500 hover:text-[#8b6d35]">Primera configuración del administrador</button>
+          {portalType && <div className="flex flex-wrap justify-between gap-3 text-xs">{portalType === 'admin' && <button type="button" onClick={() => { setMode('username'); setStage('request'); setError(''); setMessage(''); }} className="text-[#8b6d35] hover:underline">Olvidé mi usuario</button>}<button type="button" onClick={() => { setMode('password'); setStage('request'); setError(''); setMessage(''); }} className="text-[#8b6d35] hover:underline">Olvidé mi contraseña</button>{portalType !== 'admin' && portalType !== 'employee' && <button type="button" onClick={() => { setMode('register'); setRegisterStage('request'); setError(''); setMessage(''); }} className="text-[#8b6d35] hover:underline">Registrar usuario</button>}</div>}
+          {portalType === 'admin' && <button type="button" onClick={() => { setMode('bootstrap'); setError(''); setMessage(''); }} className="w-full pt-2 text-center text-[11px] text-slate-500 hover:text-[#8b6d35]">Primera configuración del administrador</button>}
+        </form> : mode === 'register' && registerStage === 'request' ? <form onSubmit={registerAccount} className="space-y-4">
+          <label className="block text-xs font-semibold">Nombre completo<input autoComplete="name" required maxLength={120} value={registerName} onChange={(e) => setRegisterName(e.target.value)} className={`${inputClass} mt-2`} /></label>
+          <label className="block text-xs font-semibold">Correo electrónico<input autoComplete="email" required type="email" maxLength={160} value={registerEmail} onChange={(e) => setRegisterEmail(e.target.value)} className={`${inputClass} mt-2`} /></label>
+          <label className="block text-xs font-semibold">Nombre de usuario<input autoComplete="username" required minLength={4} maxLength={64} value={registerUsername} onChange={(e) => setRegisterUsername(e.target.value)} className={`${inputClass} mt-2`} /></label>
+          <label className="block text-xs font-semibold">Contraseña<span className="relative mt-2 block"><input autoComplete="new-password" required minLength={10} maxLength={256} type={showNewPassword ? 'text' : 'password'} value={registerPassword} onChange={(e) => setRegisterPassword(e.target.value)} className={`${inputClass} pr-12`} /><button type="button" aria-label={showNewPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} aria-pressed={showNewPassword} onClick={() => setShowNewPassword((visible) => !visible)} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-500 transition hover:text-[#9b7b3e] dark:text-slate-400">{showNewPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}</button></span></label>
+          <label className="block text-xs font-semibold">Confirmar contraseña<input autoComplete="new-password" required minLength={10} maxLength={256} type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className={`${inputClass} mt-2`} /></label>
+          {(portalType === 'employee' || portalType === 'supplier') && <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">El correo debe coincidir con un registro activo de {portalType === 'employee' ? 'empleados' : 'proveedores'} en el sistema.</p>}
+          <button disabled={busy} className="w-full bg-[#b89652] px-4 py-3 text-xs font-bold uppercase tracking-widest text-white disabled:opacity-50">{busy ? 'Registrando…' : 'Crear cuenta'}</button>
+          <button type="button" onClick={() => { setMode('login'); setError(''); setMessage(''); }} className="w-full text-xs text-[#8b6d35]">Volver al inicio de sesión</button>
+        </form> : mode === 'register' ? <form onSubmit={confirmRegistration} className="space-y-4">
+          <p className="text-sm leading-6 text-slate-600 dark:text-slate-300">{message || `Enviamos un código de verificación a ${registerEmail}.`}</p>
+          <label className="block text-xs font-semibold">Código de verificación<input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={registrationCode} onChange={(e) => setRegistrationCode(e.target.value)} className={`${inputClass} mt-2`} /></label>
+          <button disabled={busy || !registrationToken} className="w-full bg-[#b89652] px-4 py-3 text-xs font-bold uppercase tracking-widest text-white disabled:opacity-50">{busy ? 'Verificando…' : 'Verificar y registrar'}</button>
+          <button type="button" onClick={() => { setMode('login'); setRegisterStage('request'); setRegistrationToken(''); setRegistrationCode(''); setError(''); setMessage(''); }} className="w-full text-xs text-[#8b6d35]">Cancelar y volver al inicio de sesión</button>
         </form> : mode === 'bootstrap' ? <form onSubmit={bootstrapAdmin} className="space-y-4">
           <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">Configura AUTH_BOOTSTRAP_SECRET en el entorno del servidor y usa el correo del administrador que ya existe en la hoja Usuarios.</p>
           <label className="block text-xs font-semibold">Clave de configuración<input required type="password" value={bootstrapSecret} onChange={(e) => setBootstrapSecret(e.target.value)} className={`${inputClass} mt-2`} /></label>
@@ -113,13 +171,15 @@ export const LoginPage: React.FC<{ onLogin: (user: AuthUser) => void; onBack: ()
           <button type="button" onClick={() => { setMode('login'); setError(''); }} className="w-full text-xs text-[#8b6d35]">Volver al inicio de sesión</button>
         </form> : stage === 'request' ? <form onSubmit={requestCode} className="space-y-4">
           <label className="block text-xs font-semibold">{mode === 'username' ? 'Correo electrónico registrado' : 'Usuario'}<span className="relative mt-2 block"><span className="absolute left-3 top-3 text-slate-400">{mode === 'username' ? <Mail size={16} /> : <LockKeyhole size={16} />}</span><input required type={mode === 'username' ? 'email' : 'text'} value={identifier} onChange={(e) => setIdentifier(e.target.value)} className={`${inputClass} pl-10`} /></span></label>
-          <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">{mode === 'username' ? 'Enviaremos el usuario a tu correo registrado. También podrás cambiarlo con el código.' : 'Enviaremos un código de un solo uso al correo asociado con tu usuario.'}</p>
+          <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">{mode === 'username' ? 'Enviaremos un código al correo registrado. Al verificarlo podrás elegir un usuario nuevo.' : 'Enviaremos un código de un solo uso al correo asociado con tu usuario.'}</p>
           <button disabled={busy} className="w-full bg-[#b89652] px-4 py-3 text-xs font-bold uppercase tracking-widest text-white disabled:opacity-50">{busy ? 'Enviando…' : 'Enviar código'}</button>
+          <button type="button" onClick={() => { setMode('login'); setStage('request'); setRecoveryId(''); setCode(''); setNewValue(''); setError(''); setMessage(''); }} className="w-full text-xs text-[#8b6d35]">Volver al inicio de sesión</button>
         </form> : <form onSubmit={confirmRecovery} className="space-y-4">
           <p className="text-xs leading-5 text-slate-600 dark:text-slate-300">{message}</p>
           <label className="block text-xs font-semibold">Código de verificación<input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} value={code} onChange={(e) => setCode(e.target.value)} className={`${inputClass} mt-2`} /></label>
           <label className="block text-xs font-semibold">{mode === 'username' ? 'Nuevo usuario' : 'Nueva contraseña'}<span className="relative mt-2 block"><input required minLength={mode === 'username' ? 4 : 10} type={mode === 'password' ? (showNewPassword ? 'text' : 'password') : 'text'} value={newValue} onChange={(e) => setNewValue(e.target.value)} className={`${inputClass} ${mode === 'password' ? 'pr-12' : ''}`} />{mode === 'password' && <button type="button" aria-label={showNewPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'} aria-pressed={showNewPassword} onClick={() => setShowNewPassword((visible) => !visible)} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-500 transition hover:text-[#9b7b3e] dark:text-slate-400">{showNewPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}</button>}</span></label>
           <button disabled={busy} className="w-full bg-[#b89652] px-4 py-3 text-xs font-bold uppercase tracking-widest text-white disabled:opacity-50">{busy ? 'Actualizando…' : 'Actualizar cuenta'}</button>
+          <button type="button" onClick={() => { setMode('login'); setStage('request'); setRecoveryId(''); setCode(''); setNewValue(''); setError(''); setMessage(''); }} className="w-full text-xs text-[#8b6d35]">Cancelar y volver al inicio de sesión</button>
         </form>}
         {(error || message) && <p role="status" className={`mt-4 text-sm ${error ? 'text-red-600' : 'text-emerald-700 dark:text-emerald-300'}`}>{error || message}</p>}
       </section>
