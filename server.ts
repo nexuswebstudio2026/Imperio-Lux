@@ -60,6 +60,9 @@ async function readSheetRecords(sheetName: string): Promise<Record<string, unkno
   const headers = (values[0] || []).map((value) => String(value || '').trim());
   return values.slice(1).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])));
 }
+function isPublicRecordActive(value: unknown) {
+  return value === true || value === 1 || ['true', 'activo', 'active'].includes(String(value || '').trim().toLocaleLowerCase('es'));
+}
 function verifyPassword(password: string, salt: string, hash: string) {
   if (!salt || !hash) return false;
   const actual = scryptSync(password, salt, 64);
@@ -270,6 +273,42 @@ app.get('/api/database/status', async (_req, res) => {
     res.json({ connected: true, provider: 'google-sheets', spreadsheetId, spreadsheetTitle: result.properties?.title || '', serviceAccount: credentials.client_email });
   } catch (error) {
     res.status(503).json({ connected: false, provider: 'google-sheets', error: error instanceof Error ? error.message : 'No se pudo conectar con Google Sheets.' });
+  }
+});
+
+app.get('/api/storefront/catalog', async (_req, res) => {
+  try {
+    const [products, categories, brands] = await Promise.all([
+      readSheetRecords('productos'),
+      readSheetRecords('categorias'),
+      readSheetRecords('marcas'),
+    ]);
+    res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.json({
+      products: products.filter((record) => isPublicRecordActive(record.estado)).map((record) => ({
+        id: Number(record.id) || 0,
+        nombre: String(record.nombre || ''),
+        descripcion: String(record.descripcion || ''),
+        imagen: String(record.imagen || ''),
+        marca_id: Number(record.marca_id) || 0,
+        precio_venta: Number(record.precio_venta) || 0,
+        estado: true,
+      })),
+      categories: categories.filter((record) => isPublicRecordActive(record.estado)).map((record) => ({
+        id: Number(record.id) || 0,
+        nombre: String(record.nombre || ''),
+        descripcion: String(record.descripcion || ''),
+        estado: true,
+      })),
+      brands: brands.filter((record) => isPublicRecordActive(record.estado)).map((record) => ({
+        id: Number(record.id) || 0,
+        nombre: String(record.nombre || ''),
+        descripcion: String(record.descripcion || ''),
+        estado: true,
+      })),
+    });
+  } catch (error) {
+    res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo cargar el catálogo desde Google Sheets.' });
   }
 });
 
@@ -489,14 +528,22 @@ app.post('/api/auth/admin/sync-users', requireAdmin, async (req, res) => {
     if (!incoming || incoming.length > 1000) return res.status(400).json({ error: 'La lista de usuarios no es válida.' });
     const { spreadsheetId, headers, rows } = await readUsersSheet();
     const byId = new Map(rows.map(({ data }) => [data.id, data]));
+    const claimedIds = new Set<string>();
     const merged: Record<string, string>[] = incoming.map((raw: Record<string, unknown>) => {
       const id = String(raw.id ?? '');
-      const existing = byId.get(id) || {};
+      const email = normalizeUsername(raw.email);
+      const existing = byId.get(id) || rows.find(({ data }) =>
+        !claimedIds.has(data.id) && email && normalizeUsername(data.email) === email
+      )?.data || {};
+      if (existing.id) claimedIds.add(existing.id);
       const safe: Record<string, string> = Object.fromEntries(Object.entries(raw)
         .filter(([key]) => !AUTH_HEADERS.includes(key))
         .map(([key, value]) => [key, value === null || value === undefined ? '' : String(value)]));
       return { ...existing, ...safe };
     });
+    for (const { data } of rows) {
+      if (!claimedIds.has(data.id) && !merged.some((record) => record.id === data.id)) merged.push(data);
+    }
     const mergedHeaders = [...new Set(merged.flatMap((row) => Object.keys(row)))];
     const nextHeaders = [...headers, ...mergedHeaders.filter((header) => !headers.includes(header))];
     const valueRows = [nextHeaders, ...merged.map((row) => nextHeaders.map((header) => row[header] || ''))];

@@ -1,7 +1,13 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowDown, ArrowRight, ArrowUpRight, Clock3, Mail, MapPin, Moon, ShieldCheck, Sparkles, Sun, Truck } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PUBLIC_SECTION_ROUTES } from '../../lib/routes';
+
+interface StorefrontCatalogData {
+  products: Array<Pick<ReturnType<typeof useApp>['productos'][number], 'id' | 'nombre' | 'descripcion' | 'imagen' | 'marca_id' | 'precio_venta' | 'estado'>>;
+  categories: Array<Pick<ReturnType<typeof useApp>['categorias'][number], 'id' | 'nombre' | 'descripcion' | 'estado'>>;
+  brands: Array<Pick<ReturnType<typeof useApp>['marcas'][number], 'id' | 'nombre' | 'descripcion' | 'estado'>>;
+}
 
 interface PublicStorefrontProps {
   currentPath: string;
@@ -10,10 +16,37 @@ interface PublicStorefrontProps {
 
 export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath, onAdminLogin }) => {
   const { empresa, productos, categorias, marcas, formatCurrency, theme, toggleTheme } = useApp();
-  const featuredProducts = productos.filter((product) => product.estado).slice(0, 4);
-  const featuredCategories = categorias.filter((category) => category.estado).slice(0, 4);
+  const [catalogData, setCatalogData] = useState<StorefrontCatalogData | null>(null);
+  const [catalogError, setCatalogError] = useState('');
+  const visibleProducts = catalogData?.products ?? productos;
+  const visibleCategories = catalogData?.categories ?? categorias;
+  const visibleBrands = catalogData?.brands ?? marcas;
+  const activeProducts = visibleProducts.filter((product) => product.estado);
+  const featuredProducts = currentPath === '/catalogo' ? activeProducts : activeProducts.slice(0, 4);
+  const featuredCategories = visibleCategories.filter((category) => category.estado).slice(0, 4);
   const phone = (empresa.telefono || '').replace(/\D/g, '');
   const whatsapp = phone ? `https://wa.me/${phone}` : `mailto:${empresa.correo}`;
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/storefront/catalog')
+      .then(async (response) => {
+        const data = await response.json() as StorefrontCatalogData & { error?: string };
+        if (!response.ok) throw new Error(data.error || 'No se pudo cargar el catálogo desde Google Sheets.');
+        if (!Array.isArray(data.products) || !Array.isArray(data.categories) || !Array.isArray(data.brands)) {
+          throw new Error('La respuesta del catálogo tiene un formato inválido.');
+        }
+        return data;
+      })
+      .then((data) => { if (active) setCatalogData(data); })
+      .catch((error: unknown) => {
+        if (!active) return;
+        const message = error instanceof Error ? error.message : 'No se pudo cargar el catálogo desde Google Sheets.';
+        setCatalogError(message);
+        console.error('No se pudo cargar el catálogo público:', error);
+      });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const sectionId = PUBLIC_SECTION_ROUTES[currentPath];
@@ -114,6 +147,7 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
 
         <section id="catalogo" className="scroll-mt-28 px-5 py-20 lg:px-8 lg:py-28">
           <div className="mx-auto max-w-7xl">
+            {catalogError && <p role="alert" className="mb-6 border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">{catalogError} Se muestran los datos locales disponibles.</p>}
             <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#9b7b3e]">Curaduría Imperio Lux</p>
@@ -132,7 +166,7 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
 
             <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
               {featuredProducts.map((product) => {
-                const brand = marcas.find((item) => item.id === product.marca_id)?.nombre;
+                const brand = visibleBrands.find((item) => item.id === product.marca_id)?.nombre;
                 return (
                   <article key={product.id} className="group bg-white">
                     <div className="relative aspect-[4/5] overflow-hidden bg-[#e9e5dc]">

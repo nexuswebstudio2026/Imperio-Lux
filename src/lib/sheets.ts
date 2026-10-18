@@ -295,7 +295,9 @@ export async function ensureSheetTabsExist(
 
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
-    console.warn('Could not add some tabs, continuing:', errBody);
+    throw new Error(
+      errBody?.error?.message || 'No se pudieron crear las pestañas faltantes en Google Sheets.'
+    );
   }
 }
 
@@ -439,13 +441,19 @@ export async function writeTableToSheet(
 
   // 1. Clear existing sheet content
   const clearUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:clear`;
-  await requestGoogleSheetsApi(clearUrl.replace('/api/google-sheets', ''), {
+  const clearResponse = await requestGoogleSheetsApi(clearUrl.replace('/api/google-sheets', ''), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({}),
-  }).catch(() => {});
+  });
+  if (!clearResponse.ok) {
+    const errBody = await clearResponse.json().catch(() => ({}));
+    throw new Error(
+      errBody?.error?.message || `No se pudo limpiar la pestaña ${sheetName} de Google Sheets`
+    );
+  }
 
   // 2. Write new values
   const writeUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1?valueInputOption=USER_ENTERED`;
@@ -682,4 +690,3 @@ export async function createDriveBackupSpreadsheet(
     latencyMs,
   };
 }
-

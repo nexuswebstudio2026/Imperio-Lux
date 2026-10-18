@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Empresa,
   Moneda,
@@ -405,6 +405,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<User | null>(() =>
     null
   );
+  const [sheetsReadyForAdmin, setSheetsReadyForAdmin] = useState<string | null>(null);
+  const sheetsInitializationKey = useRef<string | null>(null);
+  const syncedTableSnapshots = useRef(new Map<string, string>());
+  const pendingTableWrites = useRef(new Map<string, any[]>());
+  const tableWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFlushingTableWrites = useRef(false);
   const [activeTab, setActiveTab] = useState<AppTab>(() =>
     loadStorage<AppTab>('activeTab', 'panel')
   );
@@ -708,33 +714,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const existingTabNames = meta.sheets.map((s) => s.title);
 
       const tablesToUpload: { name: string; data: any[] }[] = [
-        { name: 'productos', data: productos.length > 0 ? productos : initialProductos },
-        { name: 'categorias', data: categorias.length > 0 ? categorias : initialCategorias },
-        { name: 'marcas', data: marcas.length > 0 ? marcas : initialMarcas },
-        { name: 'presentaciones', data: presentaciones.length > 0 ? presentaciones : initialPresentaciones },
-        { name: 'clientes', data: clientes.length > 0 ? clientes : initialClientes },
-        { name: 'proveedores', data: proveedores.length > 0 ? proveedores : initialProveedores },
-        { name: 'empleados', data: empleados.length > 0 ? empleados : initialEmpleados },
+        { name: 'productos', data: productos.length ? productos : initialProductos },
+        { name: 'categorias', data: categorias.length ? categorias : initialCategorias },
+        { name: 'marcas', data: marcas.length ? marcas : initialMarcas },
+        { name: 'presentaciones', data: presentaciones.length ? presentaciones : initialPresentaciones },
+        { name: 'clientes', data: clientes.length ? clientes : initialClientes },
+        { name: 'proveedores', data: proveedores.length ? proveedores : initialProveedores },
+        { name: 'empleados', data: empleados.length ? empleados : initialEmpleados },
         { name: 'Usuarios', data: buildRegisteredUsers(
-          users.length > 0 ? users : initialUsers,
-          empleados.length > 0 ? empleados : initialEmpleados,
-          clientes.length > 0 ? clientes : initialClientes,
-          proveedores.length > 0 ? proveedores : initialProveedores
+          users.length ? users : initialUsers,
+          empleados.length ? empleados : initialEmpleados,
+          clientes.length ? clientes : initialClientes,
+          proveedores.length ? proveedores : initialProveedores
         ) },
-        { name: 'ventas', data: ventas.length > 0 ? ventas : initialVentas },
-        { name: 'compras', data: compras.length > 0 ? compras : initialCompras },
-        { name: 'cajas', data: cajas.length > 0 ? cajas : initialCajas },
-        { name: 'movimientos_caja', data: movimientosCaja.length > 0 ? movimientosCaja : initialMovimientosCaja },
-        { name: 'inventario_ajustes', data: inventarioAjustes.length > 0 ? inventarioAjustes : initialInventarioAjustes },
-        { name: 'kardex', data: kardex.length > 0 ? kardex : initialKardex },
+        { name: 'ventas', data: ventas.length ? ventas : initialVentas },
+        { name: 'compras', data: compras.length ? compras : initialCompras },
+        { name: 'cajas', data: cajas.length ? cajas : initialCajas },
+        { name: 'movimientos_caja', data: movimientosCaja.length ? movimientosCaja : initialMovimientosCaja },
+        { name: 'inventario_ajustes', data: inventarioAjustes.length ? inventarioAjustes : initialInventarioAjustes },
+        { name: 'kardex', data: kardex.length ? kardex : initialKardex },
         { name: 'empresas', data: [empresa || initialEmpresa] },
-        { name: 'users', data: users.length > 0 ? users : initialUsers },
-        { name: 'roles', data: roles.length > 0 ? roles : initialRoles },
-        { name: 'monedas', data: monedas.length > 0 ? monedas : initialMonedas },
-        { name: 'documentos', data: documentos.length > 0 ? documentos : initialDocumentos },
-        { name: 'comprobantes', data: comprobantes.length > 0 ? comprobantes : initialComprobantes },
-        { name: 'activity_logs', data: activityLogs.length > 0 ? activityLogs : initialActivityLogs },
-        { name: 'notificaciones', data: notificaciones.length > 0 ? notificaciones : initialNotificaciones },
+        { name: 'users', data: users.length ? users : initialUsers },
+        { name: 'roles', data: roles.length ? roles : initialRoles },
+        { name: 'monedas', data: monedas.length ? monedas : initialMonedas },
+        { name: 'documentos', data: documentos.length ? documentos : initialDocumentos },
+        { name: 'comprobantes', data: comprobantes.length ? comprobantes : initialComprobantes },
+        { name: 'activity_logs', data: activityLogs.length ? activityLogs : initialActivityLogs },
+        { name: 'notificaciones', data: notificaciones.length ? notificaciones : initialNotificaciones },
       ];
 
       onProgress?.('Creando pestañas en la hoja de cálculo...', 10);
@@ -815,66 +821,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (existingTabs.has('productos')) {
         onProgress?.('Descargando productos...', 15);
         const list = await readTableFromSheet<Producto>(token, googleSheetsId, 'productos');
-        if (list.length > 0) {
-          setProductos(list);
-          saveStorage('productos', list);
-          totalRecords += list.length;
-        }
+        setProductos(list);
+        saveStorage('productos', list);
+        totalRecords += list.length;
       }
       if (existingTabs.has('categorias')) {
         onProgress?.('Descargando categorías...', 25);
         const list = await readTableFromSheet<Categoria>(token, googleSheetsId, 'categorias');
-        if (list.length > 0) {
-          setCategorias(list);
-          saveStorage('categorias', list);
-          totalRecords += list.length;
-        }
+        setCategorias(list);
+        saveStorage('categorias', list);
+        totalRecords += list.length;
       }
       if (existingTabs.has('marcas')) {
         const list = await readTableFromSheet<Marca>(token, googleSheetsId, 'marcas');
-        if (list.length > 0) { setMarcas(list); saveStorage('marcas', list); totalRecords += list.length; }
+        setMarcas(list); saveStorage('marcas', list); totalRecords += list.length;
       }
       if (existingTabs.has('presentaciones')) {
         const list = await readTableFromSheet<Presentacion>(token, googleSheetsId, 'presentaciones');
-        if (list.length > 0) { setPresentaciones(list); saveStorage('presentaciones', list); totalRecords += list.length; }
+        setPresentaciones(list); saveStorage('presentaciones', list); totalRecords += list.length;
       }
       if (existingTabs.has('clientes')) {
         onProgress?.('Descargando clientes...', 40);
         const list = await readTableFromSheet<Cliente>(token, googleSheetsId, 'clientes');
-        if (list.length > 0) { setClientes(list); saveStorage('clientes', list); totalRecords += list.length; }
+        setClientes(list); saveStorage('clientes', list); totalRecords += list.length;
       }
       if (existingTabs.has('proveedores')) {
         const list = await readTableFromSheet<Proveedor>(token, googleSheetsId, 'proveedores');
-        if (list.length > 0) { setProveedores(list); saveStorage('proveedores', list); totalRecords += list.length; }
+        setProveedores(list); saveStorage('proveedores', list); totalRecords += list.length;
       }
       if (existingTabs.has('empleados')) {
         const list = await readTableFromSheet<Empleado>(token, googleSheetsId, 'empleados');
-        if (list.length > 0) { setEmpleados(list); saveStorage('empleados', list); totalRecords += list.length; }
+        setEmpleados(list); saveStorage('empleados', list); totalRecords += list.length;
       }
       if (existingTabs.has('ventas')) {
         onProgress?.('Descargando ventas...', 60);
         const list = await readTableFromSheet<Venta>(token, googleSheetsId, 'ventas');
-        if (list.length > 0) { setVentas(list); saveStorage('ventas', list); totalRecords += list.length; }
+        setVentas(list); saveStorage('ventas', list); totalRecords += list.length;
       }
       if (existingTabs.has('compras')) {
         const list = await readTableFromSheet<Compra>(token, googleSheetsId, 'compras');
-        if (list.length > 0) { setCompras(list); saveStorage('compras', list); totalRecords += list.length; }
+        setCompras(list); saveStorage('compras', list); totalRecords += list.length;
       }
       if (existingTabs.has('cajas')) {
         const list = await readTableFromSheet<Caja>(token, googleSheetsId, 'cajas');
-        if (list.length > 0) { setCajas(list); saveStorage('cajas', list); totalRecords += list.length; }
+        setCajas(list); saveStorage('cajas', list); totalRecords += list.length;
       }
       if (existingTabs.has('movimientos_caja')) {
         const list = await readTableFromSheet<MovimientoCaja>(token, googleSheetsId, 'movimientos_caja');
-        if (list.length > 0) { setMovimientosCaja(list); saveStorage('movimientosCaja', list); totalRecords += list.length; }
+        setMovimientosCaja(list); saveStorage('movimientosCaja', list); totalRecords += list.length;
       }
       if (existingTabs.has('inventario_ajustes')) {
         const list = await readTableFromSheet<InventarioAjuste>(token, googleSheetsId, 'inventario_ajustes');
-        if (list.length > 0) { setInventarioAjustes(list); saveStorage('inventarioAjustes', list); totalRecords += list.length; }
+        setInventarioAjustes(list); saveStorage('inventarioAjustes', list); totalRecords += list.length;
       }
       if (existingTabs.has('kardex')) {
         const list = await readTableFromSheet<KardexItem>(token, googleSheetsId, 'kardex');
-        if (list.length > 0) { setKardex(list); saveStorage('kardex', list); totalRecords += list.length; }
+        setKardex(list); saveStorage('kardex', list); totalRecords += list.length;
       }
       if (existingTabs.has('empresas')) {
         const list = await readTableFromSheet<Empresa>(token, googleSheetsId, 'empresas');
@@ -882,31 +884,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       if (existingTabs.has('users')) {
         const list = await readTableFromSheet<User>(token, googleSheetsId, 'users');
-        if (list.length > 0) { setUsers(list); saveStorage('users', list); totalRecords += list.length; }
+        setUsers(list); saveStorage('users', list); totalRecords += list.length;
       }
       if (existingTabs.has('roles')) {
         const list = await readTableFromSheet<Role>(token, googleSheetsId, 'roles');
-        if (list.length > 0) { setRoles(list); saveStorage('roles', list); totalRecords += list.length; }
+        setRoles(list); saveStorage('roles', list); totalRecords += list.length;
       }
       if (existingTabs.has('monedas')) {
         const list = await readTableFromSheet<Moneda>(token, googleSheetsId, 'monedas');
-        if (list.length > 0) { setMonedas(list); saveStorage('monedas', list); totalRecords += list.length; }
+        setMonedas(list); saveStorage('monedas', list); totalRecords += list.length;
       }
       if (existingTabs.has('documentos')) {
         const list = await readTableFromSheet<DocumentoTipo>(token, googleSheetsId, 'documentos');
-        if (list.length > 0) { setDocumentos(list); saveStorage('documentos', list); totalRecords += list.length; }
+        setDocumentos(list); saveStorage('documentos', list); totalRecords += list.length;
       }
       if (existingTabs.has('comprobantes')) {
         const list = await readTableFromSheet<ComprobanteTipo>(token, googleSheetsId, 'comprobantes');
-        if (list.length > 0) { setComprobantes(list); saveStorage('comprobantes', list); totalRecords += list.length; }
+        setComprobantes(list); saveStorage('comprobantes', list); totalRecords += list.length;
       }
       if (existingTabs.has('activity_logs')) {
         const list = await readTableFromSheet<ActivityLog>(token, googleSheetsId, 'activity_logs');
-        if (list.length > 0) { setActivityLogs(list); saveStorage('activityLogs', list); totalRecords += list.length; }
+        setActivityLogs(list); saveStorage('activityLogs', list); totalRecords += list.length;
       }
       if (existingTabs.has('notificaciones')) {
         const list = await readTableFromSheet<Notificacion>(token, googleSheetsId, 'notificaciones');
-        if (list.length > 0) { setNotificaciones(list); saveStorage('notificaciones', list); totalRecords += list.length; }
+        setNotificaciones(list); saveStorage('notificaciones', list); totalRecords += list.length;
       }
 
       setGoogleSheetsStatus('connected');
@@ -946,7 +948,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return downloadAllFromGoogleSheets(onProgress);
       } else {
         onProgress?.('La hoja de cálculo está lista. Sembrando las 22 pestañas iniciales...', 30);
-        return uploadAllToGoogleSheets(onProgress);
+        const uploaded = await uploadAllToGoogleSheets(onProgress);
+        const downloaded = await downloadAllFromGoogleSheets(onProgress);
+        return {
+          success: true,
+          count: downloaded.count,
+          message: `${uploaded.message} Los datos iniciales ya están cargados en el sistema.`,
+        };
       }
     },
     [googleAccessToken, googleSheetsId, signInWithGoogleSheets, downloadAllFromGoogleSheets, uploadAllToGoogleSheets]
@@ -1067,6 +1075,142 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     },
     [googleAccessToken, googleSheetsId, signInWithGoogleSheets, getTableDataByName]
   );
+
+  const isAdminSession = currentUser?.user_type
+    ? currentUser.user_type === 'admin'
+    : /admin|administrador/i.test(currentUser?.role || '');
+  const adminSheetsKey = isAdminSession && currentUser
+    ? `${currentUser.id}:${googleSheetsId}`
+    : null;
+  const syncBidirectionalRef = useRef(syncBidirectionalGoogleSheets);
+  syncBidirectionalRef.current = syncBidirectionalGoogleSheets;
+  const uploadSingleTableRef = useRef(uploadSingleTableToGoogleSheets);
+  uploadSingleTableRef.current = uploadSingleTableToGoogleSheets;
+  const getCurrentSheetTables = useCallback((): Array<[string, any[]]> => [
+    ['productos', productos],
+    ['categorias', categorias],
+    ['marcas', marcas],
+    ['presentaciones', presentaciones],
+    ['clientes', clientes],
+    ['proveedores', proveedores],
+    ['empleados', empleados],
+    ['Usuarios', buildRegisteredUsers(users, empleados, clientes, proveedores)],
+    ['ventas', ventas],
+    ['compras', compras],
+    ['cajas', cajas],
+    ['movimientos_caja', movimientosCaja],
+    ['inventario_ajustes', inventarioAjustes],
+    ['kardex', kardex],
+    ['empresas', [empresa]],
+    ['users', users],
+    ['roles', roles],
+    ['monedas', monedas],
+    ['documentos', documentos],
+    ['comprobantes', comprobantes],
+    ['activity_logs', activityLogs],
+    ['notificaciones', notificaciones],
+  ], [
+    productos,
+    categorias,
+    marcas,
+    presentaciones,
+    clientes,
+    proveedores,
+    empleados,
+    users,
+    ventas,
+    compras,
+    cajas,
+    movimientosCaja,
+    inventarioAjustes,
+    kardex,
+    empresa,
+    roles,
+    monedas,
+    documentos,
+    comprobantes,
+    activityLogs,
+    notificaciones,
+  ]);
+  const getCurrentSheetTablesRef = useRef(getCurrentSheetTables);
+  getCurrentSheetTablesRef.current = getCurrentSheetTables;
+
+  useEffect(() => {
+    if (!adminSheetsKey) {
+      sheetsInitializationKey.current = null;
+      syncedTableSnapshots.current.clear();
+      pendingTableWrites.current.clear();
+      if (tableWriteTimer.current) clearTimeout(tableWriteTimer.current);
+      tableWriteTimer.current = null;
+      setSheetsReadyForAdmin(null);
+      return;
+    }
+    if (sheetsInitializationKey.current === adminSheetsKey) return;
+
+    sheetsInitializationKey.current = adminSheetsKey;
+    syncedTableSnapshots.current = new Map(
+      getCurrentSheetTablesRef.current().map(([name, data]) => [name, JSON.stringify(data)])
+    );
+    setSheetsReadyForAdmin(null);
+    void syncBidirectionalRef.current()
+      .then(() => {
+        if (sheetsInitializationKey.current === adminSheetsKey) {
+          setSheetsReadyForAdmin(adminSheetsKey);
+        }
+      })
+      .catch((error: unknown) => {
+        if (sheetsInitializationKey.current !== adminSheetsKey) return;
+        sheetsInitializationKey.current = null;
+        const message = error instanceof Error ? error.message : 'Error desconocido';
+        setGoogleSheetsStatus('error');
+        setGoogleSheetsMessage(`No se pudo sincronizar la base de datos al iniciar: ${message}`);
+        console.error('No se pudo inicializar la sincronización con Google Sheets:', error);
+      });
+  }, [adminSheetsKey]);
+
+  useEffect(() => {
+    if (!adminSheetsKey || sheetsReadyForAdmin !== adminSheetsKey) return;
+
+    const tables = getCurrentSheetTablesRef.current();
+    const snapshots = syncedTableSnapshots.current;
+
+    for (const [name, data] of tables) {
+      const serialized = JSON.stringify(data);
+      if (snapshots.get(name) !== serialized) pendingTableWrites.current.set(name, data);
+    }
+    if (!pendingTableWrites.current.size || tableWriteTimer.current) return;
+
+    tableWriteTimer.current = setTimeout(() => {
+      tableWriteTimer.current = null;
+      if (isFlushingTableWrites.current) return;
+
+      isFlushingTableWrites.current = true;
+      void (async () => {
+        try {
+          while (pendingTableWrites.current.size) {
+            const [name, data] = pendingTableWrites.current.entries().next().value as [string, any[]];
+            setGoogleSheetsMessage(`Guardando cambios en la pestaña "${name}" de Google Sheets...`);
+            await uploadSingleTableRef.current(name, data);
+            syncedTableSnapshots.current.set(name, JSON.stringify(data));
+            if (pendingTableWrites.current.get(name) === data) pendingTableWrites.current.delete(name);
+          }
+          setGoogleSheetsStatus('connected');
+          setGoogleSheetsMessage('Todos los cambios se guardaron en Google Sheets.');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Error desconocido';
+          setGoogleSheetsStatus('error');
+          setGoogleSheetsMessage(`No se pudo guardar el cambio en Google Sheets: ${message}`);
+          console.error('Error al guardar automáticamente en Google Sheets:', error);
+        } finally {
+          isFlushingTableWrites.current = false;
+        }
+      })();
+    }, 700);
+  }, [
+    adminSheetsKey,
+    sheetsReadyForAdmin,
+    getCurrentSheetTables,
+  ]);
 
   const exportAllToExcel = useCallback(() => {
     const allTables = [

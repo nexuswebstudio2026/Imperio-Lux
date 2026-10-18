@@ -15,7 +15,7 @@ Punto de venta y gestión comercial construido con React, TypeScript, Vite y Exp
 3. Instala dependencias con `npm install` o `bun install`.
 4. Inicia la aplicación con `npm run dev` o `bun run dev`.
 
-La comprobación de conexión está disponible en `GET /api/database/status`. El cliente consulta y modifica la hoja mediante `/api/google-sheets`; el servidor agrega el token de la cuenta de servicio. Ninguna clave privada ni token de Google se incluye en el bundle del navegador.
+La comprobación de conexión está disponible en `GET /api/database/status`. El catálogo público consulta productos, categorías y marcas activas mediante `GET /api/storefront/catalog`, que solo expone los campos destinados al sitio. Al entrar un administrador, el sistema descarga las pestañas con datos existentes o inicializa las 22 pestañas desde el estado local cuando `productos` está vacío. Después de sincronizar, los cambios administrativos en productos, clientes, proveedores, ventas, compras y demás colecciones se guardan automáticamente en su pestaña de Google Sheets. Los errores de escritura se muestran en el estado de conexión y en la consola del navegador. El cliente consulta y modifica la hoja mediante `/api/google-sheets`; el servidor agrega el token de la cuenta de servicio. Ninguna clave privada ni token de Google se incluye en el bundle del navegador.
 
 ## Producción
 
