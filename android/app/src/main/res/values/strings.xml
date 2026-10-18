@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Imperio Lux</string>
+    <string name="title_activity_main">Imperio Lux</string>
+    <string name="package_name">com.nexuswebstudio.imperiolux</string>
+    <string name="custom_url_scheme">com.nexuswebstudio.imperiolux</string>
+</resources>

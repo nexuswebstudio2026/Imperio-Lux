@@ -1,10 +1,29 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowDown, ArrowRight, ArrowUpRight, Clock3, House, LogIn, Mail, MapPin, MessageCircle, Moon, ShieldCheck, ShoppingBag, Sparkles, Sun, Truck, UsersRound } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUpRight, Clock3, Download, House, Laptop, LogIn, Mail, MapPin, MessageCircle, MonitorDown, Moon, ShieldCheck, ShoppingBag, Smartphone, Sparkles, Sun, Truck, UsersRound } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { PUBLIC_SECTION_ROUTES } from '../../lib/routes';
 import { WhatsAppQuoteWidget } from './WhatsAppQuoteWidget';
 
 const OWNER_WHATSAPP_NUMBER = '573118444853';
+const RELEASES_URL = 'https://github.com/nexuswebstudio2026/Imperio-Lux/releases/latest';
+const RELEASE_API_URL = 'https://api.github.com/repos/nexuswebstudio2026/Imperio-Lux/releases/latest';
+
+interface GitHubReleaseAsset {
+  name: string;
+  browser_download_url: string;
+}
+
+interface GitHubRelease {
+  html_url: string;
+  assets: GitHubReleaseAsset[];
+}
+
+const appPlatforms = [
+  { id: 'android', name: 'Android', detail: 'Teléfonos y tabletas Android', icon: Smartphone, match: (name: string) => name.endsWith('.apk') },
+  { id: 'ios', name: 'iOS', detail: 'iPhone y iPad · App Store / TestFlight', icon: Smartphone, match: (_name: string) => false },
+  { id: 'windows', name: 'Windows', detail: 'Instalador para equipos Windows', icon: MonitorDown, match: (name: string) => /\.(exe|msi)$/.test(name) },
+  { id: 'mac', name: 'macOS', detail: 'Mac · imagen de instalación', icon: Laptop, match: (name: string) => /\.(dmg|pkg)$/.test(name) },
+] as const;
 
 interface StorefrontCatalogData {
   products: Array<Pick<ReturnType<typeof useApp>['productos'][number], 'id' | 'nombre' | 'descripcion' | 'imagen' | 'categoria_id' | 'marca_id' | 'precio_venta' | 'estado'>>;
@@ -21,6 +40,7 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
   const { empresa, productos, categorias, marcas, formatCurrency, theme, toggleTheme } = useApp();
   const [catalogData, setCatalogData] = useState<StorefrontCatalogData | null>(null);
   const [catalogError, setCatalogError] = useState('');
+  const [release, setRelease] = useState<GitHubRelease | null>(null);
   const visibleProducts = catalogData?.products ?? productos;
   const visibleCategories = catalogData?.categories ?? categorias;
   const visibleBrands = catalogData?.brands ?? marcas;
@@ -57,6 +77,18 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
       });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (currentPath !== '/') return;
+    const controller = new AbortController();
+    fetch(RELEASE_API_URL, { signal: controller.signal, headers: { Accept: 'application/vnd.github+json' } })
+      .then((response) => response.ok ? response.json() as Promise<GitHubRelease> : null)
+      .then((data) => { if (data) setRelease(data); })
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.name !== 'AbortError') console.info('Las descargas de aplicaciones aún no están publicadas.');
+      });
+    return () => controller.abort();
+  }, [currentPath]);
 
   useEffect(() => {
     const sectionId = PUBLIC_SECTION_ROUTES[currentPath];
@@ -133,6 +165,9 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
                 <a href="/catalogo" className="store-hero-primary inline-flex items-center gap-3 bg-[#b89652] px-6 py-4 text-[10px] font-bold uppercase tracking-[0.2em] text-white transition hover:bg-[#c9a968]">
                   Explorar catálogo <ArrowRight className="h-4 w-4" />
                 </a>
+                <a href="#descargas" className="inline-flex items-center gap-2 border border-white/25 px-5 py-4 text-[10px] font-bold uppercase tracking-[0.16em] text-white/85 transition hover:border-[#d8c38c] hover:text-[#e5d4a8]">
+                  <Download className="h-4 w-4" /> Descargar aplicación
+                </a>
                 <a href="/nosotros" className="px-4 py-4 text-[10px] font-bold uppercase tracking-[0.2em] text-white/75 transition hover:text-white">Nuestra historia</a>
               </div>
               <div className="mt-16 flex flex-wrap gap-x-8 gap-y-4 border-t border-white/15 pt-6 text-[10px] uppercase tracking-[0.16em] text-white/55">
@@ -162,6 +197,49 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
             Descubrir <ArrowDown className="h-3.5 w-3.5" />
           </a>
         </section>
+
+        {currentPath === '/' && (
+          <section id="descargas" className="scroll-mt-24 bg-[#eeeae1] px-5 py-16 dark:bg-[#111a28] sm:py-20 lg:px-8">
+            <div className="mx-auto max-w-7xl">
+              <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#9b7b3e]">Imperio Lux en tus dispositivos</p>
+                  <h2 className="mt-3 font-serif text-4xl text-[#171714] dark:text-white sm:text-5xl">Descarga nuestra aplicación</h2>
+                </div>
+                <p className="max-w-md text-sm leading-6 text-[#77746c] dark:text-slate-300">Elige tu dispositivo. Las descargas se habilitarán al publicarse cada instalador oficial.</p>
+              </div>
+
+              <div className="mt-9 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {appPlatforms.map(({ id, name, detail, icon: Icon, match }) => {
+                  const asset = release?.assets.find(({ name: assetName }) => match(assetName.toLowerCase()));
+                  return (
+                    <article key={id} className="flex min-h-[215px] flex-col border border-[#d9d3c6] bg-[#f8f6f1] p-5 dark:border-slate-700 dark:bg-[#172337] sm:p-6">
+                      <div className="flex items-center justify-between">
+                        <span className="grid h-11 w-11 place-items-center rounded-full bg-[#e8dfcc] text-[#8b6d35] dark:bg-[#253650] dark:text-[#e0c78f]"><Icon className="h-5 w-5" /></span>
+                        <span className={`text-[9px] font-bold uppercase tracking-[0.16em] ${asset ? 'text-emerald-700 dark:text-emerald-300' : 'text-[#8a8170] dark:text-slate-400'}`}>{asset ? 'Disponible' : 'Próximamente'}</span>
+                      </div>
+                      <h3 className="mt-5 font-serif text-2xl text-[#171714] dark:text-white">{name}</h3>
+                      <p className="mt-1 text-xs leading-5 text-[#77746c] dark:text-slate-300">{detail}</p>
+                      {asset ? (
+                        <a href={asset.browser_download_url} className="mt-5 inline-flex items-center justify-center gap-2 rounded-full bg-[#17243a] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.14em] text-white transition hover:bg-[#263b5b] dark:bg-[#bd9858] dark:text-[#101827] dark:hover:bg-[#d1ae68]" download>
+                          <Download className="h-4 w-4" /> Descargar
+                        </a>
+                      ) : id === 'ios' ? (
+                        <button type="button" disabled className="mt-5 inline-flex cursor-not-allowed items-center justify-center rounded-full border border-[#c8c1b3] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8a8170] opacity-80 dark:border-slate-600 dark:text-slate-400">
+                          App Store próximamente
+                        </button>
+                      ) : (
+                        <a href={release?.html_url || RELEASES_URL} target="_blank" rel="noreferrer" className="mt-5 inline-flex items-center justify-center rounded-full border border-[#c8c1b3] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[#77746c] transition hover:border-[#9b7b3e] hover:text-[#8b6d35] dark:border-slate-600 dark:text-slate-300 dark:hover:border-[#bd9858] dark:hover:text-[#e0c78f]">
+                          Ver disponibilidad
+                        </a>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        )}
 
         <section id="catalogo" className="scroll-mt-28 px-5 py-20 lg:px-8 lg:py-28">
           <div className="mx-auto max-w-7xl">

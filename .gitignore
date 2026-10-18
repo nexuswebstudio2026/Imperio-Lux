@@ -6,7 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+!.env.native
 service-account.json
 *service-account*.json
 .runtime/
 .vercel
+release/

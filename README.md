@@ -23,6 +23,15 @@ Construye el frontend con `npm run build` y ejecuta el servidor con `NODE_ENV=pr
 
 La cuenta de servicio solo autentica el servidor ante Google; la autenticación y autorización de operadores se gestiona por separado en el servidor. Google Sheets es apropiado para un uso pequeño y de baja concurrencia, pero no ofrece transacciones para ventas concurrentes.
 
+## Aplicaciones nativas
+
+El proyecto no usa PWA. La app móvil se empaqueta con Capacitor para Android/iOS y la app de escritorio se empaqueta con Electron para Windows/macOS/Linux. La web publicada sigue siendo la misma experiencia en el navegador.
+
+- Android/iOS: instala dependencias, ejecuta `npm run cap:sync` y abre la plataforma con `npm run cap:android` o `npm run cap:ios`. Android requiere Android Studio y SDK; iOS requiere macOS y Xcode. `cap:sync` genera el frontend empaquetado con la URL API estable de Vercel de `.env.native`.
+- Escritorio: `npm run desktop:dev` abre el sitio publicado en una ventana nativa. `npm run desktop:build` genera el instalador correspondiente al sistema operativo en `release/desktop-app`.
+
+Las sesiones móviles usan cookies entre el origen nativo local y la API de Vercel. El servidor solo habilita CORS con credenciales para los orígenes de Capacitor incluidos en `server.ts`.
+
 ## Rutas del sitio
 
 La tienda pública está disponible en `/`, `/catalogo`, `/nosotros` y `/contacto`; la navegación usa rutas limpias y no agrega fragmentos `#...`. El selector de acceso está en `/acceso`, con entradas separadas en `/acceso/admin`, `/acceso/clientes` y `/acceso/proveedores`. El panel administrativo usa rutas bajo `/admin`; los portales de cliente y proveedor están en `/cliente` y `/proveedor`. Las rutas internas conservan la sesión y admiten recarga y navegación atrás/adelante. Las cuentas de clientes y proveedores se vinculan a su registro por el identificador `CLI-<id>` o `PROV-<id>` generado al sincronizar la hoja `Usuarios`.

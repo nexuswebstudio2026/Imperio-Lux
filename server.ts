@@ -10,6 +10,19 @@ import nodemailer from 'nodemailer';
 import { jsPDF } from 'jspdf';
 
 const app = express();
+const nativeAppOrigins = new Set(['capacitor://localhost', 'https://localhost', 'http://localhost']);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && nativeAppOrigins.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Vary', 'Origin');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+  }
+  next();
+});
 app.use(express.json({ limit: '10mb' }));
 const root = path.dirname(fileURLToPath(import.meta.url));
 const deployedCommitSha = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || (() => {
@@ -678,7 +691,8 @@ app.post('/api/auth/login', async (req, res) => {
     const expires = Date.now() + 12 * 60 * 60_000;
     const token = createSessionToken(user, expires);
     if (process.env.VERCEL !== '1') sessions.set(token, { user, expires });
-    res.setHeader('Set-Cookie', `imperio_session=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=43200${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`);
+    const crossSiteNative = nativeAppOrigins.has(String(req.headers.origin || ''));
+    res.setHeader('Set-Cookie', `imperio_session=${token}; HttpOnly; SameSite=${crossSiteNative ? 'None' : 'Lax'}; Path=/; Max-Age=43200${process.env.NODE_ENV === 'production' || crossSiteNative ? '; Secure' : ''}`);
     res.json({ user });
   } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo validar la cuenta en Google Sheets.' }); }
 });
@@ -742,7 +756,8 @@ app.get('/api/portal/data', async (req, res) => {
 app.post('/api/auth/logout', (req, res) => {
   const session = currentSession(req);
   if (session) sessions.delete(session.token);
-  res.setHeader('Set-Cookie', 'imperio_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+  const crossSiteNative = nativeAppOrigins.has(String(req.headers.origin || ''));
+  res.setHeader('Set-Cookie', `imperio_session=; HttpOnly; SameSite=${crossSiteNative ? 'None' : 'Lax'}; Path=/; Max-Age=0${process.env.NODE_ENV === 'production' || crossSiteNative ? '; Secure' : ''}`);
   res.json({ ok: true });
 });
 

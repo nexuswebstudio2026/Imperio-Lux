@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "imperio-lux",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,9 +9,18 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "build:native": "vite build --mode native",
+    "cap:sync": "npm run build:native && cap sync",
+    "cap:android": "npm run cap:sync && cap open android",
+    "cap:ios": "npm run cap:sync && cap open ios",
+    "desktop:dev": "electron desktop/main.cjs",
+    "desktop:build": "npm run build && electron-builder"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
@@ -29,14 +38,42 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.3",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/nodemailer": "^8.0.2",
     "autoprefixer": "^10.4.21",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.0.12",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3"
+  },
+  "capacitor": {
+    "appId": "com.nexuswebstudio.imperiolux",
+    "appName": "Imperio Lux"
+  },
+  "build": {
+    "appId": "com.nexuswebstudio.imperiolux",
+    "productName": "Imperio Lux",
+    "directories": {
+      "output": "release/desktop-app"
+    },
+    "files": [
+      "desktop/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "artifactName": "Imperio-Lux-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
   }
 }

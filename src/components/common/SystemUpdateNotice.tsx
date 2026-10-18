@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Check, GitCommitHorizontal, RefreshCw, Sparkles, X } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 
 interface SystemVersion {
   commit: string;
@@ -8,6 +9,7 @@ interface SystemVersion {
 }
 
 const LAST_SEEN_VERSION_KEY = 'imperio-lux:last-seen-system-version';
+const isNativeApp = Capacitor.isNativePlatform();
 
 export const SystemUpdateNotice: React.FC = () => {
   const [version, setVersion] = useState<SystemVersion | null>(null);
@@ -44,12 +46,7 @@ export const SystemUpdateNotice: React.FC = () => {
   const refreshToLatest = async () => {
     if (version) window.localStorage.setItem(LAST_SEEN_VERSION_KEY, version.version);
     setRefreshing(true);
-    try {
-      const registration = await navigator.serviceWorker?.getRegistration();
-      await registration?.update();
-    } catch (error) {
-      console.warn('No se pudo comprobar la actualización de la aplicación:', error);
-    }
+    if (isNativeApp) return;
     window.location.reload();
   };
 
@@ -76,7 +73,9 @@ export const SystemUpdateNotice: React.FC = () => {
           El sitio se ha actualizado
         </h2>
         <p id="system-update-description" className="mt-4 text-sm leading-6 text-slate-600 dark:text-slate-300">
-          Ya está disponible la versión más reciente publicada desde GitHub. Actualiza la página para cargar los últimos cambios.
+          {isNativeApp
+            ? 'Hay una versión nueva del sistema. Para recibir los cambios, instala la actualización de Imperio Lux cuando esté disponible para tu dispositivo.'
+            : 'Ya está disponible la versión más reciente publicada desde GitHub. Actualiza la página para cargar los últimos cambios.'}
         </p>
 
         <div className="mt-6 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/70">
@@ -91,10 +90,12 @@ export const SystemUpdateNotice: React.FC = () => {
           <button type="button" onClick={rememberVersion} disabled={refreshing} className="rounded-xl border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
             Continuar
           </button>
-          <button type="button" onClick={refreshToLatest} disabled={refreshing} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#17243a] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-[#17243a]/20 transition hover:bg-[#243958] disabled:cursor-wait disabled:opacity-70 dark:bg-[#bd9858] dark:text-[#111827] dark:hover:bg-[#d1ae68]">
-            {refreshing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            {refreshing ? 'Actualizando…' : 'Actualizar ahora'}
-          </button>
+          {!isNativeApp && (
+            <button type="button" onClick={refreshToLatest} disabled={refreshing} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#17243a] px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-[#17243a]/20 transition hover:bg-[#243958] disabled:cursor-wait disabled:opacity-70 dark:bg-[#bd9858] dark:text-[#111827] dark:hover:bg-[#d1ae68]">
+              {refreshing ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              {refreshing ? 'Actualizando…' : 'Actualizar ahora'}
+            </button>
+          )}
         </div>
       </section>
     </div>
