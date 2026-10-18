@@ -23,7 +23,7 @@ const registrationAttempts = new Map<string, { count: number; resetAt: number }>
 const registrationConfirmAttempts = new Map<string, { count: number; resetAt: number }>();
 const USERS_SHEET = 'Usuarios';
 const AUTH_HEADERS = ['usuario', 'contrasena_salt', 'contrasena_hash'];
-const USER_PROFILE_HEADERS = ['id', 'tipo_usuario', 'nombre', 'email', 'cargo', 'rol', 'estado'];
+const USER_PROFILE_HEADERS = ['id', 'tipo_usuario', 'nombre', 'email', 'numero_documento', 'telefono', 'cargo', 'rol', 'estado'];
 
 function normalizeUsersHeader(value: unknown) {
   const header = String(value || '').trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
@@ -917,8 +917,41 @@ app.post('/api/auth/bootstrap-admin', async (req, res) => {
 app.get('/api/auth/admin/users', requireAdmin, async (_req, res) => {
   try {
     const { rows } = await readUsersSheet();
-    res.json({ users: rows.filter(({ data }) => data.id).map(({ data }) => ({ id: data.id, name: data.nombre || data.name || '', email: data.email || '', type: classifyUser(data), username: data.usuario || '', configured: Boolean(data.contrasena_hash), cargo: data.cargo || '', rol: data.rol || '', estado: !/^(inactivo|inactive|false|0)$/i.test(data.estado || '') })) });
+    res.json({ users: rows.filter(({ data }) => data.id).map(({ data }) => ({ id: data.id, name: data.nombre || data.name || '', email: data.email || '', document: data.numero_documento || data.documento || '', phone: data.telefono || data.celular || '', type: classifyUser(data), username: data.usuario || '', configured: Boolean(data.contrasena_hash), cargo: data.cargo || '', rol: data.rol || '', estado: !/^(inactivo|inactive|false|0)$/i.test(data.estado || '') })) });
   } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo leer la hoja Usuarios.' }); }
+});
+
+app.post('/api/auth/admin/users/sync-employee-details', requireAdmin, async (_req, res) => {
+  try {
+    const employeeRecords = await readSheetRecords('Empleados');
+    const { spreadsheetId, headers, rows } = await readUsersSheet();
+    const employees = employeeRecords.map((record) => {
+      const normalized = Object.fromEntries(Object.entries(record).map(([key, value]) => [normalizeUsersHeader(key), String(value ?? '').trim()]));
+      return {
+        id: normalized.id,
+        email: (normalized.email || normalized.correo_electronico || '').toLocaleLowerCase('es'),
+        name: [normalized.nombre, normalized.apellido].filter(Boolean).join(' ').trim(),
+        document: normalized.numero_documento || normalized.numero_de_documento || normalized.documento || normalized.cedula || '',
+        phone: normalized.telefono || normalized.celular || normalized.numero_telefonico || '',
+        cargo: normalized.cargo || '',
+      };
+    });
+    let updated = 0;
+    for (const row of rows) {
+      if (classifyUser(row.data) !== 'employee') continue;
+      const employee = employees.find((candidate) => candidate.id && row.data.id === `EMP-${candidate.id}`)
+        || employees.find((candidate) => candidate.email && row.data.email.toLocaleLowerCase('es') === candidate.email);
+      if (!employee) continue;
+      if (employee.email) row.data.email = employee.email;
+      if (employee.document) row.data.numero_documento = employee.document;
+      if (employee.phone) row.data.telefono = employee.phone;
+      if (employee.name) row.data.nombre = employee.name;
+      if (employee.cargo) row.data.cargo = employee.cargo;
+      await writeUserRow(spreadsheetId, headers, row.rowNumber, row.data);
+      updated += 1;
+    }
+    res.json({ message: `Se sincronizaron los datos de contacto de ${updated} empleado(s) desde la hoja Empleados.`, count: updated });
+  } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudieron sincronizar los datos de empleados.' }); }
 });
 
 app.post('/api/auth/admin/users', requireAdmin, async (req, res) => {
@@ -931,7 +964,7 @@ app.post('/api/auth/admin/users', requireAdmin, async (req, res) => {
     if (!['admin', 'employee', 'customer', 'supplier'].includes(type)) return res.status(400).json({ error: 'El tipo de usuario no es válido.' });
     const { spreadsheetId, headers, rows } = await readUsersSheet();
     if (rows.some(({ data }) => data.id === id || data.email.toLocaleLowerCase('es') === email)) return res.status(409).json({ error: 'Ya existe una cuenta con ese ID o correo.' });
-    const record: Record<string, string> = { id, tipo_usuario: type, nombre: name, email, cargo: String(req.body?.cargo || '').trim(), rol: String(req.body?.rol || '').trim(), estado: req.body?.estado === false ? 'Inactivo' : 'Activo', usuario: '', contrasena_salt: '', contrasena_hash: '' };
+    const record: Record<string, string> = { id, tipo_usuario: type, nombre: name, email, numero_documento: String(req.body?.document || '').trim(), telefono: String(req.body?.phone || '').trim(), cargo: String(req.body?.cargo || '').trim(), rol: String(req.body?.rol || '').trim(), estado: req.body?.estado === false ? 'Inactivo' : 'Activo', usuario: '', contrasena_salt: '', contrasena_hash: '' };
     await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(`${USERS_SHEET}!A:Z`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { method: 'POST', body: JSON.stringify({ values: [headers.map((header) => record[normalizeUsersHeader(header)] ?? '')] }) });
     res.status(201).json({ message: 'Usuario creado en Google Sheets.', id });
   } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo crear el usuario.' }); }
@@ -954,6 +987,8 @@ app.put('/api/auth/admin/users/:id', requireAdmin, async (req, res) => {
     if (name) target.data.nombre = name;
     if (email) target.data.email = email;
     if (type) target.data.tipo_usuario = type;
+    if (req.body?.document !== undefined && (!partial || String(req.body.document).trim())) target.data.numero_documento = String(req.body.document).trim();
+    if (req.body?.phone !== undefined && (!partial || String(req.body.phone).trim())) target.data.telefono = String(req.body.phone).trim();
     if (req.body?.cargo !== undefined && (!partial || String(req.body.cargo).trim())) target.data.cargo = String(req.body.cargo).trim();
     if (req.body?.rol !== undefined && (!partial || String(req.body.rol).trim())) target.data.rol = String(req.body.rol).trim();
     if (req.body?.estado !== undefined) target.data.estado = req.body.estado === false ? 'Inactivo' : 'Activo';

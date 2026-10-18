@@ -5,6 +5,8 @@ export const REGISTERED_USERS_HEADERS = [
   'tipo_usuario',
   'nombre',
   'email',
+  'numero_documento',
+  'telefono',
   'cargo',
   'rol',
   'estado',
@@ -18,6 +20,8 @@ export interface RegisteredUser {
   tipo_usuario: 'Administrador' | 'Empleado' | 'Cliente' | 'Proveedor';
   nombre: string;
   email: string;
+  numero_documento: string;
+  telefono: string;
   cargo: string;
   rol: string;
   estado: boolean;
@@ -43,6 +47,8 @@ export function buildRegisteredUsers(
       tipo_usuario: isAdmin ? 'Administrador' as const : 'Empleado' as const,
       nombre: employeeName || user.name,
       email: user.email || employee?.email || '',
+      numero_documento: employee?.numero_documento || '',
+      telefono: employee?.telefono || '',
       cargo: employee?.cargo || '',
       rol: user.role,
       estado: employee?.estado ?? true,
@@ -56,6 +62,8 @@ export function buildRegisteredUsers(
       tipo_usuario: 'Empleado' as const,
       nombre: `${employee.nombre} ${employee.apellido}`.trim(),
       email: employee.email,
+      numero_documento: employee.numero_documento,
+      telefono: employee.telefono,
       cargo: employee.cargo,
       rol: '',
       estado: employee.estado,
@@ -66,6 +74,8 @@ export function buildRegisteredUsers(
     tipo_usuario: 'Cliente' as const,
     nombre: client.razon_social,
     email: client.email,
+    numero_documento: client.numero_documento,
+    telefono: client.telefono,
     cargo: '',
     rol: '',
     estado: client.estado,
@@ -76,6 +86,8 @@ export function buildRegisteredUsers(
     tipo_usuario: 'Proveedor' as const,
     nombre: supplier.razon_social,
     email: supplier.email,
+    numero_documento: supplier.numero_documento,
+    telefono: supplier.telefono,
     cargo: '',
     rol: '',
     estado: supplier.estado,
