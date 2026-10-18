@@ -66,11 +66,11 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
 
   return (
     <div className="storefront min-h-screen bg-[#f7f5f0] pb-[calc(4.5rem+env(safe-area-inset-bottom))] text-[#171714] md:pb-0" data-theme={theme}>
-      <div className="bg-[#151512] px-4 py-2 text-center text-[10px] font-medium uppercase tracking-[0.22em] text-[#d8c38c] sm:text-[11px]">
-        Una selección extraordinaria · Envíos a todo Colombia
+      <div className="storefront-announcement relative z-50 flex min-h-9 items-center justify-center overflow-hidden bg-[#151512] px-3 py-2 text-center text-[9px] font-medium uppercase leading-4 tracking-[0.12em] text-[#d8c38c] sm:px-4 sm:text-[11px] sm:tracking-[0.22em]">
+        <span className="relative z-10 block max-w-full">Una selección extraordinaria · Envíos a todo Colombia</span>
       </div>
 
-      <header className="sticky top-0 z-40 border-b border-black/10 bg-[#f7f5f0]/95 backdrop-blur-md">
+      <header className="z-40 border-b border-black/10 bg-[#f7f5f0]/95 backdrop-blur-md md:sticky md:top-0">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-4 sm:gap-4 sm:px-5 lg:px-8">
           <a href="/" className="flex shrink-0 items-center gap-2 sm:gap-3" aria-label="Imperio Lux, inicio">
             <img src="/assets/imperio-icon.svg" alt="" className="h-10 w-10 rounded-full sm:h-11 sm:w-11" />
