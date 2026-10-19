@@ -324,7 +324,7 @@ export const TABLE_DEFAULT_HEADERS: Record<string, string[]> = {
   movimientos_caja: ['id', 'caja_id', 'tipo', 'concepto', 'monto', 'usuario_id', 'fecha'],
   inventario_ajustes: ['id', 'producto_id', 'producto_nombre', 'tipo_ajuste', 'cantidad', 'motivo', 'usuario_id', 'fecha'],
   kardex: ['id', 'producto_id', 'producto_nombre', 'tipo_movimiento', 'motivo', 'cantidad', 'costo_unitario', 'total', 'saldo_stock', 'fecha'],
-  empresas: ['id', 'nombre', 'propietario', 'ruc', 'porcentaje_impuesto', 'abreviatura_impuesto', 'direccion', 'ubicacion', 'telefono', 'correo', 'moneda_id'],
+  empresas: ['id', 'nombre', 'propietario', 'NIT', 'porcentaje_impuesto', 'abreviatura_impuesto', 'direccion', 'ubicacion', 'telefono', 'correo', 'moneda_id'],
   users: ['id', 'name', 'email', 'role_id', 'role_name', 'status', 'created_at'],
   Usuarios: ['id', 'tipo_usuario', 'nombre', 'email', 'cargo', 'rol', 'estado', 'usuario', 'contrasena_salt', 'contrasena_hash'],
   roles: ['id', 'name', 'description', 'permissions'],
@@ -344,6 +344,11 @@ export function objectsToSheetRows(
       const { imagen, FotoProducto, ...rest } = record;
       return { ...rest, FotoProducto: FotoProducto ?? imagen ?? '' };
     })
+    : tableName === 'empresas'
+      ? records.map((record): Record<string, unknown> => {
+        const { ruc, NIT, ...rest } = record;
+        return { ...rest, NIT: NIT ?? ruc ?? '' };
+      })
     : records;
 
   const keySet = new Set<string>();
@@ -391,6 +396,10 @@ export function sheetRowsToObjects(values: unknown[][], tableName?: string): Rec
       if (tableName === 'productos' && !('imagen' in record) && 'FotoProducto' in record) {
         record.imagen = record.FotoProducto;
         delete record.FotoProducto;
+      }
+      if (tableName === 'empresas' && !('ruc' in record) && 'NIT' in record) {
+        record.ruc = record.NIT;
+        delete record.NIT;
       }
       return hasData ? record : null;
     })

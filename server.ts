@@ -314,6 +314,37 @@ async function googleApi(url: string, init: RequestInit = {}) {
   return data as any;
 }
 
+async function migrateCompanyRucHeaderToNit(): Promise<'renamed' | 'already-nit'> {
+  const spreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;
+  if (!spreadsheetId) throw new Error('No hay una hoja de cálculo configurada para actualizar la columna fiscal de empresas.');
+
+  const range = encodeURIComponent('empresas!A1:ZZ1');
+  const result = await googleApi(
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${range}?valueRenderOption=UNFORMATTED_VALUE`
+  );
+  const headers: string[] = (result.values?.[0] || []).map((value: unknown) => String(value ?? '').trim());
+  const rucIndex = headers.findIndex((header) => header.toLocaleLowerCase('es') === 'ruc');
+  const nitIndex = headers.findIndex((header) => header.toLocaleLowerCase('es') === 'nit');
+
+  if (rucIndex < 0) {
+    if (nitIndex >= 0) return 'already-nit';
+    throw new Error('No se encontró la columna RUC en la fila de encabezados de la pestaña empresas.');
+  }
+  if (nitIndex >= 0) {
+    throw new Error('La pestaña empresas ya tiene columnas RUC y NIT separadas; no se renombró para evitar sobrescribir datos.');
+  }
+
+  let column = '';
+  for (let index = rucIndex + 1; index > 0; index = Math.floor((index - 1) / 26)) {
+    column = String.fromCharCode(65 + ((index - 1) % 26)) + column;
+  }
+  await googleApi(
+    `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(`empresas!${column}1`)}?valueInputOption=RAW`,
+    { method: 'PUT', body: JSON.stringify({ values: [['NIT']] }) }
+  );
+  return 'renamed';
+}
+
 function zonedDateTime(date: Date, timezone: string) {
   const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date);
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
@@ -1300,6 +1331,13 @@ if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'production') {
 
 const server = createServer(app);
 await loadBackupConfig();
+await migrateCompanyRucHeaderToNit()
+  .then((result) => console.log(result === 'renamed'
+    ? 'Se renombró la columna RUC a NIT en la pestaña empresas de Google Sheets.'
+    : 'La pestaña empresas ya utiliza la columna NIT.'))
+  .catch((error: unknown) => {
+    console.error('No se pudo renombrar RUC a NIT en la pestaña empresas:', error instanceof Error ? error.message : 'Error desconocido');
+  });
 void readUsersSheet().then(() => console.log('Columnas de autenticación listas en Google Sheets.')).catch((error) => console.error('No se pudieron preparar las columnas de autenticación en Google Sheets:', error instanceof Error ? error.message : 'Error desconocido'));
 if (process.env.VERCEL !== '1') {
   const quoteSpreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;

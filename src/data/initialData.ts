@@ -46,15 +46,23 @@ export const initialEmpresa: Empresa = {
 };
 
 export function migrateLegacyEmpresa(empresa: Empresa): Empresa {
+  const oldAddresses = [
+    'Calle 85 # 12-40, Zona Rosa - Tienda Virtual',
+    'Av. Primavera 1420, Surco - Tienda Virtual',
+  ];
+  const legacyLocation = /bogotá|lima|perú|surco/i.test(empresa.ubicacion || '');
+  const oldAddress = oldAddresses.includes(empresa.direccion);
+  const invalidPhone = !empresa.telefono || /#error|formula parse error/i.test(empresa.telefono);
+
   return {
     ...empresa,
-    direccion: empresa.direccion === 'Calle 85 # 12-40, Zona Rosa - Tienda Virtual'
+    direccion: oldAddresses.includes(empresa.direccion)
       ? initialEmpresa.direccion
       : empresa.direccion,
-    ubicacion: empresa.ubicacion === 'Bogotá, Colombia'
+    ubicacion: legacyLocation || oldAddress || !empresa.ubicacion
       ? initialEmpresa.ubicacion
       : empresa.ubicacion,
-    telefono: ['+57 310 123 4567', '+57 310 7458741'].includes(empresa.telefono)
+    telefono: invalidPhone || ['+57 310 123 4567', '+57 310 7458741'].includes(empresa.telefono)
       ? initialEmpresa.telefono
       : empresa.telefono,
     correo: empresa.correo === 'ventas@imperiolux.com'

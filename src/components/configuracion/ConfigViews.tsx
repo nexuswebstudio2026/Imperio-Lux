@@ -101,7 +101,7 @@ export const EmpresaConfigView: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block font-bold text-slate-700 mb-1">RUC / Identificación Fiscal:</label>
+              <label className="block font-bold text-slate-700 mb-1">NIT / Identificación Fiscal:</label>
               <input
                 type="text"
                 required
