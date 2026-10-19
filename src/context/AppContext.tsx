@@ -25,6 +25,7 @@ import {
 } from '../types';
 import {
   initialEmpresa,
+  migrateLegacyEmpresa,
   initialMonedas,
   initialDocumentos,
   initialComprobantes,
@@ -84,6 +85,7 @@ import {
   savePushPreferences,
   type PushPreferences,
 } from '../lib/browserNotificationsService';
+import { uploadProductImageContext } from '../lib/uploadImage';
 import { ADMIN_TAB_ROUTES } from '../lib/routes';
 
 export type AppTab =
@@ -183,6 +185,7 @@ interface AppContextType {
   addProducto: (prod: Omit<Producto, 'id'>) => void;
   updateProducto: (id: number, prod: Partial<Producto>) => void;
   deleteProducto: (id: number) => void;
+  uploadProductImage: (file: File) => Promise<string>;
 
   clientes: Cliente[];
   addCliente: (c: Omit<Cliente, 'id'>) => Cliente;
@@ -492,7 +495,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [theme]);
 
   const [empresa, setEmpresa] = useState<Empresa>(() => {
-    const loaded = loadStorage<Empresa>('empresa', initialEmpresa);
+    const loaded = migrateLegacyEmpresa(loadStorage<Empresa>('empresa', initialEmpresa));
     // Ensure default currency is Peso colombiano (moneda_id: 1) and Colombia location
     if (
       !loaded.moneda_id ||
@@ -668,7 +671,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     initializeNotificaciones().then((status) => {
-      setBrowserNotificationStatus(status);
+      setBrowserNotificationStatus({
+        isSupported: status.supported,
+        token: status.token,
+        permission: status.permission,
+      });
     });
   }, []);
 
@@ -912,7 +919,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       if (existingTabs.has('empresas')) {
         const list = (sheetData.get('empresas') || []) as Empresa[];
-        if (list.length > 0 && list[0]) { setEmpresa(list[0]); saveStorage('empresa', list[0]); totalRecords += 1; }
+        if (list.length > 0 && list[0]) {
+          const company = migrateLegacyEmpresa(list[0]);
+          setEmpresa(company);
+          saveStorage('empresa', company);
+          totalRecords += 1;
+        }
       }
       if (existingTabs.has('users')) {
         const list = (sheetData.get('users') || []) as User[];
@@ -1494,6 +1506,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logActivity('Eliminación', 'Productos', `Producto #${id} eliminado`);
   };
 
+  // Subida de imágenes de productos a Vercel Blob Storage
+  const uploadProductImage = async (file: File): Promise<string> => {
+    return uploadProductImageContext(file);
+  };
+
   // Clientes
   const addCliente = (c: Omit<Cliente, 'id'>): Cliente => {
     const newId = clientes.length > 0 ? Math.max(...clientes.map((item) => item.id)) + 1 : 1;
@@ -1640,6 +1657,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const prodOriginal = productos.find((p) => p.id === it.producto_id);
       if (prodOriginal) {
         const nuevoStock = Math.max(0, prodOriginal.cantidad - it.cantidad);
+        const stockMinimo = prodOriginal.stock_minimo ?? 5;
         if (nuevoStock === 0) {
           sendPushAlert({
             title: `🚨 ¡STOCK AGOTADO! - ${prodOriginal.nombre}`,
@@ -1648,7 +1666,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             categoria: 'inventario_critico',
             data: { productoId: prodOriginal.id, stock: 0, stock_minimo: prodOriginal.stock_minimo },
           });
-        } else if (nuevoStock <= prodOriginal.stock_minimo) {
+        } else if (nuevoStock <= stockMinimo) {
           sendPushAlert({
             title: `⚠️ Alerta de Stock Crítico - ${prodOriginal.nombre}`,
             body: `Quedan solo ${nuevoStock} unidades en existencias (Nivel mínimo definido: ${prodOriginal.stock_minimo}).`,
@@ -1919,6 +1937,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Push notification por ajuste crítico o reposición
       if (tipo === 'Salida') {
+        const stockMinimo = prod.stock_minimo ?? 5;
         if (nuevoStock === 0) {
           sendPushAlert({
             title: `🚨 ¡STOCK AGOTADO POR AJUSTE! - ${prod.nombre}`,
@@ -1927,7 +1946,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             categoria: 'inventario_critico',
             data: { productoId: prod.id, stock: 0, stock_minimo: prod.stock_minimo },
           });
-        } else if (nuevoStock <= prod.stock_minimo) {
+        } else if (nuevoStock <= stockMinimo) {
           sendPushAlert({
             title: `⚠️ Stock Crítico por Ajuste - ${prod.nombre}`,
             body: `Ajuste de salida de ${cantidad} unid. (${motivo}). Stock resultante en nivel crítico: ${nuevoStock} (Mínimo: ${prod.stock_minimo}).`,
@@ -2110,6 +2129,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addProducto,
         updateProducto,
         deleteProducto,
+        uploadProductImage,
         clientes,
         addCliente,
         updateCliente,

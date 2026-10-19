@@ -8,8 +8,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import nodemailer from 'nodemailer';
 import { jsPDF } from 'jspdf';
+import { put as putBlob } from '@vercel/blob';
+import multer from 'multer';
 
 const app = express();
+const root = path.dirname(fileURLToPath(import.meta.url));
 const nativeAppOrigins = new Set(['capacitor://localhost', 'https://localhost', 'http://localhost']);
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -24,7 +27,12 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '10mb' }));
-const root = path.dirname(fileURLToPath(import.meta.url));
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 4 * 1024 * 1024,
+  },
+});
 const deployedCommitSha = process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || (() => {
   try {
     return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -54,14 +62,43 @@ const AUTH_HEADERS = ['usuario', 'contrasena_salt', 'contrasena_hash'];
 const USER_PROFILE_HEADERS = ['id', 'tipo_usuario', 'nombre', 'email', 'numero_documento', 'telefono', 'documento_id', 'tipo_persona', 'direccion', 'cargo', 'rol', 'estado'];
 
 app.get('/api/system/version', (_req, res) => {
-  const commit = deployedCommitSha;
-  const releaseVersion = deployedCommitMessage.match(/update\s+app\s+v\.?\s*([\d]+(?:\.[\d]+)+)/i)?.[1];
-  res.setHeader('Cache-Control', 'no-store, max-age=0');
-  res.json({
-    commit,
-    version: commit ? commit.slice(0, 12) : 'local',
-    displayVersion: releaseVersion ? `Update App V. ${releaseVersion}` : deployedCommitMessage || 'Versión local',
-  });
+  void (async () => {
+    try {
+      const response = await fetch('https://api.github.com/repos/nexuswebstudio2026/Imperio-Lux/commits?per_page=1', {
+        headers: { Accept: 'application/vnd.github+json' },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) {
+        throw new Error(`GitHub devolvió HTTP ${response.status} al consultar el último commit.`);
+      }
+      const commits = await response.json() as Array<{ sha?: string; commit?: { message?: string } }>;
+      const commit = commits[0];
+      const title = String(commit?.commit?.message || '').split(/\r?\n/, 1)[0].trim();
+      if (!title) throw new Error('GitHub no devolvió el título del último commit.');
+      const releaseVersion = title.match(/\bv\.?\s*(\d+(?:\.\d+)+)\b/i)?.[1] || null;
+      res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=300');
+      res.json({
+        commit: commit?.sha || '',
+        version: commit?.sha?.slice(0, 12) || 'unknown',
+        releaseVersion,
+        displayVersion: releaseVersion ? `Gana Pro V.${releaseVersion}` : title,
+        title,
+        source: 'github',
+      });
+    } catch (error) {
+      const releaseVersion = deployedCommitMessage.match(/\bv\.?\s*(\d+(?:\.\d+)+)\b/i)?.[1] || null;
+      res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=30');
+      res.json({
+        commit: deployedCommitSha ? deployedCommitSha.slice(0, 12) : 'local',
+        version: deployedCommitSha ? deployedCommitSha.slice(0, 12) : 'local',
+        releaseVersion,
+        displayVersion: releaseVersion ? `Gana Pro V.${releaseVersion}` : deployedCommitMessage || 'Versión local',
+        title: deployedCommitMessage || 'Versión local',
+        source: 'deployment',
+        warning: error instanceof Error ? error.message : 'No se pudo consultar la versión más reciente en GitHub.',
+      });
+    }
+  })();
 });
 
 function normalizeUsersHeader(value: unknown) {
@@ -695,6 +732,41 @@ app.post('/api/auth/login', async (req, res) => {
     res.setHeader('Set-Cookie', `imperio_session=${token}; HttpOnly; SameSite=${crossSiteNative ? 'None' : 'Lax'}; Path=/; Max-Age=43200${process.env.NODE_ENV === 'production' || crossSiteNative ? '; Secure' : ''}`);
     res.json({ user });
   } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo validar la cuenta en Google Sheets.' }); }
+});
+
+app.post('/api/upload-image', requireAdmin, upload.single('file'), async (req, res) => {
+  try {
+    const file = (req as express.Request & {
+      file?: { buffer: Buffer; mimetype: string; originalname: string; size: number };
+    }).file;
+    if (!file) {
+      return res.status(400).json({ error: 'No se recibió ningún archivo.' });
+    }
+
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    if (!validTypes.includes(file.mimetype)) {
+      return res.status(400).json({ error: 'Por favor, selecciona un archivo de imagen válido (JPG, PNG, WebP o GIF).' });
+    }
+    if (!process.env.BLOB_STORE_ID && !process.env.BLOB_READ_WRITE_TOKEN) {
+      return res.status(503).json({ error: 'El almacenamiento de fotos de Vercel Blob no está configurado.' });
+    }
+
+    const extension = file.mimetype === 'image/jpeg' || file.mimetype === 'image/jpg'
+      ? 'jpg'
+      : file.mimetype.slice('image/'.length);
+    const pathname = `productos/${Date.now()}-${randomBytes(8).toString('hex')}.${extension}`;
+    const blob = await putBlob(pathname, file.buffer, {
+      access: 'public',
+      contentType: file.mimetype,
+      ...(process.env.BLOB_STORE_ID ? { storeId: process.env.BLOB_STORE_ID } : {}),
+      ...(process.env.BLOB_READ_WRITE_TOKEN ? { token: process.env.BLOB_READ_WRITE_TOKEN } : {}),
+    });
+
+    res.status(201).json({ success: true, url: blob.url });
+  } catch (error) {
+    console.error('No se pudo subir la imagen del producto a Vercel Blob:', error);
+    res.status(502).json({ error: error instanceof Error ? error.message : 'No se pudo guardar la imagen en Vercel Blob.' });
+  }
 });
 
 app.get('/api/portal/data', async (req, res) => {

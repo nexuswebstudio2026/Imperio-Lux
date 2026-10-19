@@ -47,6 +47,13 @@ export const ProductoListView: React.FC = () => {
   const [precioCompra, setPrecioCompra] = useState<number>(0);
   const [precioVenta, setPrecioVenta] = useState<number>(0);
 
+  // Image upload state
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+
   const openNewModal = () => {
     setEditingId(null);
     setCodigo(String(Math.floor(775000000000 + Math.random() * 999999999)));
@@ -60,6 +67,11 @@ export const ProductoListView: React.FC = () => {
     setStockMinimo(5);
     setPrecioCompra(2.50);
     setPrecioVenta(4.00);
+    setImagePreview(null);
+    setImageFile(null);
+    setUploadedImageUrl(null);
+    setImageError(null);
+    setIsUploadingImage(false);
     setModalOpen(true);
   };
 
@@ -76,12 +88,80 @@ export const ProductoListView: React.FC = () => {
     setStockMinimo(p.stock_minimo ?? 5);
     setPrecioCompra(p.precio_compra);
     setPrecioVenta(p.precio_venta);
+    setImagePreview(p.imagen || null);
+    setImageFile(null);
+    setUploadedImageUrl(p.imagen || null);
+    setImageError(null);
+    setIsUploadingImage(false);
     setModalOpen(true);
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validar tipo
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
+      setImageError('Selecciona una imagen JPG, PNG, WebP o GIF.');
+      setUploadedImageUrl(null);
+      return;
+    }
+
+    if (file.size > 4 * 1024 * 1024) {
+      setImageError('La imagen no puede superar los 4 MB.');
+      setUploadedImageUrl(null);
+      return;
+    }
+
+    setImageError(null);
+    setUploadedImageUrl(null);
+
+    const previewUrl = URL.createObjectURL(file);
+    setImagePreview(previewUrl);
+    setImageFile(file);
+
+    // Subir imagen al backend
+    setIsUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/upload-image', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await response.json() as { url?: string; error?: string };
+
+      if (!response.ok || !result.url) {
+        throw new Error(result.error || 'Error al subir la imagen.');
+      }
+
+      setImagePreview(result.url);
+      setUploadedImageUrl(result.url);
+    } catch (error) {
+      console.error('Error al subir imagen:', error);
+      setImageError(error instanceof Error ? error.message : 'No se pudo guardar la imagen.');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImagePreview(null);
+    setImageFile(null);
+    setUploadedImageUrl(null);
+    setImageError(null);
   };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!nombre.trim()) return;
+    if (isUploadingImage) return;
+    if (!editingId && !uploadedImageUrl) {
+      setImageError('Debes subir una foto y esperar a que se guarde correctamente antes de crear el producto.');
+      return;
+    }
 
     if (editingId) {
       updateProducto(editingId, {
@@ -96,6 +176,7 @@ export const ProductoListView: React.FC = () => {
         stock_minimo: Number(stockMinimo) || 5,
         precio_compra: Number(precioCompra),
         precio_venta: Number(precioVenta),
+        imagen: uploadedImageUrl || undefined,
       });
     } else {
       addProducto({
@@ -111,6 +192,7 @@ export const ProductoListView: React.FC = () => {
         precio_compra: Number(precioCompra),
         precio_venta: Number(precioVenta),
         estado: true,
+        imagen: uploadedImageUrl || undefined,
       });
     }
     setModalOpen(false);
@@ -458,6 +540,46 @@ export const ProductoListView: React.FC = () => {
                     className="w-full border border-slate-300 rounded px-2 py-1.5 font-bold text-emerald-700"
                   />
                 </div>
+
+               {/* Campo para subir imagen del producto */}
+               <div className="mt-3">
+                 <label className="block font-semibold text-slate-700 mb-2">
+                   Foto del Producto{!editingId ? ' (obligatoria)' : ''}:
+                 </label>
+                 <input
+                   type="file"
+                   accept="image/jpeg,image/png,image/webp,image/gif"
+                   onChange={handleImageChange}
+                   disabled={isUploadingImage}
+                   required={!editingId}
+                   className="w-full border border-slate-300 rounded px-3 py-2 file:mr-4 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 cursor-pointer"
+                   id="product-image"
+                 />
+                 {imageError && (
+                   <p className="text-red-600 text-xs mt-1">{imageError}</p>
+                 )}
+                 {isUploadingImage && (
+                   <p className="text-blue-600 text-xs mt-1">Subiendo imagen a Vercel...</p>
+                 )}
+                 {imagePreview && !isUploadingImage && (
+                   <div className="mt-2 relative rounded-lg overflow-hidden border border-slate-300">
+                     <img
+                       src={imagePreview}
+                       alt="Vista previa del producto"
+                       className="max-h-48 w-full object-contain"
+                     />
+                     {imageFile && (
+                       <button
+                         type="button"
+                         onClick={handleRemoveImage}
+                         className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                       >
+                         ×
+                       </button>
+                     )}
+                   </div>
+                 )}
+               </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t">
@@ -470,9 +592,10 @@ export const ProductoListView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold cursor-pointer"
+                  disabled={isUploadingImage || (!editingId && !uploadedImageUrl)}
+                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {editingId ? 'Actualizar Producto' : 'Guardar Producto'}
+                  {isUploadingImage ? 'Subiendo foto...' : editingId ? 'Actualizar Producto' : 'Guardar Producto'}
                 </button>
               </div>
             </form>

@@ -38,12 +38,30 @@ export const initialEmpresa: Empresa = {
   ruc: '901.452.890-1',
   porcentaje_impuesto: 19,
   abreviatura_impuesto: 'IVA',
-  direccion: 'Calle 85 # 12-40, Zona Rosa - Tienda Virtual',
-  ubicacion: 'Bogotá, Colombia',
-  telefono: '+57 310 123 4567',
-  correo: 'ventas@imperiolux.com',
+  direccion: 'Mz O Cs 5 Barrio Gualcaloma',
+  ubicacion: 'Pasto, Nariño',
+  telefono: '+57 311 8444853',
+  correo: 'nexuswebstudio2026@gmail.com',
   moneda_id: 1,
 };
+
+export function migrateLegacyEmpresa(empresa: Empresa): Empresa {
+  return {
+    ...empresa,
+    direccion: empresa.direccion === 'Calle 85 # 12-40, Zona Rosa - Tienda Virtual'
+      ? initialEmpresa.direccion
+      : empresa.direccion,
+    ubicacion: empresa.ubicacion === 'Bogotá, Colombia'
+      ? initialEmpresa.ubicacion
+      : empresa.ubicacion,
+    telefono: ['+57 310 123 4567', '+57 310 7458741'].includes(empresa.telefono)
+      ? initialEmpresa.telefono
+      : empresa.telefono,
+    correo: empresa.correo === 'ventas@imperiolux.com'
+      ? initialEmpresa.correo
+      : empresa.correo,
+  };
+}
 
 export const initialDocumentos: DocumentoTipo[] = [
   { id: 1, nombre: 'DNI' },

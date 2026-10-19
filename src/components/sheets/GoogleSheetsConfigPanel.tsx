@@ -1506,12 +1506,11 @@ export const GoogleSheetsConfigPanel: React.FC = () => {
       {/* Confirmation Modal */}
       <ConfirmDestructiveModal
         isOpen={confirmModal.isOpen}
-        onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
         onConfirm={executeConfirmedSync}
         title={confirmModal.title}
         description={confirmModal.description}
-        confirmText="Confirmar y Ejecutar Sincronización"
-        destructive={confirmModal.type === 'download'}
+        confirmLabel="Confirmar y Ejecutar Sincronización"
       />
     </div>
   );

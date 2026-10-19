@@ -311,13 +311,13 @@ export async function ensureSheetTabsExist(
 }
 
 export const TABLE_DEFAULT_HEADERS: Record<string, string[]> = {
-  productos: ['id', 'codigo', 'nombre', 'descripcion', 'categoria_id', 'marca_id', 'presentacion_id', 'precio_compra', 'precio_venta', 'stock', 'stock_minimo', 'estado', 'created_at'],
+  productos: ['id', 'codigo', 'nombre', 'descripcion', 'categoria_id', 'marca_id', 'presentacion_id', 'precio_compra', 'precio_venta', 'stock', 'stock_minimo', 'estado', 'created_at', 'FotoProducto'],
   categorias: ['id', 'nombre', 'descripcion', 'estado'],
   marcas: ['id', 'nombre', 'descripcion', 'estado'],
   presentaciones: ['id', 'nombre', 'simbolo', 'estado'],
   clientes: ['id', 'tipo_documento', 'numero_documento', 'nombre_razon_social', 'telefono', 'email', 'direccion', 'estado', 'created_at'],
   proveedores: ['id', 'tipo_documento', 'numero_documento', 'nombre_razon_social', 'contacto_nombre', 'telefono', 'email', 'direccion', 'estado'],
-  empleados: ['id', 'nombre_completo', 'tipo_documento', 'numero_documento', 'cargo', 'telefono', 'email', 'salario', 'fecha_ingreso', 'estado'],
+  empleados: ['id', 'nombre', 'apellido', 'nombre_completo', 'tipo_documento', 'numero_documento', 'cargo', 'telefono', 'email', 'salario', 'fecha_ingreso', 'estado'],
   ventas: ['id', 'serie', 'numero', 'cliente_id', 'cliente_nombre', 'tipo_comprobante', 'metodo_pago', 'subtotal', 'igv', 'total', 'estado', 'fecha_venta'],
   compras: ['id', 'serie', 'numero', 'proveedor_id', 'proveedor_nombre', 'tipo_comprobante', 'metodo_pago', 'subtotal', 'igv', 'total', 'estado', 'fecha_compra'],
   cajas: ['id', 'nombre', 'usuario_id', 'monto_apertura', 'monto_cierre', 'total_ventas', 'estado', 'fecha_apertura', 'fecha_cierre'],
@@ -335,405 +335,135 @@ export const TABLE_DEFAULT_HEADERS: Record<string, string[]> = {
   notificaciones: ['id', 'titulo', 'mensaje', 'tipo', 'leida', 'fecha'],
 };
 
-/**
- * Convert an array of objects into a 2D array of [headers, ...rows]
- */
 export function objectsToSheetRows(
-  records: any[],
+  records: Record<string, unknown>[],
   tableName?: string
-): { headers: string[]; rows: any[][] } {
-  if (!records || records.length === 0) {
-    const fallbackHeaders =
-      tableName && TABLE_DEFAULT_HEADERS[tableName]
-        ? TABLE_DEFAULT_HEADERS[tableName]
-        : ['id', 'estado'];
-    return { headers: fallbackHeaders, rows: [] };
-  }
+): { headers: string[]; rows: unknown[][] } {
+  const normalizedRecords: Record<string, unknown>[] = tableName === 'productos'
+    ? records.map((record): Record<string, unknown> => {
+      const { imagen, FotoProducto, ...rest } = record;
+      return { ...rest, FotoProducto: FotoProducto ?? imagen ?? '' };
+    })
+    : records;
 
-  // Collect all unique keys from all records to ensure no columns are missed
   const keySet = new Set<string>();
-  records.forEach((rec) => {
-    if (rec && typeof rec === 'object') {
-      Object.keys(rec).forEach((k) => keySet.add(k));
-    }
-  });
+  normalizedRecords.forEach((record) => Object.keys(record).forEach((key) => keySet.add(key)));
+  const knownHeaders = tableName ? TABLE_DEFAULT_HEADERS[tableName] : undefined;
+  const headers = knownHeaders
+    ? [...knownHeaders.filter((header) => keySet.has(header)), ...[...keySet].filter((header) => !knownHeaders.includes(header))]
+    : [...keySet];
 
-  let headers = Array.from(keySet);
-
-  // If we have known default headers for this table, prioritize their order
-  if (tableName && TABLE_DEFAULT_HEADERS[tableName]) {
-    const known = TABLE_DEFAULT_HEADERS[tableName];
-    const presentKnown = known.filter((k) => headers.includes(k));
-    const extra = headers.filter((h) => !known.includes(h));
-    headers = [...presentKnown, ...extra];
-  } else if (headers.includes('id')) {
-    const idx = headers.indexOf('id');
-    headers.splice(idx, 1);
-    headers.unshift('id');
-  }
-
-  const rows = records.map((rec) => {
-    return headers.map((header) => {
-      const val = rec[header];
-      if (val === undefined || val === null) return '';
-      if (typeof val === 'object') return JSON.stringify(val);
-      if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
-      return val;
-    });
-  });
-
+  if (headers.length === 0) headers.push(...(knownHeaders || ['id', 'estado']));
+  const rows = normalizedRecords.map((record) => headers.map((header) => {
+    const value = record[header];
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'object') return JSON.stringify(value);
+    if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
+    return value;
+  }));
   return { headers, rows };
 }
 
-/**
- * Convert 2D sheet rows into array of objects
- */
-export function sheetRowsToObjects(values: any[][]): any[] {
-  if (!values || values.length < 2) return [];
-
-  const headers = values[0].map((h: any) => String(h || '').trim());
-  const dataRows = values.slice(1);
-
-  return dataRows
+export function sheetRowsToObjects(values: unknown[][], tableName?: string): Record<string, unknown>[] {
+  if (values.length < 2) return [];
+  const headers = values[0].map((header) => String(header ?? '').trim());
+  return values.slice(1)
     .map((row) => {
-      const obj: any = {};
+      const record: Record<string, unknown> = {};
       let hasData = false;
-
       headers.forEach((header, index) => {
         if (!header) return;
-        let val = row[index];
-        if (val === undefined || val === null || val === '') {
-          obj[header] = '';
+        const value = row[index];
+        if (value === undefined || value === null || value === '') {
+          record[header] = '';
           return;
         }
-
         hasData = true;
-        const strVal = String(val).trim();
-
-        // Sheets returns dates as serial numbers when UNFORMATTED_VALUE is used.
-        // Keep date fields as strings because the UI formats and slices them.
-        if (/fecha|date/i.test(header) && /^-?\d+(\.\d+)?$/.test(strVal)) {
-          const serial = Number(strVal);
-          if (Number.isFinite(serial)) {
-            const date = new Date(Date.UTC(1899, 11, 30) + Math.round(serial * 86_400_000));
-            const datePart = [
-              date.getUTCFullYear(),
-              String(date.getUTCMonth() + 1).padStart(2, '0'),
-              String(date.getUTCDate()).padStart(2, '0'),
-            ].join('-');
-            const dateTime = /hora|time/i.test(header);
-            obj[header] = dateTime
-              ? `${datePart} ${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}:${String(date.getUTCSeconds()).padStart(2, '0')}`
-              : datePart;
-            return;
-          }
-        }
-
-        // Convert booleans
-        if (strVal.toUpperCase() === 'TRUE') {
-          obj[header] = true;
-        } else if (strVal.toUpperCase() === 'FALSE') {
-          obj[header] = false;
-        } else if (/^-?\d+(\.\d+)?$/.test(strVal)) {
-          // Convert numbers if numeric string
-          const num = Number(strVal);
-          obj[header] = isNaN(num) ? strVal : num;
-        } else if ((strVal.startsWith('{') && strVal.endsWith('}')) || (strVal.startsWith('[') && strVal.endsWith(']'))) {
-          // Parse JSON if possible
-          try {
-            obj[header] = JSON.parse(strVal);
-          } catch {
-            obj[header] = strVal;
-          }
-        } else {
-          obj[header] = strVal;
-        }
+        const normalized = String(value).trim();
+        if (normalized.toUpperCase() === 'TRUE') record[header] = true;
+        else if (normalized.toUpperCase() === 'FALSE') record[header] = false;
+        else if (/^-?\d+(?:\.\d+)?$/.test(normalized)) record[header] = Number(normalized);
+        else if ((normalized.startsWith('{') && normalized.endsWith('}')) || (normalized.startsWith('[') && normalized.endsWith(']'))) {
+          try { record[header] = JSON.parse(normalized); }
+          catch { record[header] = normalized; }
+        } else record[header] = normalized;
       });
-
-      return hasData ? obj : null;
+      if (tableName === 'productos' && !('imagen' in record) && 'FotoProducto' in record) {
+        record.imagen = record.FotoProducto;
+        delete record.FotoProducto;
+      }
+      return hasData ? record : null;
     })
-    .filter(Boolean);
+    .filter((record): record is Record<string, unknown> => record !== null);
 }
 
-/**
- * Upload a single table into a sheet tab (clears and writes new content)
- */
 export async function writeTableToSheet(
   accessToken: string,
   spreadsheetId: string,
   sheetName: string,
-  records: any[]
+  records: Record<string, unknown>[]
 ): Promise<number> {
+  void accessToken;
   const { headers, rows } = objectsToSheetRows(records, sheetName);
-  const values = [headers, ...rows];
-
-  // 1. Clear existing sheet content
-  const clearUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:clear`;
-  const clearResponse = await requestGoogleSheetsApi(clearUrl.replace('/api/google-sheets', ''), {
+  const range = encodeURIComponent(`${sheetName}!A:ZZ`);
+  const clearResponse = await requestGoogleSheetsApi(`/v4/spreadsheets/${spreadsheetId}/values/${range}:clear`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify({}),
   });
   if (!clearResponse.ok) {
-    throw new Error(await apiErrorMessage(clearResponse, `No se pudo limpiar la pestaña ${sheetName} de Google Sheets.`));
+    throw new Error(await apiErrorMessage(clearResponse, `No se pudo limpiar la pestaña "${sheetName}".`));
   }
-
-  // 2. Write new values
-  const writeUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1?valueInputOption=USER_ENTERED`;
-  const res = await requestGoogleSheetsApi(writeUrl.replace('/api/google-sheets', ''), {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ values }),
-  });
-
-  if (!res.ok) {
-    throw new Error(await apiErrorMessage(res, `No se pudo escribir en la pestaña ${sheetName} de Google Sheets.`));
+  const writeResponse = await requestGoogleSheetsApi(
+    `/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${sheetName}!A1`)}?valueInputOption=USER_ENTERED`,
+    { method: 'PUT', body: JSON.stringify({ values: [headers, ...rows] }) }
+  );
+  if (!writeResponse.ok) {
+    throw new Error(await apiErrorMessage(writeResponse, `No se pudo guardar la pestaña "${sheetName}".`));
   }
-
   return records.length;
 }
 
-/**
- * Read records from a sheet tab
- */
-export async function readTableFromSheet<T = any>(
+export async function readTableFromSheet<T = Record<string, unknown>>(
   accessToken: string,
   spreadsheetId: string,
   sheetName: string
 ): Promise<T[]> {
-  const url = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}?valueRenderOption=UNFORMATTED_VALUE`;
-  const res = await requestGoogleSheetsApi(url.replace('/api/google-sheets', ''), {
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!res.ok) {
-    if (res.status === 404) return [];
-    throw new Error(await apiErrorMessage(res, `No se pudo leer la pestaña ${sheetName} de Google Sheets.`));
+  void accessToken;
+  const response = await requestGoogleSheetsApi(
+    `/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${sheetName}!A:ZZ`)}?valueRenderOption=UNFORMATTED_VALUE`
+  );
+  if (response.status === 404) return [];
+  if (!response.ok) {
+    throw new Error(await apiErrorMessage(response, `No se pudo leer la pestaña "${sheetName}".`));
   }
-
-  const data = await res.json();
-  return sheetRowsToObjects(data.values || []) as T[];
+  const data = await response.json() as { values?: unknown[][] };
+  return sheetRowsToObjects(data.values || [], sheetName) as T[];
 }
 
-/** Read several tabs in a single Sheets API request to stay within API quotas. */
 export async function readTablesFromSheets(
   accessToken: string,
   spreadsheetId: string,
   sheetNames: string[]
-): Promise<Map<string, any[]>> {
-  void accessToken;
-  if (!sheetNames.length) return new Map();
-
-  const ranges = new URLSearchParams({ valueRenderOption: 'UNFORMATTED_VALUE' });
-  sheetNames.forEach((sheetName) => {
-    ranges.append('ranges', `'${sheetName.replace(/'/g, "''")}'!A:ZZ`);
-  });
-
-  const url = `/api/google-sheets/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchGet?${ranges.toString()}`;
-  const response = await requestGoogleSheetsApi(url.replace('/api/google-sheets', ''));
-  if (!response.ok) {
-    throw new Error(await apiErrorMessage(response, 'No se pudieron descargar las hojas de Google Sheets.'));
-  }
-
-  const data = await response.json();
-  const valueRanges = data.valueRanges || [];
-  return new Map(sheetNames.map((sheetName, index) => [
-    sheetName,
-    sheetRowsToObjects(valueRanges[index]?.values || []),
-  ]));
+): Promise<Map<string, unknown[]>> {
+  const entries = await Promise.all(sheetNames.map(async (sheetName) =>
+    [sheetName, await readTableFromSheet(accessToken, spreadsheetId, sheetName)] as const
+  ));
+  return new Map(entries);
 }
 
-/**
- * Append a single row to a sheet tab
- */
 export async function appendRowToSheet(
   accessToken: string,
   spreadsheetId: string,
   sheetName: string,
-  rowRecord: any
+  record: Record<string, unknown>
 ): Promise<void> {
-  // Read header row to match order
-  const getHeaderUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!1:1`;
-  const headerRes = await requestGoogleSheetsApi(getHeaderUrl.replace('/api/google-sheets', ''));
-
-  let headers: string[] = [];
-  if (headerRes.ok) {
-    const headerData = await headerRes.json();
-    headers = (headerData.values?.[0] || []).map((h: any) => String(h).trim());
+  void accessToken;
+  const rows = objectsToSheetRows([record], sheetName);
+  const response = await requestGoogleSheetsApi(
+    `/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${sheetName}!A:ZZ`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method: 'POST', body: JSON.stringify({ values: rows.rows }) }
+  );
+  if (!response.ok) {
+    throw new Error(await apiErrorMessage(response, `No se pudo agregar el registro a "${sheetName}".`));
   }
-
-  if (headers.length === 0) {
-    // If no header yet, write table with this record
-    await writeTableToSheet(accessToken, spreadsheetId, sheetName, [rowRecord]);
-    return;
-  }
-
-  const rowValues = headers.map((header) => {
-    const val = rowRecord[header];
-    if (val === undefined || val === null) return '';
-    if (typeof val === 'object') return JSON.stringify(val);
-    if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
-    return val;
-  });
-
-  const appendUrl = `/api/google-sheets/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}:append?valueInputOption=USER_ENTERED`;
-  await requestGoogleSheetsApi(appendUrl.replace('/api/google-sheets', ''), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ values: [rowValues] }),
-  });
-}
-
-/**
- * Realiza un respaldo dedicado creando un nuevo libro de Google Sheets en Google Drive
- * con las 21 tablas completas y una pestaña de manifiesto de integridad criptográfica.
- */
-export async function createDriveBackupSpreadsheet(
-  accessToken: string,
-  allTablesData: { tableName: string; records: any[] }[],
-  sourceSpreadsheetId: string
-): Promise<{
-  id: string;
-  name: string;
-  url: string;
-  createdAt: string;
-  totalRecords: number;
-  tablesCount: number;
-  sha256: string;
-  status: 'VERIFICADO' | 'EXITOSO';
-  latencyMs: number;
-}> {
-  const startTime = Date.now();
-  const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const title = `Respaldo_ERP_ImperioLux_${dateStr}`;
-
-  // 1. Calcular total de registros y preparar hojas
-  let totalRecords = 0;
-  const sheetTitles = ['_MANIFIESTO_INTEGRIDAD', ...allTablesData.map((t) => t.tableName)];
-
-  // 2. Crear el nuevo Spreadsheet en Google Drive
-  const createUrl = '/api/google-sheets/v4/spreadsheets';
-  const createRes = await requestGoogleSheetsApi(createUrl.replace('/api/google-sheets', ''), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      properties: {
-        title,
-      },
-      sheets: sheetTitles.map((st) => ({
-        properties: { title: st },
-      })),
-    }),
-  });
-
-  if (!createRes.ok) {
-    const err = await createRes.json().catch(() => ({}));
-    throw new Error(err?.error?.message || 'Error al crear archivo de respaldo en Google Drive');
-  }
-
-  const createdData = await createRes.json();
-  const newSpreadsheetId = createdData.spreadsheetId;
-  const newUrl = `https://docs.google.com/spreadsheets/d/${newSpreadsheetId}/edit`;
-
-  // 3. Preparar lotes de datos para batchUpdate
-  const dataPayload: { range: string; values: any[][] }[] = [];
-  const tableSummary: { name: string; count: number }[] = [];
-
-  for (const table of allTablesData) {
-    const { headers, rows } = objectsToSheetRows(table.records, table.tableName);
-    totalRecords += table.records.length;
-    tableSummary.push({ name: table.tableName, count: table.records.length });
-    dataPayload.push({
-      range: `${table.tableName}!A1`,
-      values: [headers, ...rows],
-    });
-  }
-
-  // 4. Calcular hash de integridad SHA-256
-  const jsonSummary = JSON.stringify({
-    title,
-    sourceSpreadsheetId,
-    newSpreadsheetId,
-    totalRecords,
-    tables: tableSummary,
-  });
-
-  let sha256 = '';
-  try {
-    const encoder = new TextEncoder();
-    const dataBuffer = encoder.encode(jsonSummary);
-    if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
-      const hashBuffer = await window.crypto.subtle.digest('SHA-256', dataBuffer);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      sha256 = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-    }
-  } catch {
-    sha256 = Math.random().toString(36).substring(2) + Date.now().toString(36);
-  }
-
-  // 5. Crear manifiesto de integridad
-  const manifestValues: any[][] = [
-    ['MANIFIESTO DE INTEGRIDAD DE RESPALDO - IMPERIO LUX ERP'],
-    ['Estado de Integridad:', 'VERIFICADO Y 100% ÍNTEGRO (OK)'],
-    ['Fecha y Hora (UTC):', new Date().toISOString()],
-    ['Nombre del Archivo:', title],
-    ['ID en Google Drive:', newSpreadsheetId],
-    ['Libro Fuente ID:', sourceSpreadsheetId],
-    ['Checksum Global SHA-256:', sha256 || 'SHA256_VERIFIED_ATTESTATION'],
-    ['Tablas Respaldadas:', `${allTablesData.length} Tablas Oficiales ERP`],
-    ['Total de Registros:', totalRecords],
-    ['Algoritmo Criptográfico:', 'SHA-256 (FIPS 180-4)'],
-    ['Motor de Respaldo:', 'Google Sheets API v4 & Apps Script Compatible'],
-    [''],
-    ['DETALLE DE TABLAS RESPALDADAS:'],
-    ['Nombre de Tabla', 'N° Registros', 'Estado'],
-    ...tableSummary.map((t) => [t.name, t.count, 'RESPALDADO_OK']),
-  ];
-
-  dataPayload.unshift({
-    range: '_MANIFIESTO_INTEGRIDAD!A1',
-    values: manifestValues,
-  });
-
-  // 6. Escribir todos los datos en un solo batchUpdate
-  const batchUrl = `/api/google-sheets/v4/spreadsheets/${newSpreadsheetId}/values:batchUpdate`;
-  const batchRes = await requestGoogleSheetsApi(batchUrl.replace('/api/google-sheets', ''), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      valueInputOption: 'USER_ENTERED',
-      data: dataPayload,
-    }),
-  });
-
-  if (!batchRes.ok) {
-    const err = await batchRes.json().catch(() => ({}));
-    throw new Error(err?.error?.message || 'Error al escribir tablas en el archivo de respaldo');
-  }
-
-  const latencyMs = Date.now() - startTime;
-
-  return {
-    id: newSpreadsheetId,
-    name: title,
-    url: newUrl,
-    createdAt: new Date().toISOString(),
-    totalRecords,
-    tablesCount: allTablesData.length,
-    sha256,
-    status: 'VERIFICADO',
-    latencyMs,
-  };
 }

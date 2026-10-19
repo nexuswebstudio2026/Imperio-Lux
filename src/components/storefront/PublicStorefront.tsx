@@ -18,6 +18,21 @@ interface GitHubRelease {
   assets: GitHubReleaseAsset[];
 }
 
+interface SystemVersionInfo {
+  releaseVersion: string | null;
+}
+
+interface StorefrontProduct {
+  id: number;
+  nombre: string;
+  descripcion: string;
+  imagen: string;
+  categoria_id: number;
+  marca_id: number;
+  precio_venta: number;
+  estado: boolean;
+}
+
 const appPlatforms = [
   { id: 'android', name: 'Android', detail: 'Teléfonos y tabletas Android', icon: Smartphone, match: (name: string) => name.endsWith('.apk') },
   { id: 'ios', name: 'iOS', detail: 'iPhone y iPad · App Store / TestFlight', icon: Smartphone, match: (_name: string) => false },
@@ -26,7 +41,7 @@ const appPlatforms = [
 ] as const;
 
 interface StorefrontCatalogData {
-  products: Array<Pick<ReturnType<typeof useApp>['productos'][number], 'id' | 'nombre' | 'descripcion' | 'imagen' | 'categoria_id' | 'marca_id' | 'precio_venta' | 'estado'>>;
+  products: StorefrontProduct[];
   categories: Array<Pick<ReturnType<typeof useApp>['categorias'][number], 'id' | 'nombre' | 'descripcion' | 'estado'>>;
   brands: Array<Pick<ReturnType<typeof useApp>['marcas'][number], 'id' | 'nombre' | 'descripcion' | 'estado'>>;
 }
@@ -41,7 +56,17 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
   const [catalogData, setCatalogData] = useState<StorefrontCatalogData | null>(null);
   const [catalogError, setCatalogError] = useState('');
   const [release, setRelease] = useState<GitHubRelease | null>(null);
-  const visibleProducts = catalogData?.products ?? productos;
+  const [siteVersion, setSiteVersion] = useState<string | null>(null);
+  const visibleProducts: StorefrontProduct[] = catalogData?.products ?? productos.map((product) => ({
+    id: product.id,
+    nombre: product.nombre,
+    descripcion: product.descripcion,
+    imagen: product.imagen || '',
+    categoria_id: product.categoria_ids?.[0] || 0,
+    marca_id: product.marca_id,
+    precio_venta: product.precio_venta,
+    estado: product.estado,
+  }));
   const visibleCategories = catalogData?.categories ?? categorias;
   const visibleBrands = catalogData?.brands ?? marcas;
   const activeProducts = visibleProducts.filter((product) => product.estado);
@@ -76,6 +101,33 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
         console.error('No se pudo cargar el catálogo público:', error);
       });
     return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const updateVersion = async () => {
+      try {
+        const response = await fetch('/api/system/version', {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`No se pudo consultar la versión del sitio (HTTP ${response.status}).`);
+        const data = await response.json() as SystemVersionInfo;
+        if (active && data.releaseVersion) setSiteVersion(data.releaseVersion);
+      } catch (error) {
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.warn('No se pudo actualizar la versión mostrada en el pie de página:', error);
+        }
+      }
+    };
+    let active = true;
+    void updateVersion();
+    const interval = window.setInterval(() => void updateVersion(), 5 * 60 * 1000);
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -190,7 +242,7 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
                 <p className="text-[9px] uppercase tracking-[0.22em] text-[#d8c38c]">Imperio Lux · Edición selecta</p>
                 <p className="mt-2 font-serif text-lg leading-tight">Detalles que dejan huella.</p>
               </div>
-              <div className="hero-location-badge absolute right-0 top-7 hidden rounded-full border border-[#d8c38c]/40 px-5 py-3 text-[9px] uppercase tracking-[0.22em] text-[#e4d4ad] sm:block">Bogotá · Colombia</div>
+              <div className="hero-location-badge absolute right-0 top-7 hidden rounded-full border border-[#d8c38c]/40 px-5 py-3 text-[9px] uppercase tracking-[0.22em] text-[#e4d4ad] sm:block">{empresa.ubicacion || 'Colombia'}</div>
             </div>
           </div>
           <a href="/catalogo" aria-label="Desplazarse al catálogo" className="absolute bottom-7 left-1/2 hidden -translate-x-1/2 items-center gap-2 text-[9px] uppercase tracking-[0.22em] text-white/50 lg:flex">
@@ -236,6 +288,33 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
                     </article>
                   );
                 })}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {currentPath === '/contacto' && (
+          <section className="bg-[#eeeae1] px-5 py-16 dark:bg-[#111a28] sm:py-20 lg:px-8">
+            <div className="mx-auto max-w-5xl">
+              <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#9b7b3e]">Estamos para atenderte</p>
+              <h2 className="mt-3 font-serif text-4xl text-[#171714] dark:text-white sm:text-5xl">Contacto</h2>
+              <div className="mt-8 grid gap-4 sm:grid-cols-2">
+                <div className="border border-[#d9d3c6] bg-[#f8f6f1] p-6 dark:border-slate-700 dark:bg-[#172337]">
+                  <MapPin className="h-5 w-5 text-[#9b7b3e]" />
+                  <h3 className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-[#77746c] dark:text-slate-400">Ciudad y dirección</h3>
+                  <p className="mt-2 text-lg text-[#171714] dark:text-white">{empresa.ubicacion || 'Colombia'}</p>
+                  <p className="mt-1 text-sm text-[#77746c] dark:text-slate-300">{empresa.direccion}</p>
+                </div>
+                <a href={`tel:${empresa.telefono.replace(/[^\d+]/g, '')}`} className="border border-[#d9d3c6] bg-[#f8f6f1] p-6 transition hover:border-[#9b7b3e] dark:border-slate-700 dark:bg-[#172337]">
+                  <Clock3 className="h-5 w-5 text-[#9b7b3e]" />
+                  <h3 className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-[#77746c] dark:text-slate-400">Teléfono</h3>
+                  <p className="mt-2 text-lg text-[#171714] dark:text-white">{empresa.telefono}</p>
+                </a>
+                <a href={`mailto:${empresa.correo}`} className="border border-[#d9d3c6] bg-[#f8f6f1] p-6 transition hover:border-[#9b7b3e] dark:border-slate-700 dark:bg-[#172337] sm:col-span-2">
+                  <Mail className="h-5 w-5 text-[#9b7b3e]" />
+                  <h3 className="mt-4 text-xs font-bold uppercase tracking-[0.16em] text-[#77746c] dark:text-slate-400">Correo electrónico</h3>
+                  <p className="mt-2 text-lg text-[#171714] dark:text-white">{empresa.correo}</p>
+                </a>
               </div>
             </div>
           </section>
@@ -334,10 +413,13 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
       </main>
 
       <footer className="bg-[#11110f] px-5 py-6 text-white/45">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 text-[9px] uppercase tracking-[0.16em] sm:flex-row">
-          <span>© {new Date().getFullYear()} {empresa.nombre || 'Imperio Lux'}. Todos los derechos reservados.</span>
-          <span>Elegancia que permanece</span>
-        </div>
+        <p className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-1.5 gap-y-2 text-center text-xs text-white/65">
+          <span>© {new Date().getFullYear()}</span>
+          <a href="https://nexuswebstudio.vercel.app/" className="font-semibold text-[#d8c38c] hover:text-white">Nexus Web Studio</a>
+          <span>Todos los derechos reservados.</span>
+          <a href="https://imperio-lux.vercel.app/" className="font-semibold text-[#d8c38c] hover:text-white">Imperio Lux</a>
+          <span>V. {siteVersion || '—'}</span>
+        </p>
       </footer>
       <WhatsAppQuoteWidget
         businessName={empresa.nombre || 'Imperio Lux'}

@@ -66,7 +66,7 @@ export const UsersCrudPanel: React.FC = () => {
       });
       const response = await fetch('/api/auth/admin/sync-users', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ users: usersToSync }) });
       const data = await response.json(); if (!response.ok) throw new Error(data.error || 'No se pudieron sincronizar los datos.');
-      setUsers((current) => current.map((account) => { const synced = usersToSync.find((item) => item.id === account.id); return synced ? { ...account, name: synced.nombre, email: synced.email, document: synced.numero_documento, phone: synced.telefono, cargo: synced.cargo, estado: synced.estado } : account; }));
+      setUsers((current) => current.map((account) => { const synced = usersToSync.find((item) => item.id === account.id); return synced ? { ...account, name: synced.nombre, email: synced.email, document: synced.numero_documento, phone: synced.telefono, cargo: synced.cargo, estado: typeof synced.estado === 'boolean' ? synced.estado : /^(activo|active|true|1)$/i.test(synced.estado) } : account; }));
       setMessage(`Usuarios sincronizados con la hoja Empleados. Se conservaron las credenciales. Total en Usuarios: ${data.count}.`);
     }
     catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudieron sincronizar los datos.'); }

@@ -27,6 +27,7 @@
     "@capacitor/ios": "^8.5.3",
     "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.1.14",
+    "@vercel/blob": "^2.8.2",
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
@@ -34,6 +35,7 @@
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "multer": "^2.4.0",
     "nodemailer": "^10.1.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
@@ -44,8 +46,11 @@
   "devDependencies": {
     "@capacitor/cli": "^8.5.3",
     "@types/express": "^4.17.21",
+    "@types/multer": "^2.3.0",
     "@types/node": "^22.14.0",
     "@types/nodemailer": "^8.0.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
     "electron": "^44.9.0",
     "electron-builder": "^26.0.12",
@@ -66,7 +71,11 @@
     "directories": {
       "output": "release/desktop-app"
     },
-    "files": ["desktop/**/*", "package.json", "!node_modules/**/*"],
+    "files": [
+      "desktop/**/*",
+      "package.json",
+      "!node_modules/**/*"
+    ],
     "win": {
       "target": "nsis",
       "icon": "public/assets/imperio-icon.ico",
