@@ -1,5 +1,7 @@
 import express from 'express';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config();
+dotenv.config({ path: '.env.local', override: true });
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { createHmac, createSign, randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
