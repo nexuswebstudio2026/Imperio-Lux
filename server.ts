@@ -81,7 +81,7 @@ app.get('/api/system/version', (_req, res) => {
         commit: commit?.sha || '',
         version: commit?.sha?.slice(0, 12) || 'unknown',
         releaseVersion,
-        displayVersion: releaseVersion ? `Gana Pro V.${releaseVersion}` : title,
+        displayVersion: releaseVersion ? `Imperio Lux V.${releaseVersion}` : title,
         title,
         source: 'github',
       });
@@ -92,7 +92,7 @@ app.get('/api/system/version', (_req, res) => {
         commit: deployedCommitSha ? deployedCommitSha.slice(0, 12) : 'local',
         version: deployedCommitSha ? deployedCommitSha.slice(0, 12) : 'local',
         releaseVersion,
-        displayVersion: releaseVersion ? `Gana Pro V.${releaseVersion}` : deployedCommitMessage || 'Versión local',
+        displayVersion: releaseVersion ? `Imperio Lux V.${releaseVersion}` : deployedCommitMessage || 'Versión local',
         title: deployedCommitMessage || 'Versión local',
         source: 'deployment',
         warning: error instanceof Error ? error.message : 'No se pudo consultar la versión más reciente en GitHub.',
