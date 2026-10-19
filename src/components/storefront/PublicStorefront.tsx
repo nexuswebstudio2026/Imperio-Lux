@@ -396,17 +396,36 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
           </div>
         </section>
 
-        <section id="contacto" className="scroll-mt-28 bg-[#171714] px-5 py-20 text-white lg:px-8 lg:py-24">
-          <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
-            <div>
+        <section id="contacto" className="scroll-mt-28 bg-[#171714] px-5 py-16 text-white sm:py-20 lg:px-8 lg:py-24">
+          <div className="mx-auto max-w-7xl">
+            <div className="relative z-30 max-w-5xl">
               <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#d8c38c]">Contáctenos</p>
-              <h2 className="mt-4 max-w-2xl font-serif text-4xl leading-tight sm:text-5xl">Tu próxima pieza favorita empieza con una conversación.</h2>
+              <h2 className="mt-4 max-w-4xl font-serif text-4xl leading-tight sm:text-5xl lg:text-6xl">Tu próxima pieza favorita empieza con una conversación.</h2>
               <a href={whatsapp} target={phone ? '_blank' : undefined} rel={phone ? 'noreferrer' : undefined} className="mt-8 inline-flex items-center gap-3 border border-[#b89652] px-6 py-4 text-[10px] font-bold uppercase tracking-[0.18em] text-[#e5d4a8] transition hover:bg-[#b89652] hover:text-white">Escríbenos <ArrowRight className="h-4 w-4" /></a>
             </div>
-            <div className="grid gap-5 border-t border-white/15 pt-6 text-sm text-white/70 sm:grid-cols-3 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
-              <div className="flex gap-3"><MapPin className="h-4 w-4 shrink-0 text-[#d8c38c]" /><span>{empresa.direccion || empresa.ubicacion}</span></div>
-              <a href={`tel:${String(empresa.telefono || '').replace(/[^\d+]/g, '')}`} className="flex gap-3 hover:text-white"><Clock3 className="h-4 w-4 shrink-0 text-[#d8c38c]" /><span>{empresa.telefono || 'Atención personalizada'}</span></a>
-              <a href={`mailto:${empresa.correo}`} className="flex gap-3 hover:text-white"><Mail className="h-4 w-4 shrink-0 text-[#d8c38c]" /><span>{empresa.correo}</span></a>
+            <div className="relative z-30 mt-12 grid gap-3 border-t border-white/15 pt-6 text-sm text-white/70 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="flex min-w-0 gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:col-span-2 lg:col-span-1">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#d8c38c]" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#d8c38c]">Ciudad y dirección</p>
+                  <p className="mt-2 break-words text-sm text-white">{empresa.ubicacion || 'Colombia'}</p>
+                  <p className="mt-1 break-words text-xs leading-5">{empresa.direccion}</p>
+                </div>
+              </div>
+              <a href={`tel:${String(empresa.telefono || '').replace(/[^\d+]/g, '')}`} className="flex min-w-0 gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-[#b89652] hover:text-white">
+                <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-[#d8c38c]" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#d8c38c]">Teléfono</p>
+                  <p className="mt-2 break-words text-sm">{empresa.telefono || 'Atención personalizada'}</p>
+                </div>
+              </a>
+              <a href={`mailto:${empresa.correo}`} className="flex min-w-0 gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-[#b89652] hover:text-white">
+                <Mail className="mt-0.5 h-4 w-4 shrink-0 text-[#d8c38c]" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#d8c38c]">Correo electrónico</p>
+                  <p className="mt-2 break-words text-sm">{empresa.correo}</p>
+                </div>
+              </a>
             </div>
           </div>
         </section>
