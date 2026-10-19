@@ -405,7 +405,7 @@ export const PublicStorefront: React.FC<PublicStorefrontProps> = ({ currentPath,
             </div>
             <div className="grid gap-5 border-t border-white/15 pt-6 text-sm text-white/70 sm:grid-cols-3 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
               <div className="flex gap-3"><MapPin className="h-4 w-4 shrink-0 text-[#d8c38c]" /><span>{empresa.direccion || empresa.ubicacion}</span></div>
-              <a href={`tel:${empresa.telefono}`} className="flex gap-3 hover:text-white"><Clock3 className="h-4 w-4 shrink-0 text-[#d8c38c]" /><span>{empresa.telefono || 'Atención personalizada'}</span></a>
+              <a href={`tel:${String(empresa.telefono || '').replace(/[^\d+]/g, '')}`} className="flex gap-3 hover:text-white"><Clock3 className="h-4 w-4 shrink-0 text-[#d8c38c]" /><span>{empresa.telefono || 'Atención personalizada'}</span></a>
               <a href={`mailto:${empresa.correo}`} className="flex gap-3 hover:text-white"><Mail className="h-4 w-4 shrink-0 text-[#d8c38c]" /><span>{empresa.correo}</span></a>
             </div>
           </div>

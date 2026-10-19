@@ -50,21 +50,32 @@ export function migrateLegacyEmpresa(empresa: Empresa): Empresa {
     'Calle 85 # 12-40, Zona Rosa - Tienda Virtual',
     'Av. Primavera 1420, Surco - Tienda Virtual',
   ];
-  const legacyLocation = /bogotá|lima|perú|surco/i.test(empresa.ubicacion || '');
-  const oldAddress = oldAddresses.includes(empresa.direccion);
-  const invalidPhone = !empresa.telefono || /#error|formula parse error/i.test(empresa.telefono);
+  const address = String(empresa.direccion || '').trim();
+  const location = String(empresa.ubicacion || '').trim();
+  const phone = String(empresa.telefono || '').trim();
+  const normalizedAddress = address.toLocaleLowerCase().replace(/\s+/g, ' ');
+  const oldAddress = oldAddresses.includes(address)
+    || normalizedAddress === 'mz o cs 5 gualcaloma';
+  const legacyLocation = /bogotá|lima|perú|surco/i.test(location);
+  const invalidPhone = !phone || /#error|formula parse error/i.test(phone);
+  const phoneDigits = phone.replace(/\D/g, '');
+  const colombianMobile = phoneDigits.match(/^(?:57)?(3\d{9})$/);
+  const normalizedPhone = colombianMobile
+    ? `+57 ${colombianMobile[1].slice(0, 3)} ${colombianMobile[1].slice(3)}`
+    : phone;
 
   return {
     ...empresa,
-    direccion: oldAddresses.includes(empresa.direccion)
+    direccion: oldAddress
+      || legacyLocation
       ? initialEmpresa.direccion
-      : empresa.direccion,
-    ubicacion: legacyLocation || oldAddress || !empresa.ubicacion
+      : address,
+    ubicacion: legacyLocation || oldAddress || !location
       ? initialEmpresa.ubicacion
-      : empresa.ubicacion,
-    telefono: invalidPhone || ['+57 310 123 4567', '+57 310 7458741'].includes(empresa.telefono)
+      : location,
+    telefono: invalidPhone || ['+573101234567', '+573107458741'].includes(phoneDigits)
       ? initialEmpresa.telefono
-      : empresa.telefono,
+      : normalizedPhone,
     correo: empresa.correo === 'ventas@imperiolux.com'
       ? initialEmpresa.correo
       : empresa.correo,
