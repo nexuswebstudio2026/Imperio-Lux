@@ -303,6 +303,16 @@ function saveStorage<T>(key: string, val: T): void {
   }
 }
 
+function clearPendingMarcaWrite(expected: Marca[]): void {
+  const pending = loadStorage<Marca[] | null>('pendingMarcaWrite', null);
+  if (JSON.stringify(pending) !== JSON.stringify(expected)) return;
+  try {
+    localStorage.removeItem('pv_pendingMarcaWrite');
+  } catch (error) {
+    console.error('No se pudo limpiar el estado pendiente de marcas:', error);
+  }
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Google Sheets database state
   const [googleUser, setGoogleUser] = useState<GoogleUser | null>(() => getGoogleCurrentUser());
@@ -1196,7 +1206,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       getCurrentSheetTablesRef.current().map(([name, data]) => [name, JSON.stringify(data)])
     );
     setSheetsReadyForAdmin(null);
-    void syncBidirectionalRef.current()
+    void (async () => {
+      while (sheetsInitializationKey.current === adminSheetsKey) {
+        const pendingMarcas = loadStorage<Marca[] | null>('pendingMarcaWrite', null);
+        if (!pendingMarcas) break;
+        await uploadSingleTableRef.current('marcas', pendingMarcas);
+        clearPendingMarcaWrite(pendingMarcas);
+      }
+      if (sheetsInitializationKey.current !== adminSheetsKey) return;
+      return syncBidirectionalRef.current();
+    })()
       .then(() => {
         if (sheetsInitializationKey.current === adminSheetsKey) {
           setSheetsReadyForAdmin(adminSheetsKey);
@@ -1236,6 +1255,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setGoogleSheetsMessage(`Guardando cambios en la pestaña "${name}" de Google Sheets...`);
             await uploadSingleTableRef.current(name, data);
             syncedTableSnapshots.current.set(name, JSON.stringify(data));
+            if (name === 'marcas') clearPendingMarcaWrite(data);
             if (pendingTableWrites.current.get(name) === data) pendingTableWrites.current.delete(name);
           }
           setGoogleSheetsStatus('connected');
@@ -1437,25 +1457,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addMarca = (m: Omit<Marca, 'id'>) => {
     const newId = marcas.length > 0 ? Math.max(...marcas.map((item) => item.id)) + 1 : 1;
     const item: Marca = { ...m, id: newId };
-    setMarcas((prev) => [...prev, item]);
+    const updated = [...marcas, item];
+    saveStorage('pendingMarcaWrite', updated);
+    setMarcas(updated);
     logActivity('Creación', 'Marcas', `Marca "${m.nombre}" creada`);
   };
 
   const updateMarca = (id: number, m: Partial<Marca>) => {
-    setMarcas((prev) =>
-      prev.map((item) => {
-        if (item.id === id) {
-          const updated = { ...item, ...m };
-          return updated;
-        }
-        return item;
-      })
-    );
+    const updated = marcas.map((item) => item.id === id ? { ...item, ...m } : item);
+    saveStorage('pendingMarcaWrite', updated);
+    setMarcas(updated);
     logActivity('Edición', 'Marcas', `Marca #${id} actualizada`);
   };
 
   const deleteMarca = (id: number) => {
-    setMarcas((prev) => prev.filter((item) => item.id !== id));
+    const updated = marcas.filter((item) => item.id !== id);
+    saveStorage('pendingMarcaWrite', updated);
+    setMarcas(updated);
     logActivity('Eliminación', 'Marcas', `Marca #${id} eliminada`);
   };
 

@@ -10,6 +10,7 @@ import nodemailer from 'nodemailer';
 import { jsPDF } from 'jspdf';
 import { put as putBlob } from '@vercel/blob';
 import multer from 'multer';
+import * as XLSX from 'xlsx';
 
 const app = express();
 const root = path.dirname(fileURLToPath(import.meta.url));
@@ -473,6 +474,209 @@ app.get('/api/database/status', async (_req, res) => {
     res.json({ connected: true, provider: 'google-sheets', spreadsheetId, spreadsheetTitle: result.properties?.title || '', serviceAccount: credentials.client_email });
   } catch (error) {
     res.status(503).json({ connected: false, provider: 'google-sheets', error: error instanceof Error ? error.message : 'No se pudo conectar con Google Sheets.' });
+  }
+});
+
+const workbookUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 4 * 1024 * 1024, files: 1 },
+});
+
+function uploadDatabaseWorkbook(req: express.Request, res: express.Response, next: express.NextFunction) {
+  workbookUpload.single('file')(req, res, (error) => {
+    if (!error) return next();
+    const message = error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE'
+      ? 'El archivo Excel supera el límite de 4 MB.'
+      : 'No se pudo recibir el archivo Excel.';
+    return res.status(400).json({ error: message });
+  });
+}
+
+const sensitiveWorkbookHeader = (header: unknown) => /password|contrasena|contraseña|secret|access_token|refresh_token/i.test(String(header || ''));
+const normalizeWorkbookHeader = (header: unknown) => String(header ?? '').trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
+const isBlankWorkbookCell = (value: unknown) => value === '' || value === null || value === undefined;
+
+app.get('/api/database/export', requireAdmin, async (_req, res) => {
+  try {
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;
+    if (!spreadsheetId) throw new Error('No hay una hoja de cálculo configurada en el servidor.');
+    const metadata = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=spreadsheetId,properties.title,sheets.properties`);
+    const sheets = metadata.sheets || [];
+    const names = new Set<string>();
+    const ranges = new URLSearchParams({ valueRenderOption: 'UNFORMATTED_VALUE' });
+    for (const sheet of sheets) {
+      const title = String(sheet.properties?.title || '');
+      if (!title || title.length > 31 || /[\\/?*:\[\]]/.test(title) || names.has(title.toLocaleLowerCase('es'))) {
+        throw new Error(`La pestaña "${title || '(sin nombre)'}" no puede representarse de forma segura en un libro Excel.`);
+      }
+      names.add(title.toLocaleLowerCase('es'));
+      ranges.append('ranges', `'${title.replace(/'/g, "''")}'!A:ZZ`);
+    }
+    const values = sheets.length
+      ? await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchGet?${ranges.toString()}`)
+      : { valueRanges: [] };
+    const workbook = XLSX.utils.book_new();
+    for (const [index, sheet] of sheets.entries()) {
+      const title = String(sheet.properties.title);
+      const rows: unknown[][] = (values.valueRanges?.[index]?.values || []).map((row: unknown[]) => [...row]);
+      if (rows.length > 0) {
+        const headers = rows[0].map((value) => String(value ?? ''));
+        const sensitiveColumns = new Set(headers.map((header, columnIndex) => sensitiveWorkbookHeader(header) ? columnIndex : -1).filter((columnIndex) => columnIndex >= 0));
+        for (const columnIndex of sensitiveColumns) {
+          for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) rows[rowIndex][columnIndex] = '';
+        }
+      } else {
+        rows.push([]);
+      }
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), title);
+    }
+    const file = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    const date = new Date().toISOString().slice(0, 10);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Imperio_Lux_BaseDatos_${date}.xlsx"`);
+    return res.send(file);
+  } catch (error) {
+    return res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo exportar la base de datos.' });
+  }
+});
+
+app.post('/api/database/import', requireAdmin, uploadDatabaseWorkbook, async (req, res) => {
+  try {
+    const file = (req as express.Request & { file?: Express.Multer.File }).file;
+    if (!file) return res.status(400).json({ error: 'Selecciona un archivo Excel .xlsx.' });
+    if (!/\.xlsx$/i.test(file.originalname)) return res.status(400).json({ error: 'El archivo debe tener formato .xlsx.' });
+
+    const workbook = XLSX.read(file.buffer, { type: 'buffer', cellDates: false, cellFormula: false });
+    if (!workbook.SheetNames.length) return res.status(400).json({ error: 'El libro Excel no contiene pestañas.' });
+    const importedNames = workbook.SheetNames.map((name) => name.trim());
+    if (importedNames.some((name) => !name) || new Set(importedNames.map((name) => name.toLocaleLowerCase('es'))).size !== importedNames.length) {
+      return res.status(400).json({ error: 'El libro tiene pestañas vacías o nombres duplicados.' });
+    }
+
+    const spreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;
+    if (!spreadsheetId) throw new Error('No hay una hoja de cálculo configurada en el servidor.');
+    const metadata = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=spreadsheetId,sheets.properties`);
+    const googleSheets = metadata.sheets || [];
+    const googleByName = new Map<string, any>(googleSheets.map((sheet: any) => [String(sheet.properties?.title || '').toLocaleLowerCase('es'), sheet.properties]));
+    const missingNames = [...googleByName.keys()].filter((name) => !importedNames.some((imported) => imported.toLocaleLowerCase('es') === name));
+    const extraNames = importedNames.filter((name) => !googleByName.has(name.toLocaleLowerCase('es')));
+    if (missingNames.length || extraNames.length) {
+      const details = [
+        missingNames.length ? `Faltan en Excel: ${missingNames.join(', ')}` : '',
+        extraNames.length ? `No existen en Google Sheets: ${extraNames.join(', ')}` : '',
+      ].filter(Boolean).join('. ');
+      return res.status(400).json({ error: `El archivo debe contener las mismas pestañas de Google Sheets. ${details}. Descarga una copia nueva antes de editarla.` });
+    }
+
+    const ranges = new URLSearchParams({ valueRenderOption: 'UNFORMATTED_VALUE' });
+    for (const sheet of googleSheets) {
+      const title = String(sheet.properties.title);
+      ranges.append('ranges', `'${title.replace(/'/g, "''")}'!A:ZZ`);
+    }
+    const originals = googleSheets.length
+      ? await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchGet?${ranges.toString()}`)
+      : { valueRanges: [] };
+    const originalsByName = new Map<string, unknown[][]>();
+    googleSheets.forEach((sheet: any, index: number) => originalsByName.set(String(sheet.properties.title).toLocaleLowerCase('es'), originals.valueRanges?.[index]?.values || []));
+
+    const importSheets: Array<{ title: string; sheetId: number; rows: unknown[][]; width: number }> = [];
+    let totalRows = 0;
+    for (const sheetName of importedNames) {
+      const googleSheet = googleByName.get(sheetName.toLocaleLowerCase('es'));
+      const worksheet = workbook.Sheets[workbook.SheetNames[importedNames.indexOf(sheetName)]];
+      let rows = (worksheet['!ref'] ? XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true, defval: '', blankrows: true }) as unknown[][] : []);
+      while (rows.length && rows[rows.length - 1].every(isBlankWorkbookCell)) rows.pop();
+      rows = rows.map((row) => [...row]);
+      const oldRows = originalsByName.get(sheetName.toLocaleLowerCase('es')) || [];
+      const expectedHeaders = (oldRows[0] || []).map((cell) => String(cell ?? '').trim());
+      const importedHeaders = (rows[0] || []).map((cell) => String(cell ?? '').trim());
+      while (expectedHeaders.length && !expectedHeaders.at(-1)) expectedHeaders.pop();
+      while (importedHeaders.length && !importedHeaders.at(-1)) importedHeaders.pop();
+      if (expectedHeaders.length !== importedHeaders.length || expectedHeaders.some((header, index) => header !== importedHeaders[index])) {
+        return res.status(400).json({ error: `Los encabezados de la pestaña "${sheetName}" fueron cambiados. Conserva los encabezados originales y vuelve a subir el archivo.` });
+      }
+      if (rows.length > 50_001 || importedHeaders.length > 702) return res.status(400).json({ error: `La pestaña "${sheetName}" supera el límite permitido de filas o columnas.` });
+      const width = importedHeaders.length;
+      if (rows.slice(1).some((row) => row.slice(width).some((cell) => !isBlankWorkbookCell(cell)))) {
+        return res.status(400).json({ error: `La pestaña "${sheetName}" contiene datos en columnas sin encabezado.` });
+      }
+      if (width > 0 && new Set(importedHeaders.map((header) => normalizeWorkbookHeader(header))).size !== importedHeaders.length) {
+        return res.status(400).json({ error: `La pestaña "${sheetName}" tiene encabezados duplicados.` });
+      }
+
+      const sensitiveColumns = importedHeaders.map((header, index) => sensitiveWorkbookHeader(header) ? index : -1).filter((index) => index >= 0);
+      if (sensitiveColumns.length) {
+        const headerIndexes = new Map(importedHeaders.map((header, index) => [normalizeWorkbookHeader(header), index]));
+        const identityHeaders = ['id', 'email', 'correo_electronico', 'correo', 'usuario', 'username'];
+        const identityColumns = identityHeaders.map((header) => headerIndexes.get(header)).filter((index): index is number => index !== undefined);
+        if (!identityColumns.length) return res.status(400).json({ error: `La pestaña "${sheetName}" no tiene una columna estable (ID, correo o usuario) para conservar las credenciales.` });
+        const oldHeaderIndexes = new Map(expectedHeaders.map((header, index) => [normalizeWorkbookHeader(header), index]));
+        const oldIdentityColumns = identityHeaders.map((header) => oldHeaderIndexes.get(header)).filter((index): index is number => index !== undefined);
+        const originalByIdentity = new Map<string, unknown[]>();
+        for (const oldRow of oldRows.slice(1)) {
+          for (const column of oldIdentityColumns) {
+            const value = String(oldRow[column] ?? '').trim().toLocaleLowerCase('es');
+            if (value) originalByIdentity.set(`${column}:${value}`, oldRow);
+          }
+        }
+        for (const row of rows.slice(1)) {
+          const matchingOriginal = identityColumns
+            .map((column) => String(row[column] ?? '').trim().toLocaleLowerCase('es'))
+            .filter(Boolean)
+            .map((value, index) => originalByIdentity.get(`${oldIdentityColumns[index]}:${value}`))
+            .find(Boolean);
+          for (const column of sensitiveColumns) {
+            if (!isBlankWorkbookCell(row[column])) return res.status(400).json({ error: `La columna de credenciales "${importedHeaders[column]}" está protegida y debe permanecer vacía en Excel.` });
+            const header = normalizeWorkbookHeader(importedHeaders[column]);
+            const oldColumn = oldHeaderIndexes.get(header);
+            row[column] = matchingOriginal && oldColumn !== undefined ? matchingOriginal[oldColumn] ?? '' : '';
+          }
+        }
+      }
+      for (const row of rows) {
+        if (row.length > width) row.length = width;
+        while (row.length < width) row.push('');
+        for (let column = 0; column < row.length; column += 1) {
+          const cell = row[column];
+          if (cell instanceof Date) return res.status(400).json({ error: `La pestaña "${sheetName}" contiene fechas con un formato no compatible. Convierte esas celdas en valores de fecha de Excel y vuelve a subir.` });
+          if (typeof cell === 'number' && !Number.isFinite(cell)) return res.status(400).json({ error: `La pestaña "${sheetName}" contiene un número no válido.` });
+          if (cell !== null && cell !== undefined && typeof cell !== 'string' && typeof cell !== 'number' && typeof cell !== 'boolean') row[column] = String(cell);
+        }
+      }
+      totalRows += Math.max(0, rows.length - 1);
+      importSheets.push({ title: String(googleSheet.title), sheetId: Number(googleSheet.sheetId), rows, width });
+    }
+
+    const requests = importSheets.map(({ sheetId, rows, width }) => ({
+      updateCells: {
+        range: {
+          sheetId,
+          startRowIndex: 0,
+          endRowIndex: Math.max(Number(googleSheets.find((sheet: any) => Number(sheet.properties.sheetId) === sheetId)?.properties.gridProperties?.rowCount) || 1, rows.length, 1),
+          startColumnIndex: 0,
+          endColumnIndex: Math.max(Number(googleSheets.find((sheet: any) => Number(sheet.properties.sheetId) === sheetId)?.properties.gridProperties?.columnCount) || 1, width, 1),
+        },
+        rows: rows.map((row) => ({ values: row.map((value) => {
+          if (isBlankWorkbookCell(value)) return {};
+          if (typeof value === 'boolean') return { userEnteredValue: { boolValue: value } };
+          if (typeof value === 'number') return { userEnteredValue: { numberValue: value } };
+          return { userEnteredValue: { stringValue: String(value) } };
+        }) })),
+        fields: 'userEnteredValue',
+      },
+    }));
+    if (Buffer.byteLength(JSON.stringify(requests), 'utf8') > 8 * 1024 * 1024) {
+      return res.status(413).json({ error: 'El libro es demasiado grande para actualizarlo de una vez. Divide la carga o reduce los datos y vuelve a intentarlo.' });
+    }
+    await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`, {
+      method: 'POST',
+      body: JSON.stringify({ requests }),
+    });
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.json({ message: 'La base de datos se actualizó en Google Sheets.', sheets: importSheets.length, rows: totalRows });
+  } catch (error) {
+    return res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo importar la base de datos desde Excel.' });
   }
 });
 

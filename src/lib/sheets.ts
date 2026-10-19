@@ -454,10 +454,26 @@ export async function readTablesFromSheets(
   spreadsheetId: string,
   sheetNames: string[]
 ): Promise<Map<string, unknown[]>> {
-  const entries = await Promise.all(sheetNames.map(async (sheetName) =>
-    [sheetName, await readTableFromSheet(accessToken, spreadsheetId, sheetName)] as const
-  ));
-  return new Map(entries);
+  if (sheetNames.length === 0) return new Map();
+
+  void accessToken;
+  const ranges = sheetNames.map((sheetName) => `ranges=${encodeURIComponent(`${sheetName}!A:ZZ`)}`).join('&');
+  const response = await requestGoogleSheetsApi(
+    `/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchGet?${ranges}&valueRenderOption=UNFORMATTED_VALUE`
+  );
+  if (!response.ok) {
+    throw new Error(await apiErrorMessage(response, 'No se pudieron leer las pestañas de Google Sheets.'));
+  }
+
+  const data = await response.json() as { valueRanges?: Array<{ values?: unknown[][] }> };
+  if (!Array.isArray(data.valueRanges) || data.valueRanges.length !== sheetNames.length) {
+    throw new Error('Google Sheets devolvió una respuesta incompleta al leer varias pestañas.');
+  }
+
+  return new Map(sheetNames.map((sheetName, index) => [
+    sheetName,
+    sheetRowsToObjects(data.valueRanges?.[index]?.values || [], sheetName),
+  ]));
 }
 
 export async function appendRowToSheet(
