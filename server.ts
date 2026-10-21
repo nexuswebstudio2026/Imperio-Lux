@@ -174,6 +174,47 @@ async function appendSheetGridRow(spreadsheetId: string, sheetName: string, head
   const values = headers.map((header) => data[normalizeUsersHeader(header)] ?? '');
   await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${sheetName}!A:Z`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, { method: 'POST', body: JSON.stringify({ values: [values] }) });
 }
+function normalizeRoleHeader(value: unknown) {
+  return String(value || '').trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
+}
+function parseRolePermissions(value: unknown): string[] {
+  if (Array.isArray(value)) return [...new Set(value.map((permission) => String(permission).trim()).filter(Boolean))];
+  const text = String(value || '').trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (Array.isArray(parsed)) return [...new Set(parsed.map((permission) => String(permission).trim()).filter(Boolean))];
+  } catch {
+    // Existing sheets may store permissions as comma- or newline-separated values.
+  }
+  return [...new Set(text.split(/[,\n;]+/).map((permission) => permission.trim()).filter(Boolean))];
+}
+function roleNameColumn(headers: string[]) {
+  return headers.findIndex((header) => ['name', 'nombre', 'role', 'rol', 'roles'].includes(normalizeRoleHeader(header)));
+}
+function rolePermissionsColumn(headers: string[]) {
+  return headers.findIndex((header) => ['permissions', 'permisos', 'permission', 'permiso'].includes(normalizeRoleHeader(header)));
+}
+async function readRoleRows() {
+  const spreadsheetId = process.env.GOOGLE_SHEETS_ID || backupConfig.spreadsheetId;
+  if (!spreadsheetId) throw new Error('No hay una hoja de cálculo configurada en el servidor.');
+  const result = await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent('roles!A:ZZ')}?valueRenderOption=UNFORMATTED_VALUE`);
+  const values: unknown[][] = result.values || [];
+  const headers = (values[0] || []).map((header) => String(header ?? '').trim());
+  const nameIndex = roleNameColumn(headers);
+  const permissionsIndex = rolePermissionsColumn(headers);
+  const idIndex = headers.findIndex((header) => normalizeRoleHeader(header) === 'id');
+  const roles = values.slice(1).flatMap((row, index) => {
+    const name = String(row[nameIndex] ?? '').trim();
+    if (!name) return [];
+    return [{
+      id: String(row[idIndex] ?? index + 1),
+      name,
+      permissions: parseRolePermissions(row[permissionsIndex]),
+    }];
+  });
+  return { spreadsheetId, headers, values, roles };
+}
 function isPublicRecordActive(value: unknown) {
   return value === true || value === 1 || ['true', 'activo', 'active'].includes(String(value || '').trim().toLocaleLowerCase('es'));
 }
@@ -1294,6 +1335,72 @@ app.get('/api/auth/admin/users', requireAdmin, async (_req, res) => {
     const { rows } = await readUsersSheet();
     res.json({ users: rows.filter(({ data }) => data.id).map(({ data }) => ({ id: data.id, name: data.nombre || data.name || '', email: data.email || '', document: data.numero_documento || data.documento || '', phone: data.telefono || data.celular || '', type: classifyUser(data), username: data.usuario || '', configured: Boolean(data.contrasena_hash), cargo: data.cargo || '', rol: data.rol || '', pending: /^pendiente|pending$/i.test(data.estado || ''), estado: isPublicRecordActive(data.estado) })) });
   } catch (error) { res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudo leer la hoja Usuarios.' }); }
+});
+
+app.get('/api/auth/admin/roles', requireAdmin, async (_req, res) => {
+  try {
+    const { roles } = await readRoleRows();
+    res.json({ roles });
+  } catch (error) {
+    res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudieron leer los roles de Google Sheets.' });
+  }
+});
+
+app.put('/api/auth/admin/roles', requireAdmin, async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim();
+    const permissions = req.body?.permissions;
+    if (!name || name.length > 80) return res.status(400).json({ error: 'El nombre del rol debe tener entre 1 y 80 caracteres.' });
+    if (!Array.isArray(permissions) || permissions.length > 200) return res.status(400).json({ error: 'La lista de permisos no es válida.' });
+    const normalizedPermissions = [...new Set(permissions.map((permission: unknown) => String(permission).trim()).filter(Boolean))];
+    if (normalizedPermissions.some((permission) => permission.length > 120)) return res.status(400).json({ error: 'Cada permiso debe tener como máximo 120 caracteres.' });
+
+    const sheet = await readRoleRows();
+    const headers = [...sheet.headers];
+    let nameIndex = roleNameColumn(headers);
+    let permissionsIndex = rolePermissionsColumn(headers);
+    if (nameIndex < 0) {
+      nameIndex = headers.length;
+      headers.push('name');
+    }
+    if (permissionsIndex < 0) {
+      permissionsIndex = headers.length;
+      headers.push('permissions');
+    }
+    if (headers.length !== sheet.headers.length) {
+      await googleApi(`https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheet.spreadsheetId)}/values/${encodeURIComponent('roles!A1')}?valueInputOption=RAW`, {
+        method: 'PUT',
+        body: JSON.stringify({ values: [headers] }),
+      });
+    }
+
+    const existingRowIndex = sheet.values.slice(1).findIndex((row) =>
+      String(row[nameIndex] ?? '').trim().toLocaleLowerCase('es') === name.toLocaleLowerCase('es')
+    );
+    const values = existingRowIndex >= 0
+      ? [...sheet.values[existingRowIndex + 1]]
+      : Array(headers.length).fill('');
+    while (values.length < headers.length) values.push('');
+    values[nameIndex] = name;
+    values[permissionsIndex] = JSON.stringify(normalizedPermissions);
+    const idIndex = headers.findIndex((header) => normalizeRoleHeader(header) === 'id');
+    if (existingRowIndex < 0 && idIndex >= 0) {
+      const existingIds = sheet.values.slice(1).map((row) => Number(row[idIndex])).filter((id) => Number.isInteger(id) && id > 0);
+      values[idIndex] = String(Math.max(0, ...existingIds) + 1);
+    }
+    const range = existingRowIndex >= 0 ? `roles!A${existingRowIndex + 2}` : 'roles!A:ZZ';
+    const url = existingRowIndex >= 0
+      ? `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheet.spreadsheetId)}/values/${encodeURIComponent(range)}?valueInputOption=RAW`
+      : `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(sheet.spreadsheetId)}/values/${encodeURIComponent(range)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+    const row = headers.map((_, index) => values[index] ?? '');
+    await googleApi(url, {
+      method: existingRowIndex >= 0 ? 'PUT' : 'POST',
+      body: JSON.stringify({ values: [row] }),
+    });
+    res.json({ message: `Permisos del rol "${name}" guardados.`, role: { name, permissions: normalizedPermissions } });
+  } catch (error) {
+    res.status(503).json({ error: error instanceof Error ? error.message : 'No se pudieron guardar los permisos del rol.' });
+  }
 });
 
 app.post('/api/auth/admin/users/:id/approve', requireAdmin, async (req, res) => {

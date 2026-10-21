@@ -19,7 +19,6 @@ import {
   CloudUpload,
   Key,
   RefreshCw,
-  AlertTriangle,
 } from 'lucide-react';
 
 /* ================= EMPRESA CONFIG ================= */
@@ -507,30 +506,43 @@ export const RegisteredUsersView: React.FC = () => {
   </div>;
 };
 type UserRoleAccount = { id: string; name: string; email: string; type: string; rol: string };
+type ManagedRole = { id: string; name: string; permissions: string[] };
 
 const normalizeRoleName = (name: string) => name.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 /* ================= USUARIOS Y ROLES ================= */
 export const UsuariosRolesView: React.FC = () => {
-  const { roles } = useApp();
   const [roleUsers, setRoleUsers] = useState<UserRoleAccount[]>([]);
+  const [roleDefinitions, setRoleDefinitions] = useState<ManagedRole[]>([]);
   const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
+  const [permissionDrafts, setPermissionDrafts] = useState<Record<string, string[]>>({});
+  const [permissionInputs, setPermissionInputs] = useState<Record<string, string>>({});
   const [roleUsersLoading, setRoleUsersLoading] = useState(true);
   const [roleUsersError, setRoleUsersError] = useState('');
   const [roleUsersMessage, setRoleUsersMessage] = useState('');
   const [savingRoleUser, setSavingRoleUser] = useState('');
+  const [savingPermissionsRole, setSavingPermissionsRole] = useState('');
 
   const loadRoleUsers = async () => {
     setRoleUsersLoading(true);
     setRoleUsersError('');
     try {
-      const response = await fetch('/api/auth/admin/users', { credentials: 'same-origin' });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'No se pudieron leer los usuarios de Google Sheets.');
-      if (!Array.isArray(data.users)) throw new Error('La respuesta de usuarios no tiene el formato esperado.');
-      const accounts = data.users as UserRoleAccount[];
+      const [usersResponse, rolesResponse] = await Promise.all([
+        fetch('/api/auth/admin/users', { credentials: 'same-origin' }),
+        fetch('/api/auth/admin/roles', { credentials: 'same-origin' }),
+      ]);
+      const [usersData, rolesData] = await Promise.all([usersResponse.json(), rolesResponse.json()]);
+      if (!usersResponse.ok) throw new Error(usersData.error || 'No se pudieron leer los usuarios de Google Sheets.');
+      if (!rolesResponse.ok) throw new Error(rolesData.error || 'No se pudieron leer los permisos de roles de Google Sheets.');
+      if (!Array.isArray(usersData.users) || !Array.isArray(rolesData.roles)) throw new Error('La respuesta de usuarios o roles no tiene el formato esperado.');
+      const accounts = usersData.users as UserRoleAccount[];
+      const definitions = rolesData.roles as ManagedRole[];
       setRoleUsers(accounts);
       setRoleDrafts(Object.fromEntries(accounts.map((account) => [account.id, account.rol || ''])));
+      setRoleDefinitions(definitions);
+      const persistedPermissions = Object.fromEntries(definitions.map((role) => [normalizeRoleName(role.name), role.permissions]));
+      const assignedRoleKeys = [...new Set(accounts.map((account) => normalizeRoleName(account.rol)).filter(Boolean))];
+      setPermissionDrafts(Object.fromEntries(assignedRoleKeys.map((key) => [key, persistedPermissions[key] || []])));
     } catch (error) {
       setRoleUsersError(error instanceof Error ? error.message : 'No se pudieron leer los usuarios de Google Sheets.');
     } finally {
@@ -540,13 +552,23 @@ export const UsuariosRolesView: React.FC = () => {
 
   useEffect(() => { void loadRoleUsers(); }, []);
 
+  const assignedRoles = Array.from(new Map(roleUsers
+    .map((account) => account.rol.trim())
+    .filter(Boolean)
+    .map((name) => [normalizeRoleName(name), name])).entries());
+  const savedRolesByName = new Map(roleDefinitions.map((role) => [normalizeRoleName(role.name), role]));
+  const matrixRoles: ManagedRole[] = assignedRoles.map(([key, name]) => {
+    const saved = savedRolesByName.get(key);
+    return saved || { id: `assigned-${key}`, name, permissions: [] };
+  });
+
   const saveUserRole = async (account: UserRoleAccount, remove = false) => {
     const role = remove ? '' : (roleDrafts[account.id] ?? account.rol).trim();
     if (!remove && !role) {
       setRoleUsersError('Selecciona un rol definido en la matriz. Usa “Quitar” para eliminar la asignación.');
       return;
     }
-    if (!remove && !roles.some((definedRole) => normalizeRoleName(definedRole.nombre) === normalizeRoleName(role))) {
+    if (!remove && !matrixRoles.some((definedRole) => normalizeRoleName(definedRole.name) === normalizeRoleName(role))) {
       setRoleUsersError(`“${role}” no existe en la matriz de permisos. Selecciona un rol definido antes de guardar.`);
       return;
     }
@@ -573,6 +595,60 @@ export const UsuariosRolesView: React.FC = () => {
     }
   };
 
+  const addPermission = (role: ManagedRole) => {
+    const key = normalizeRoleName(role.name);
+    const permission = (permissionInputs[key] || '').trim();
+    if (!permission) return;
+    if (permission.length > 120) {
+      setRoleUsersError('Cada permiso debe tener como máximo 120 caracteres.');
+      return;
+    }
+    const current = permissionDrafts[key] || role.permissions;
+    if (current.some((item) => item.toLocaleLowerCase('es') === permission.toLocaleLowerCase('es'))) {
+      setRoleUsersError('Ese permiso ya está agregado a este rol.');
+      return;
+    }
+    if (current.length >= 200) {
+      setRoleUsersError('Un rol no puede tener más de 200 permisos.');
+      return;
+    }
+    setRoleUsersError('');
+    setPermissionDrafts((previous) => ({ ...previous, [key]: [...current, permission] }));
+    setPermissionInputs((previous) => ({ ...previous, [key]: '' }));
+  };
+
+  const removePermission = (role: ManagedRole, permission: string) => {
+    const key = normalizeRoleName(role.name);
+    setPermissionDrafts((previous) => ({
+      ...previous,
+      [key]: (previous[key] || role.permissions).filter((item) => item !== permission),
+    }));
+  };
+
+  const saveRolePermissions = async (role: ManagedRole) => {
+    const key = normalizeRoleName(role.name);
+    const permissions = permissionDrafts[key] || role.permissions;
+    setSavingPermissionsRole(key);
+    setRoleUsersError('');
+    setRoleUsersMessage('');
+    try {
+      const response = await fetch('/api/auth/admin/roles', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: role.name, permissions }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `No se pudieron guardar los permisos de ${role.name}.`);
+      setRoleUsersMessage(`Permisos del rol “${role.name}” guardados en Google Sheets.`);
+      await loadRoleUsers();
+    } catch (error) {
+      setRoleUsersError(error instanceof Error ? error.message : `No se pudieron guardar los permisos de ${role.name}.`);
+    } finally {
+      setSavingPermissionsRole('');
+    }
+  };
+
   const assignedRoleCounts = roleUsers.reduce<Record<string, { name: string; count: number }>>((counts, account) => {
     const role = account.rol.trim();
     if (!role) return counts;
@@ -581,8 +657,7 @@ export const UsuariosRolesView: React.FC = () => {
     else counts[key] = { name: role, count: 1 };
     return counts;
   }, {});
-  const definedRolesByName = new Map(roles.map((role) => [normalizeRoleName(role.nombre), role]));
-  const unmatchedAssignments = roleUsers.filter((account) => account.rol.trim() && !definedRolesByName.has(normalizeRoleName(account.rol)));
+  const assignedRolesByName = new Map(matrixRoles.map((role) => [normalizeRoleName(role.name), role]));
 
   return (
     <div>
@@ -609,12 +684,6 @@ export const UsuariosRolesView: React.FC = () => {
               {Object.values(assignedRoleCounts).map(({ name, count }) => <span key={name} className="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">{name} · {count} usuario(s)</span>)}
             </div>
           )}
-          {!roleUsersLoading && !roleUsersError && unmatchedAssignments.length > 0 && (
-            <div role="alert" className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-              <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4 shrink-0" /> Hay {unmatchedAssignments.length} asignación(es) sin un rol correspondiente en la matriz. No tienen permisos definidos.</p>
-              <ul className="mt-2 list-inside list-disc">{unmatchedAssignments.map((account) => <li key={account.id}>{account.name || account.email}: <strong>{account.rol}</strong></li>)}</ul>
-            </div>
-          )}
           <div className="overflow-x-auto">
             <table className="min-w-[760px] w-full text-left text-xs text-slate-600 dark:text-slate-300">
               <thead className="border-b border-slate-200 bg-slate-100 text-[10px] font-semibold uppercase text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -625,17 +694,17 @@ export const UsuariosRolesView: React.FC = () => {
                   : roleUsers.map((account) => {
                     const draft = roleDrafts[account.id] ?? account.rol;
                     const unchanged = draft.trim() === account.rol.trim();
-                    const hasMatchingRole = Boolean(account.rol.trim() && definedRolesByName.has(normalizeRoleName(account.rol)));
+                    const hasMatchingRole = Boolean(account.rol.trim() && assignedRolesByName.has(normalizeRoleName(account.rol)));
+                    const matchingRole = assignedRolesByName.get(normalizeRoleName(account.rol));
                     return <tr key={account.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{account.name || '—'}<span className="block pt-1 font-normal text-slate-500">{account.email || account.id}</span></td>
                       <td className="px-4 py-3">{({ admin: 'Administrador', employee: 'Empleado', client: 'Cliente', supplier: 'Proveedor' } as Record<string, string>)[account.type] || account.type}</td>
                       <td className="px-4 py-3">
                         <select aria-label={`Rol de ${account.name || account.email}`} value={draft} onChange={(event) => setRoleDrafts((current) => ({ ...current, [account.id]: event.target.value }))} disabled={Boolean(savingRoleUser)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-white">
                           <option value="">Sin rol asignado</option>
-                          {account.rol && !hasMatchingRole && <option value={account.rol}>⚠ {account.rol} — sin matriz</option>}
-                          {roles.map((role) => <option key={role.id} value={role.nombre}>{role.nombre}</option>)}
+                          {matrixRoles.map((role) => <option key={role.id} value={role.name}>{role.name}</option>)}
                         </select>
-                        {account.rol && <span className={`mt-1 block text-[10px] ${hasMatchingRole ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>{hasMatchingRole ? `Coincide con ${definedRolesByName.get(normalizeRoleName(account.rol))?.permisos.length ?? 0} permisos definidos` : 'No coincide con ningún rol de la matriz'}</span>}
+                        {account.rol && <span className="mt-1 block text-[10px] text-emerald-700 dark:text-emerald-300">{hasMatchingRole ? `Coincide con ${permissionDrafts[normalizeRoleName(account.rol)]?.length ?? matchingRole?.permissions.length ?? 0} permisos` : 'Sin rol definido'}</span>}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
@@ -662,27 +731,37 @@ export const UsuariosRolesView: React.FC = () => {
             </span>
           </div>
           <div className="p-4 space-y-4">
-            {roles.map((r) => {
-              const matchingUsers = roleUsers.filter((account) => normalizeRoleName(account.rol) === normalizeRoleName(r.nombre));
+            {matrixRoles.map((role) => {
+              const key = normalizeRoleName(role.name);
+              const permissions = permissionDrafts[key] || role.permissions;
+              const matchingUsers = roleUsers.filter((account) => normalizeRoleName(account.rol) === key);
+              const hasChanges = permissions.length !== role.permissions.length || permissions.some((permission, index) => permission !== role.permissions[index]);
               return (
                 <div
-                  key={r.id}
+                  key={role.id}
                   className="border border-slate-200 rounded-lg p-3 bg-slate-50/50"
                 >
                   <div className="flex items-center justify-between mb-3">
                     <span className="font-bold text-xs uppercase text-slate-900">
-                      {r.nombre} <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-semibold">({r.permisos.length} permisos · {matchingUsers.length} usuarios)</span>
+                      {role.name} <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-semibold">({permissions.length} permisos · {matchingUsers.length} usuarios)</span>
                     </span>
+                    <button type="button" onClick={() => void saveRolePermissions(role)} disabled={!hasChanges || Boolean(savingPermissionsRole) || roleUsersLoading} className="inline-flex items-center gap-1 rounded-lg bg-[#152238] px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-40 dark:bg-[#bd9858] dark:text-[#101b2d]">
+                      <Save className="h-3.5 w-3.5" /> {savingPermissionsRole === key ? 'Guardando…' : 'Guardar permisos'}
+                    </button>
                   </div>
                   {matchingUsers.length > 0 && <p className="mb-2 text-[10px] text-slate-600">Asignado a: {matchingUsers.map((account) => account.name || account.email || account.id).join(', ')}</p>}
                   <div className="flex flex-wrap gap-1.5">
-                    {r.permisos.map((permission) => <span key={permission} className="rounded bg-white px-2 py-1 font-mono text-[10px] text-slate-700">{permission}</span>)}
-                    {r.permisos.length === 0 && <p className="text-[10px] italic text-amber-700">Este rol no tiene permisos configurados.</p>}
+                    {permissions.map((permission) => <span key={permission} className="inline-flex items-center gap-1 rounded bg-white px-2 py-1 font-mono text-[10px] text-slate-700">{permission}<button type="button" onClick={() => removePermission(role, permission)} disabled={Boolean(savingPermissionsRole)} aria-label={`Quitar permiso ${permission} del rol ${role.name}`} className="font-bold text-red-600 hover:text-red-800 disabled:opacity-40">×</button></span>)}
+                    {permissions.length === 0 && <p className="text-[10px] italic text-amber-700">Este rol aún no tiene permisos. Agrégalos aquí.</p>}
                   </div>
+                  <form onSubmit={(event) => { event.preventDefault(); addPermission(role); }} className="mt-3 flex flex-col gap-2 sm:flex-row">
+                    <input value={permissionInputs[key] || ''} onChange={(event) => setPermissionInputs((previous) => ({ ...previous, [key]: event.target.value }))} placeholder="Nombre del permiso (p. ej., ver-inventario)" maxLength={120} disabled={Boolean(savingPermissionsRole)} className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-white" />
+                    <button type="submit" disabled={Boolean(savingPermissionsRole) || !(permissionInputs[key] || '').trim()} className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-40 dark:border-slate-600 dark:text-white">Agregar permiso</button>
+                  </form>
                 </div>
               );
             })}
-            {roles.length === 0 && <p className="text-center text-xs text-slate-500">No hay roles definidos en la matriz.</p>}
+            {!roleUsersLoading && matrixRoles.length === 0 && <p className="text-center text-xs text-slate-500">No hay usuarios con roles asignados en la pestaña Usuarios.</p>}
           </div>
         </div>
       </div>
