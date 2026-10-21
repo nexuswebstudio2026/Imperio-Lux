@@ -48,7 +48,10 @@ export function normalizePathname(pathname: string): string {
 
 export function adminTabFromPath(pathname: string): AppTab | null {
   const path = normalizePathname(pathname);
-  return ADMIN_ROUTE_TABS[path] || ADMIN_ROUTE_ALIASES[path] || null;
+  // Primeramente revisar aliases
+  if (ADMIN_ROUTE_ALIASES[path]) return ADMIN_ROUTE_ALIASES[path];
+  // Luego revisar rutas principales
+  return ADMIN_ROUTE_TABS[path] || null;
 }
 
 export function isAdminPath(pathname: string): boolean {

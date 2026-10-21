@@ -122,6 +122,15 @@ const MainContent: React.FC = () => {
   const renderCurrentView = () => {
     switch (activeTab) {
       case 'panel':
+        // Verificar si es usuario admin
+        const isAdmin = currentUser?.user_type
+          ? currentUser.user_type === 'admin'
+          : /admin|administrador/i.test(currentUser?.role || '');
+        
+        if (isAdmin) {
+          return <UsuariosRolesView />;
+        }
+        // Si no es admin, mostrar dashboard
         return <DashboardView />;
       case 'categorias':
         return <CategoriaView />;
