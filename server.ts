@@ -106,7 +106,9 @@ app.get('/api/system/version', (_req, res) => {
 
 function normalizeUsersHeader(value: unknown) {
   const header = String(value || '').trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_');
-  return header === 'tipo_usuairo' ? 'tipo_usuario' : header;
+  if (header === 'tipo_usuairo') return 'tipo_usuario';
+  if (header === 'roles' || header === 'role') return 'rol';
+  return header;
 }
 
 async function readUsersSheet() {
@@ -182,10 +184,18 @@ function verifyPassword(password: string, salt: string, hash: string) {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 function classifyUser(row: Record<string, string>): AuthUser['type'] {
-  const type = `${row.tipo_usuario || ''} ${row.rol || ''} ${row.role || ''}`.toLocaleLowerCase('es');
-  if (/admin|administrador/.test(type)) return 'admin';
-  if (/proveedor|supplier/.test(type)) return 'supplier';
-  if (/empleado|employee|cajero|vendedor/.test(type)) return 'employee';
+  const classify = (value: string): AuthUser['type'] | null => {
+    const normalized = value.toLocaleLowerCase('es');
+    if (/admin|administrador/.test(normalized)) return 'admin';
+    if (/proveedor|supplier/.test(normalized)) return 'supplier';
+    if (/empleado|employee|cajero|vendedor/.test(normalized)) return 'employee';
+    if (/cliente|customer|client/.test(normalized)) return 'client';
+    return null;
+  };
+  const explicitType = classify(row.tipo_usuario || '');
+  if (explicitType) return explicitType;
+  const legacyType = classify(`${row.rol || ''} ${row.role || ''}`);
+  if (legacyType) return legacyType;
   return 'client';
 }
 function safeUser(row: Record<string, string>): AuthUser {
@@ -1398,7 +1408,10 @@ app.put('/api/auth/admin/users/:id', requireAdmin, async (req, res) => {
     if (req.body?.document !== undefined && (!partial || String(req.body.document).trim())) target.data.numero_documento = String(req.body.document).trim();
     if (req.body?.phone !== undefined && (!partial || String(req.body.phone).trim())) target.data.telefono = String(req.body.phone).trim();
     if (req.body?.cargo !== undefined && (!partial || String(req.body.cargo).trim())) target.data.cargo = String(req.body.cargo).trim();
-    if (req.body?.rol !== undefined && (!partial || String(req.body.rol).trim())) target.data.rol = String(req.body.rol).trim();
+    if (req.body?.rol !== undefined) {
+      if (typeof req.body.rol !== 'string' || req.body.rol.trim().length > 80) return res.status(400).json({ error: 'El rol debe ser texto de hasta 80 caracteres.' });
+      target.data.rol = req.body.rol.trim();
+    }
     if (req.body?.estado !== undefined) target.data.estado = req.body.estado === false ? 'Inactivo' : 'Activo';
     await writeUserRow(spreadsheetId, headers, target.rowNumber, target.data);
     res.json({ message: 'Usuario actualizado en Google Sheets.' });

@@ -14,11 +14,11 @@ import {
   X,
   ShieldCheck,
   Activity,
-  User,
   Users,
   Search,
   CloudUpload,
   Key,
+  RefreshCw,
 } from 'lucide-react';
 
 /* ================= EMPRESA CONFIG ================= */
@@ -512,9 +512,81 @@ const defaultPermissions: Record<string, string[]> = {
   supplier: ['suppliers.manage', 'quotes.send', 'catalog.view'],
 };
 
+type UserRoleAccount = { id: string; name: string; email: string; type: string; rol: string };
+
 /* ================= USUARIOS Y ROLES ================= */
 export const UsuariosRolesView: React.FC = () => {
-  const { users, roles, currentUser } = useApp();
+  const { roles } = useApp();
+  const [roleUsers, setRoleUsers] = useState<UserRoleAccount[]>([]);
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, string>>({});
+  const [roleUsersLoading, setRoleUsersLoading] = useState(true);
+  const [roleUsersError, setRoleUsersError] = useState('');
+  const [roleUsersMessage, setRoleUsersMessage] = useState('');
+  const [savingRoleUser, setSavingRoleUser] = useState('');
+
+  const loadRoleUsers = async () => {
+    setRoleUsersLoading(true);
+    setRoleUsersError('');
+    try {
+      const response = await fetch('/api/auth/admin/users', { credentials: 'same-origin' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudieron leer los usuarios de Google Sheets.');
+      if (!Array.isArray(data.users)) throw new Error('La respuesta de usuarios no tiene el formato esperado.');
+      const accounts = data.users as UserRoleAccount[];
+      setRoleUsers(accounts);
+      setRoleDrafts(Object.fromEntries(accounts.map((account) => [account.id, account.rol || ''])));
+    } catch (error) {
+      setRoleUsersError(error instanceof Error ? error.message : 'No se pudieron leer los usuarios de Google Sheets.');
+    } finally {
+      setRoleUsersLoading(false);
+    }
+  };
+
+  useEffect(() => { void loadRoleUsers(); }, []);
+
+  const saveUserRole = async (account: UserRoleAccount, remove = false) => {
+    const role = remove ? '' : (roleDrafts[account.id] ?? account.rol).trim();
+    if (!remove && !role) {
+      setRoleUsersError('Escribe un rol para asignarlo. Usa “Quitar rol” para eliminar la asignación.');
+      return;
+    }
+    if (remove && !window.confirm(`¿Quitar el rol de ${account.name || account.email}? Esto no afectará a otros usuarios con el mismo rol.`)) return;
+
+    setSavingRoleUser(account.id);
+    setRoleUsersError('');
+    setRoleUsersMessage('');
+    try {
+      const response = await fetch(`/api/auth/admin/users/${encodeURIComponent(account.id)}`, {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ partial: true, rol: role }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo actualizar el rol del usuario.');
+      setRoleUsersMessage(remove ? 'Se quitó la asignación de rol.' : `Rol “${role}” guardado para ${account.name || account.email}.`);
+      await loadRoleUsers();
+    } catch (error) {
+      setRoleUsersError(error instanceof Error ? error.message : 'No se pudo actualizar el rol del usuario.');
+    } finally {
+      setSavingRoleUser('');
+    }
+  };
+
+  const availableRoleNames = Array.from(new Map(
+    [...roles.map((role) => role.nombre), ...roleUsers.map((account) => account.rol)]
+      .map((name) => name.trim())
+      .filter(Boolean)
+      .map((name) => [name.toLocaleLowerCase('es'), name])
+  ).values());
+  const assignedRoleCounts = roleUsers.reduce<Record<string, { name: string; count: number }>>((counts, account) => {
+    const role = account.rol.trim();
+    if (!role) return counts;
+    const key = role.toLocaleLowerCase('es');
+    if (counts[key]) counts[key].count += 1;
+    else counts[key] = { name: role, count: 1 };
+    return counts;
+  }, {});
 
   // Estado de permisos por rol (editable por admin)
   const [permissionState, setPermissionState] = React.useState<Record<number, Set<string>>>(() => {
@@ -578,38 +650,56 @@ export const UsuariosRolesView: React.FC = () => {
         items={[{ label: 'Otros' }, { label: 'Usuarios y Roles' }]}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Users list */}
-        <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
-          <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
-            <span className="font-bold text-xs text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-              <User className="w-4 h-4 text-slate-600" />
-              <span>Usuarios Registrados</span>
-            </span>
+      <div className="space-y-6">
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <header className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Roles por usuario · Google Sheets</h2>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Lectura y cambios en la columna “roles” (o “rol”) de la pestaña Usuarios. El mismo rol puede asignarse a varios usuarios.</p>
+            </div>
+            <button type="button" onClick={() => void loadRoleUsers()} disabled={roleUsersLoading || Boolean(savingRoleUser)} className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50 dark:border-slate-600 dark:text-white">
+              <RefreshCw className={`h-4 w-4 ${roleUsersLoading ? 'animate-spin' : ''}`} /> Actualizar
+            </button>
+          </header>
+          {roleUsersMessage && <p role="status" className="m-4 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200">{roleUsersMessage}</p>}
+          {roleUsersError && <p role="alert" className="m-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-900/30 dark:text-red-200">{roleUsersError}</p>}
+          {!roleUsersLoading && !roleUsersError && Object.keys(assignedRoleCounts).length > 0 && (
+            <div className="flex flex-wrap gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+              {Object.values(assignedRoleCounts).map(({ name, count }) => <span key={name} className="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">{name} · {count} usuario(s)</span>)}
+            </div>
+          )}
+          <div className="overflow-x-auto">
+            <table className="min-w-[760px] w-full text-left text-xs text-slate-600 dark:text-slate-300">
+              <thead className="border-b border-slate-200 bg-slate-100 text-[10px] font-semibold uppercase text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                <tr><th className="px-4 py-3">Usuario</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Rol asignado</th><th className="px-4 py-3">Acciones</th></tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {roleUsersLoading ? <tr><td colSpan={4} className="p-8 text-center text-slate-500">Leyendo usuarios y roles desde Google Sheets…</td></tr>
+                  : roleUsers.map((account) => {
+                    const draft = roleDrafts[account.id] ?? account.rol;
+                    const unchanged = draft.trim() === account.rol.trim();
+                    return <tr key={account.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{account.name || '—'}<span className="block pt-1 font-normal text-slate-500">{account.email || account.id}</span></td>
+                      <td className="px-4 py-3 capitalize">{account.type}</td>
+                      <td className="px-4 py-3">
+                        <input aria-label={`Rol de ${account.name || account.email}`} list="assigned-role-options" value={draft} onChange={(event) => setRoleDrafts((current) => ({ ...current, [account.id]: event.target.value }))} placeholder="Escribe o elige un rol" disabled={Boolean(savingRoleUser)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-white" />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => void saveUserRole(account)} disabled={Boolean(savingRoleUser) || unchanged || !draft.trim()} className="inline-flex items-center gap-1 rounded-lg bg-[#152238] px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-40 dark:bg-[#bd9858] dark:text-[#101b2d]">
+                            <Save className="h-3.5 w-3.5" /> {savingRoleUser === account.id ? 'Guardando…' : account.rol ? 'Actualizar' : 'Asignar'}
+                          </button>
+                          {account.rol && <button type="button" onClick={() => void saveUserRole(account, true)} disabled={Boolean(savingRoleUser)} className="inline-flex items-center gap-1 rounded-lg border border-red-300 px-3 py-2 text-[11px] font-semibold text-red-700 disabled:opacity-50 dark:border-red-900 dark:text-red-300"><Trash2 className="h-3.5 w-3.5" /> Quitar</button>}
+                        </div>
+                      </td>
+                    </tr>;
+                  })}
+                {!roleUsersLoading && !roleUsersError && roleUsers.length === 0 && <tr><td colSpan={4} className="p-8 text-center text-slate-500">No hay usuarios en la pestaña Usuarios.</td></tr>}
+              </tbody>
+            </table>
           </div>
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-100 text-slate-700 uppercase font-semibold text-[10px] border-b border-slate-200">
-              <tr>
-                <th className="px-4 py-2.5">Usuario</th>
-                <th className="px-4 py-2.5">Correo</th>
-                <th className="px-4 py-2.5 text-center">Rol Asignado</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {users.map((u) => (
-                <tr key={u.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-3 font-semibold text-slate-900">{u.name}</td>
-                  <td className="px-4 py-3 text-slate-500">{u.email}</td>
-                  <td className="px-4 py-3 text-center">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase bg-blue-100 text-blue-800">
-                      {u.role}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          <datalist id="assigned-role-options">{availableRoleNames.map((name) => <option key={name} value={name} />)}</datalist>
+        </section>
 
         {/* Roles and permissions matrix */}
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
