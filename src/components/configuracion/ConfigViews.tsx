@@ -505,9 +505,40 @@ export const RegisteredUsersView: React.FC = () => {
     </div>
   </div>;
 };
+const defaultPermissions: Record<string, string[]> = {
+  admin: ['users.read', 'users.write', 'roles.manage', 'sheets.config', 'reports.view', 'inventory.manage', 'sales.manage', 'finance.manage'],
+  employee: ['inventory.read', 'sales.create', 'purchases.create', 'cashier.manage', 'reports.view'],
+  client: ['catalog.view', 'quotes.create', 'profile.view'],
+  supplier: ['suppliers.manage', 'quotes.send', 'catalog.view'],
+};
+
 /* ================= USUARIOS Y ROLES ================= */
 export const UsuariosRolesView: React.FC = () => {
-  const { users, roles } = useApp();
+  const { users, roles, currentUser } = useApp();
+
+  // Estado de permisos por rol (editable por admin)
+  const [permissionState, setPermissionState] = React.useState<Record<number, Set<string>>>(() => {
+    const state: Record<number, Set<string>> = {};
+    roles.forEach((r) => {
+      state[r.id] = new Set(r.permisos || []);
+    });
+    return state;
+  });
+
+  // Función para alternar permiso
+  const togglePermission = (roleId: number, perm: string) => {
+    setPermissionState((prev) => {
+      const newState = { ...prev };
+      const perms = newState[roleId] || new Set();
+      if (perms.has(perm)) {
+        perms.delete(perm);
+      } else {
+        perms.add(perm);
+      }
+      newState[roleId] = perms;
+      return newState;
+    });
+  };
 
   // Funciones disponibles por rol
   const roleFunctions: Record<string, string[]> = {
@@ -590,24 +621,47 @@ export const UsuariosRolesView: React.FC = () => {
           </div>
           <div className="p-4 space-y-4">
             {roles.map((r) => {
-              const functions = roleFunctions[r.nombre.toLowerCase()] || [];
               return (
-                <div key={r.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
-                  <div className="flex items-center justify-between mb-2">
+                <div
+                  key={r.id}
+                  className="border border-slate-200 rounded-lg p-3 bg-slate-50/50"
+                >
+                  <div className="flex items-center justify-between mb-3">
                     <span className="font-bold text-xs uppercase text-slate-900">
                       {r.nombre} {r.permisos.length > 0 && <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-semibold">({r.permisos.length} perms)</span>}
                     </span>
                   </div>
-                  {functions.length > 0 && (
-                    <div className="text-[10px] text-slate-700 space-y-1">
-                      {functions.map((func, idx) => (
-                        <span key={idx} className="px-1.5 py-0.5 bg-white border border-slate-200 text-slate-600 rounded text-[10px] font-mono">
-                          {func}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {!functions.length && <p className="text-[9px] text-slate-500 italic">Sin funciones específicas definidas</p>}
+
+                  {/* Permissions list */}
+                  <div className="space-y-2">
+                    {defaultPermissions[r.nombre.toLowerCase()]?.map((perm, idx) => {
+                      const isCurrentlyAssigned = permissionState[r.id]?.has(perm) || false;
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-2 px-2 py-1 rounded bg-white ${
+                            isCurrentlyAssigned ? 'bg-blue-50' : 'bg-slate-100'
+                          }"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isCurrentlyAssigned}
+                            onChange={() => togglePermission(r.id, perm)}
+                            className="w-3 h-3 rounded border-slate-400 cursor-pointer"
+                          />
+                          <span className="text-[10px] text-slate-700 font-mono">
+                            {perm}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                    {!defaultPermissions[r.nombre.toLowerCase()] && (
+                      <p className="text-[9px] text-slate-500 italic">
+                        Sin permisos predefinidos
+                      </p>
+                    )}
+                  </div>
                 </div>
               );
             })}

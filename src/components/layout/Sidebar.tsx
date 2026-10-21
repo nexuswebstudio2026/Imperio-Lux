@@ -373,7 +373,7 @@ export const Sidebar: React.FC = () => {
               }`}
             >
               <ShieldCheck className="w-4 h-4 text-red-400" />
-              <span>Usuarios y Roles</span>
+              <span>Roles</span>
             </button>
           </div>
         </div>

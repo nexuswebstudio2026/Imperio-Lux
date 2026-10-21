@@ -7,6 +7,7 @@ import { NotificationConfigModal } from './components/notifications/Notification
 
 // Views
 import { DashboardView } from './components/dashboard/DashboardView';
+import { DashboardAdminView } from './components/dashboard/DashboardAdminView';
 import { ProductoListView } from './components/productos/ProductoListView';
 import {
   CategoriaView,
@@ -128,9 +129,10 @@ const MainContent: React.FC = () => {
           : /admin|administrador/i.test(currentUser?.role || '');
         
         if (isAdmin) {
-          return <UsuariosRolesView />;
+          // Admin ve dashboard completo con estadísticas
+          return <DashboardAdminView />;
         }
-        // Si no es admin, mostrar dashboard
+        // Si no es admin, mostrar dashboard normal
         return <DashboardView />;
       case 'categorias':
         return <CategoriaView />;
