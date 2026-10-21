@@ -19,6 +19,7 @@ import {
   CloudUpload,
   Key,
   RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 
 /* ================= EMPRESA CONFIG ================= */
@@ -505,14 +506,9 @@ export const RegisteredUsersView: React.FC = () => {
     </div>
   </div>;
 };
-const defaultPermissions: Record<string, string[]> = {
-  admin: ['users.read', 'users.write', 'roles.manage', 'sheets.config', 'reports.view', 'inventory.manage', 'sales.manage', 'finance.manage'],
-  employee: ['inventory.read', 'sales.create', 'purchases.create', 'cashier.manage', 'reports.view'],
-  client: ['catalog.view', 'quotes.create', 'profile.view'],
-  supplier: ['suppliers.manage', 'quotes.send', 'catalog.view'],
-};
-
 type UserRoleAccount = { id: string; name: string; email: string; type: string; rol: string };
+
+const normalizeRoleName = (name: string) => name.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 /* ================= USUARIOS Y ROLES ================= */
 export const UsuariosRolesView: React.FC = () => {
@@ -547,7 +543,11 @@ export const UsuariosRolesView: React.FC = () => {
   const saveUserRole = async (account: UserRoleAccount, remove = false) => {
     const role = remove ? '' : (roleDrafts[account.id] ?? account.rol).trim();
     if (!remove && !role) {
-      setRoleUsersError('Escribe un rol para asignarlo. Usa “Quitar rol” para eliminar la asignación.');
+      setRoleUsersError('Selecciona un rol definido en la matriz. Usa “Quitar” para eliminar la asignación.');
+      return;
+    }
+    if (!remove && !roles.some((definedRole) => normalizeRoleName(definedRole.nombre) === normalizeRoleName(role))) {
+      setRoleUsersError(`“${role}” no existe en la matriz de permisos. Selecciona un rol definido antes de guardar.`);
       return;
     }
     if (remove && !window.confirm(`¿Quitar el rol de ${account.name || account.email}? Esto no afectará a otros usuarios con el mismo rol.`)) return;
@@ -573,75 +573,16 @@ export const UsuariosRolesView: React.FC = () => {
     }
   };
 
-  const availableRoleNames = Array.from(new Map(
-    [...roles.map((role) => role.nombre), ...roleUsers.map((account) => account.rol)]
-      .map((name) => name.trim())
-      .filter(Boolean)
-      .map((name) => [name.toLocaleLowerCase('es'), name])
-  ).values());
   const assignedRoleCounts = roleUsers.reduce<Record<string, { name: string; count: number }>>((counts, account) => {
     const role = account.rol.trim();
     if (!role) return counts;
-    const key = role.toLocaleLowerCase('es');
+    const key = normalizeRoleName(role);
     if (counts[key]) counts[key].count += 1;
     else counts[key] = { name: role, count: 1 };
     return counts;
   }, {});
-
-  // Estado de permisos por rol (editable por admin)
-  const [permissionState, setPermissionState] = React.useState<Record<number, Set<string>>>(() => {
-    const state: Record<number, Set<string>> = {};
-    roles.forEach((r) => {
-      state[r.id] = new Set(r.permisos || []);
-    });
-    return state;
-  });
-
-  // Función para alternar permiso
-  const togglePermission = (roleId: number, perm: string) => {
-    setPermissionState((prev) => {
-      const newState = { ...prev };
-      const perms = newState[roleId] || new Set();
-      if (perms.has(perm)) {
-        perms.delete(perm);
-      } else {
-        perms.add(perm);
-      }
-      newState[roleId] = perms;
-      return newState;
-    });
-  };
-
-  // Funciones disponibles por rol
-  const roleFunctions: Record<string, string[]> = {
-    admin: [
-      'Gestión completa del sistema',
-      'Configuración de Google Sheets',
-      'Sincronización de datos',
-      'Gestión de usuarios y roles',
-      'Ver reportes y auditoría',
-      'Configuración de empresa',
-      'Gestión de catálogo de productos',
-      'Ver todas las transacciones',
-    ],
-    employee: [
-      'Gestión de inventario',
-      'Registro de ventas y compras',
-      'Caja y finanzas',
-      'Ver catálogo de productos',
-      'Emisión de cotizaciones',
-    ],
-    client: [
-      'Visitar catálogo de productos',
-      'Solicitar cotizaciones',
-      'Ver mi perfil',
-    ],
-    supplier: [
-      'Gestión de proveedores',
-      'Enviar cotizaciones',
-      'Ver catálogo de productos',
-    ],
-  };
+  const definedRolesByName = new Map(roles.map((role) => [normalizeRoleName(role.nombre), role]));
+  const unmatchedAssignments = roleUsers.filter((account) => account.rol.trim() && !definedRolesByName.has(normalizeRoleName(account.rol)));
 
   return (
     <div>
@@ -668,6 +609,12 @@ export const UsuariosRolesView: React.FC = () => {
               {Object.values(assignedRoleCounts).map(({ name, count }) => <span key={name} className="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-semibold text-blue-800 dark:bg-blue-900/30 dark:text-blue-200">{name} · {count} usuario(s)</span>)}
             </div>
           )}
+          {!roleUsersLoading && !roleUsersError && unmatchedAssignments.length > 0 && (
+            <div role="alert" className="m-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              <p className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4 shrink-0" /> Hay {unmatchedAssignments.length} asignación(es) sin un rol correspondiente en la matriz. No tienen permisos definidos.</p>
+              <ul className="mt-2 list-inside list-disc">{unmatchedAssignments.map((account) => <li key={account.id}>{account.name || account.email}: <strong>{account.rol}</strong></li>)}</ul>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="min-w-[760px] w-full text-left text-xs text-slate-600 dark:text-slate-300">
               <thead className="border-b border-slate-200 bg-slate-100 text-[10px] font-semibold uppercase text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -678,11 +625,17 @@ export const UsuariosRolesView: React.FC = () => {
                   : roleUsers.map((account) => {
                     const draft = roleDrafts[account.id] ?? account.rol;
                     const unchanged = draft.trim() === account.rol.trim();
+                    const hasMatchingRole = Boolean(account.rol.trim() && definedRolesByName.has(normalizeRoleName(account.rol)));
                     return <tr key={account.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{account.name || '—'}<span className="block pt-1 font-normal text-slate-500">{account.email || account.id}</span></td>
-                      <td className="px-4 py-3 capitalize">{account.type}</td>
+                      <td className="px-4 py-3">{({ admin: 'Administrador', employee: 'Empleado', client: 'Cliente', supplier: 'Proveedor' } as Record<string, string>)[account.type] || account.type}</td>
                       <td className="px-4 py-3">
-                        <input aria-label={`Rol de ${account.name || account.email}`} list="assigned-role-options" value={draft} onChange={(event) => setRoleDrafts((current) => ({ ...current, [account.id]: event.target.value }))} placeholder="Escribe o elige un rol" disabled={Boolean(savingRoleUser)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-white" />
+                        <select aria-label={`Rol de ${account.name || account.email}`} value={draft} onChange={(event) => setRoleDrafts((current) => ({ ...current, [account.id]: event.target.value }))} disabled={Boolean(savingRoleUser)} className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-800 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950 dark:text-white">
+                          <option value="">Sin rol asignado</option>
+                          {account.rol && !hasMatchingRole && <option value={account.rol}>⚠ {account.rol} — sin matriz</option>}
+                          {roles.map((role) => <option key={role.id} value={role.nombre}>{role.nombre}</option>)}
+                        </select>
+                        {account.rol && <span className={`mt-1 block text-[10px] ${hasMatchingRole ? 'text-emerald-700 dark:text-emerald-300' : 'text-amber-700 dark:text-amber-300'}`}>{hasMatchingRole ? `Coincide con ${definedRolesByName.get(normalizeRoleName(account.rol))?.permisos.length ?? 0} permisos definidos` : 'No coincide con ningún rol de la matriz'}</span>}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-2">
@@ -698,7 +651,6 @@ export const UsuariosRolesView: React.FC = () => {
               </tbody>
             </table>
           </div>
-          <datalist id="assigned-role-options">{availableRoleNames.map((name) => <option key={name} value={name} />)}</datalist>
         </section>
 
         {/* Roles and permissions matrix */}
@@ -706,11 +658,12 @@ export const UsuariosRolesView: React.FC = () => {
           <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
             <span className="font-bold text-xs text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
               <Key className="w-4 h-4 text-red-500" />
-              <span>Roles y Matriz de Permisos (Spatie)</span>
+              <span>Roles y Matriz de Permisos</span>
             </span>
           </div>
           <div className="p-4 space-y-4">
             {roles.map((r) => {
+              const matchingUsers = roleUsers.filter((account) => normalizeRoleName(account.rol) === normalizeRoleName(r.nombre));
               return (
                 <div
                   key={r.id}
@@ -718,43 +671,18 @@ export const UsuariosRolesView: React.FC = () => {
                 >
                   <div className="flex items-center justify-between mb-3">
                     <span className="font-bold text-xs uppercase text-slate-900">
-                      {r.nombre} {r.permisos.length > 0 && <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-semibold">({r.permisos.length} perms)</span>}
+                      {r.nombre} <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-semibold">({r.permisos.length} permisos · {matchingUsers.length} usuarios)</span>
                     </span>
                   </div>
-
-                  {/* Permissions list */}
-                  <div className="space-y-2">
-                    {defaultPermissions[r.nombre.toLowerCase()]?.map((perm, idx) => {
-                      const isCurrentlyAssigned = permissionState[r.id]?.has(perm) || false;
-                      return (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-2 px-2 py-1 rounded bg-white ${
-                            isCurrentlyAssigned ? 'bg-blue-50' : 'bg-slate-100'
-                          }"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isCurrentlyAssigned}
-                            onChange={() => togglePermission(r.id, perm)}
-                            className="w-3 h-3 rounded border-slate-400 cursor-pointer"
-                          />
-                          <span className="text-[10px] text-slate-700 font-mono">
-                            {perm}
-                          </span>
-                        </div>
-                      );
-                    })}
-
-                    {!defaultPermissions[r.nombre.toLowerCase()] && (
-                      <p className="text-[9px] text-slate-500 italic">
-                        Sin permisos predefinidos
-                      </p>
-                    )}
+                  {matchingUsers.length > 0 && <p className="mb-2 text-[10px] text-slate-600">Asignado a: {matchingUsers.map((account) => account.name || account.email || account.id).join(', ')}</p>}
+                  <div className="flex flex-wrap gap-1.5">
+                    {r.permisos.map((permission) => <span key={permission} className="rounded bg-white px-2 py-1 font-mono text-[10px] text-slate-700">{permission}</span>)}
+                    {r.permisos.length === 0 && <p className="text-[10px] italic text-amber-700">Este rol no tiene permisos configurados.</p>}
                   </div>
                 </div>
               );
             })}
+            {roles.length === 0 && <p className="text-center text-xs text-slate-500">No hay roles definidos en la matriz.</p>}
           </div>
         </div>
       </div>
