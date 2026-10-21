@@ -509,6 +509,37 @@ export const RegisteredUsersView: React.FC = () => {
 export const UsuariosRolesView: React.FC = () => {
   const { users, roles } = useApp();
 
+  // Funciones disponibles por rol
+  const roleFunctions: Record<string, string[]> = {
+    admin: [
+      'Gestión completa del sistema',
+      'Configuración de Google Sheets',
+      'Sincronización de datos',
+      'Gestión de usuarios y roles',
+      'Ver reportes y auditoría',
+      'Configuración de empresa',
+      'Gestión de catálogo de productos',
+      'Ver todas las transacciones',
+    ],
+    employee: [
+      'Gestión de inventario',
+      'Registro de ventas y compras',
+      'Caja y finanzas',
+      'Ver catálogo de productos',
+      'Emisión de cotizaciones',
+    ],
+    client: [
+      'Visitar catálogo de productos',
+      'Solicitar cotizaciones',
+      'Ver mi perfil',
+    ],
+    supplier: [
+      'Gestión de proveedores',
+      'Enviar cotizaciones',
+      'Ver catálogo de productos',
+    ],
+  };
+
   return (
     <div>
       <Breadcrumb
@@ -558,26 +589,28 @@ export const UsuariosRolesView: React.FC = () => {
             </span>
           </div>
           <div className="p-4 space-y-4">
-            {roles.map((r) => (
-              <div key={r.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-bold text-xs uppercase text-slate-900">{r.nombre}</span>
-                  <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-semibold">
-                    {r.permisos.length} permisos
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {r.permisos.map((perm, idx) => (
-                    <span
-                      key={idx}
-                      className="px-1.5 py-0.5 bg-white border border-slate-200 text-slate-600 rounded text-[10px] font-mono"
-                    >
-                      {perm}
+            {roles.map((r) => {
+              const functions = roleFunctions[r.nombre.toLowerCase()] || [];
+              return (
+                <div key={r.id} className="border border-slate-200 rounded-lg p-3 bg-slate-50/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-xs uppercase text-slate-900">
+                      {r.nombre} {r.permisos.length > 0 && <span className="text-[10px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-semibold">({r.permisos.length} perms)</span>}
                     </span>
-                  ))}
+                  </div>
+                  {functions.length > 0 && (
+                    <div className="text-[10px] text-slate-700 space-y-1">
+                      {functions.map((func, idx) => (
+                        <span key={idx} className="px-1.5 py-0.5 bg-white border border-slate-200 text-slate-600 rounded text-[10px] font-mono">
+                          {func}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {!functions.length && <p className="text-[9px] text-slate-500 italic">Sin funciones específicas definidas</p>}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
