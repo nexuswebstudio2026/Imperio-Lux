@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Breadcrumb } from '../layout/Breadcrumb';
-import { Users, Sales, Purchase, BarChart2, MapPin, DollarSign, Shield, UsersRound } from 'lucide-react';
+import { Navbar } from '../layout/Navbar';
+import { BarChart2, MapPin, DollarSign, Shield, ShoppingCart, UsersRound } from 'lucide-react';
 
 /* ================= DASHBOARD ADMIN ================= */
 export const DashboardAdminView: React.FC = () => {
-  const { users, ventas, compras, monedas, formatCurrency } = useApp();
+  const { users, ventas, compras, formatCurrency } = useApp();
 
   const [ventasTotales, setVentasTotales] = useState(0);
   const [comprasTotales, setComprasTotales] = useState(0);
@@ -30,7 +31,7 @@ export const DashboardAdminView: React.FC = () => {
       <Navbar />
       <Breadcrumb
         title="Panel de Control Administrativo"
-        items={[{ label: 'Inicio' }, { label: 'Panel Admin' }]};
+        items={[{ label: 'Inicio' }, { label: 'Panel Admin' }]}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-4">
@@ -66,7 +67,7 @@ export const DashboardAdminView: React.FC = () => {
         <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
           <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
             <span className="font-bold text-xs text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-              <Purchase className="w-4 h-4 text-slate-600" /> 
+              <ShoppingCart className="w-4 h-4 text-slate-600" /> 
               <span>Compras Totales</span>
             </span>
           </div>
@@ -126,6 +127,3 @@ export const DashboardAdminView: React.FC = () => {
     </div>
   );
 };
-
-/* ================= ACTIVITY LOG ================= */
-export const ActivityLogView: React.FC = () => {
