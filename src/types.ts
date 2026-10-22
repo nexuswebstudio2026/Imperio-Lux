@@ -14,6 +14,8 @@ export interface Empresa {
   abreviatura_impuesto: string;
   direccion: string;
   ubicacion: string;
+  latitude: number | null;
+  longitude: number | null;
   telefono: string;
   correo: string;
   moneda_id: number;

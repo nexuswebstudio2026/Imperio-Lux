@@ -40,6 +40,8 @@ export const initialEmpresa: Empresa = {
   abreviatura_impuesto: 'IVA',
   direccion: 'Mz O Cs 5 Barrio Gualcaloma',
   ubicacion: 'Pasto, Nariño',
+  latitude: 1.2166, // Latitud de Pasto, Nariño, Colombia
+  longitude: -77.2825, // Longitud de Pasto, Nariño, Colombia
   telefono: '+57 311 8444853',
   correo: 'nexuswebstudio2026@gmail.com',
   moneda_id: 1,
