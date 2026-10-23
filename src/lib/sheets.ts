@@ -435,12 +435,40 @@ export async function writeTableToSheet(
 export async function readTableFromSheet<T = Record<string, unknown>>(
   accessToken: string,
   spreadsheetId: string,
-  sheetName: string
+  sheetName: string,
+  options: BatchReadOptions = {}
 ): Promise<T[]> {
   void accessToken;
-  const response = await requestGoogleSheetsApi(
-    `/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${sheetName}!A:ZZ`)}?valueRenderOption=UNFORMATTED_VALUE`
-  );
+  const { columns, startRow, endRow } = options;
+
+  // Construir rango optimizado basado en las columnas solicitadas
+  const colRange = columns && columns.length > 0
+    ? `A:${String.fromCharCode(65 + columns.length - 1)}`
+    : 'A:ZZ';
+
+  // Construir rango de filas si se especifica
+  const rowRange = startRow || endRow
+    ? `${startRow || 1}:${endRow || ''}`
+    : '';
+
+  // Montar la range completa
+  const range = rowRange
+    ? `${sheetName}!${rowRange}${colRange}`
+    : `${sheetName}!${colRange}`;
+
+  const url = `/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`;
+
+  // Agregar header para columnas solicitadas si aplica
+  const init: RequestInit = {
+    headers: {
+      ...(columns && columns.length > 0 && {
+        'X-Requested-Columns': columns.join(',')
+      })
+    }
+  };
+
+  const response = await requestGoogleSheetsApi(url, init);
+
   if (response.status === 404) return [];
   if (!response.ok) {
     throw new Error(await apiErrorMessage(response, `No se pudo leer la pestaña "${sheetName}".`));
@@ -452,15 +480,33 @@ export async function readTableFromSheet<T = Record<string, unknown>>(
 export async function readTablesFromSheets(
   accessToken: string,
   spreadsheetId: string,
-  sheetNames: string[]
+  sheetNames: string[],
+  options?: BatchReadOptions
 ): Promise<Map<string, unknown[]>> {
   if (sheetNames.length === 0) return new Map();
 
   void accessToken;
-  const ranges = sheetNames.map((sheetName) => `ranges=${encodeURIComponent(`${sheetName}!A:ZZ`)}`).join('&');
-  const response = await requestGoogleSheetsApi(
-    `/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}/values:batchGet?${ranges}&valueRenderOption=UNFORMATTED_VALUE`
-  );
+const { columns } = options || {};
+// Construir ranges optimizados
+  const ranges = sheetNames.map((sheetName) => {
+    const colRange = columns && columns.length > 0
+      ? `A:${String.fromCharCode(65 + columns.length - 1)}`
+      : 'A:ZZ';
+    const sheetColRange = `${sheetName}!${colRange}`;
+    return `ranges=${encodeURIComponent(sheetColRange)}`;
+  }).join('&');
+  const url = `/v4/spreadsheets/${spreadsheetId}/values:batchGet?${ranges}&valueRenderOption=UNFORMATTED_VALUE`;
+
+  const init: RequestInit = {
+    headers: {
+      ...(columns && columns.length > 0 && {
+        'X-Requested-Columns': columns.join(',')
+      })
+    }
+  };
+
+  const response = await requestGoogleSheetsApi(url, init);
+
   if (!response.ok) {
     throw new Error(await apiErrorMessage(response, 'No se pudieron leer las pestañas de Google Sheets.'));
   }
@@ -491,4 +537,127 @@ export async function appendRowToSheet(
   if (!response.ok) {
     throw new Error(await apiErrorMessage(response, `No se pudo agregar el registro a "${sheetName}".`));
   }
+}
+/** Interfaces estandarizadas para Google Sheets Database */
+/** Client for the server-side Google Sheets database API. Service-account
+ * credentials and Google access tokens never leave the Node server. */
+export interface DatabaseConnectionStatus {
+  connected: boolean;
+  provider: 'google-sheets';
+  spreadsheetId?: string;
+  spreadsheetTitle?: string;
+  serviceAccount?: string;
+  error?: string;
+}
+
+/** Resultado estandarizado de lectura de sheet */
+export interface SheetReadResult<T = Record<string, unknown>> {
+  success: boolean;
+  data: T[];
+  error?: string;
+  totalRows: number;
+  sheetId?: number;
+}
+
+/** Resultado estandarizado de escritura en sheet */
+export interface SheetWriteResult {
+  success: boolean;
+  rowsUpdated: number;
+  error?: string;
+}
+
+/** Rango de celdas para operaciones específicas */
+export interface SheetRange {
+  sheetName: string;
+  startRow?: number;
+  endRow?: number;
+  startCol?: string;
+  endCol?: string;
+}
+
+/** Opciones para lecturas por lotes optimizadas */
+export interface BatchReadOptions {
+  /** Filtrar solo columnas específicas (optimiza ancho de banda) */
+  columns?: string[];
+  /** Filtrar filas por rango */
+  startRow?: number;
+  endRow?: number;
+}
+
+/** Respuesta estandarizada del API REST */
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  code?: string;
+  retryable?: boolean;
+}
+
+/** Configuración de cuenta de servicio */
+export interface ServiceAccountConfig {
+  filePath?: string;
+  json?: string;
+  spreadsheetId: string;
+  scopes?: string[];
+}
+
+/** Error personalizado para validaciones de negocio */
+export class DatabaseValidationError extends Error {
+  constructor(message: string, public code?: string) {
+    super(message);
+    this.name = 'DatabaseValidationError';
+  }
+}
+
+/** Error personalizado para problemas de conexión/autenticación */
+export class DatabaseConnectionError extends Error {
+  constructor(message: string, public retryable: boolean = true) {
+    super(message);
+    this.name = 'DatabaseConnectionError';
+    this.retryable = retryable;
+  }
+}
+
+/** Error personalizado para respuestas error del API */
+export class DatabaseApiError extends Error {
+  constructor(
+    message: string, 
+    public status?: number, 
+    public code?: string,
+    public retryable: boolean = true
+  ) {
+    super(message);
+    this.name = 'DatabaseApiError';
+  }
+}
+
+/** 
+ * Convierte cualquier error en un DatabaseApiError estandarizado
+ * Esto asegura respuestas consistentes en todo el código
+ */
+export function normalizeError(error: unknown): DatabaseApiError {
+  if (error instanceof DatabaseApiError) return error;
+  
+  if (error instanceof Error) {
+    return new DatabaseApiError(
+      error.message,
+      undefined, 
+      undefined, 
+      true
+    );
+  }
+  
+  const message = error instanceof Object ? (error as any).message || 'Error desconocido' : String(error);
+  return new DatabaseApiError(message, undefined, undefined, true);
+}
+
+/** Estado de conexión estandarizado con metadatos */
+export interface DatabaseStatus {
+  connected: boolean;
+  provider: 'google-sheets';
+  spreadsheetId?: string;
+  spreadsheetTitle?: string;
+  serviceAccount?: string;
+  error?: string;
+  lastCheck?: string;
 }
