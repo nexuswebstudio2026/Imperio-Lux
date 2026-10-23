@@ -412,7 +412,6 @@ export async function writeTableToSheet(
   sheetName: string,
   records: Record<string, unknown>[]
 ): Promise<number> {
-  void accessToken;
   const { headers, rows } = objectsToSheetRows(records, sheetName);
   const range = encodeURIComponent(`${sheetName}!A:ZZ`);
   const clearResponse = await requestGoogleSheetsApi(`/v4/spreadsheets/${spreadsheetId}/values/${range}:clear`, {
@@ -438,7 +437,6 @@ export async function readTableFromSheet<T = Record<string, unknown>>(
   sheetName: string,
   options: BatchReadOptions = {}
 ): Promise<T[]> {
-  void accessToken;
   const { columns, startRow, endRow } = options;
 
   // Construir rango optimizado basado en las columnas solicitadas
@@ -485,8 +483,7 @@ export async function readTablesFromSheets(
 ): Promise<Map<string, unknown[]>> {
   if (sheetNames.length === 0) return new Map();
 
-  void accessToken;
-const { columns } = options || {};
+  const { columns } = options || {};
 // Construir ranges optimizados
   const ranges = sheetNames.map((sheetName) => {
     const colRange = columns && columns.length > 0
@@ -528,7 +525,6 @@ export async function appendRowToSheet(
   sheetName: string,
   record: Record<string, unknown>
 ): Promise<void> {
-  void accessToken;
   const rows = objectsToSheetRows([record], sheetName);
   const response = await requestGoogleSheetsApi(
     `/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(`${sheetName}!A:ZZ`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
